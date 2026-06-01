@@ -1,60 +1,83 @@
-import './style.css'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.ts'
+/**
+ * Entry point + the fixed-timestep game loop.
+ *
+ * The loop is the contract every later phase builds on:
+ *
+ *     gather input  ->  update(state, intent, dt)  ->  render(state)  ->  repeat
+ *
+ * Simulation advances in fixed TIMESTEP increments off an accumulator, so the
+ * game logic is deterministic and frame-rate independent; rendering happens once
+ * per animation frame and only READS state. The player moves because
+ * GameState.update mutates PlayerState — never because input is wired straight
+ * into this loop.
+ */
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+import './style.css';
+import { createGameState, update } from './game/GameState';
+import { Controls } from './input/Controls';
+import { SceneManager } from './rendering/SceneManager';
+import { DungeonRenderer } from './rendering/DungeonRenderer';
+import { EntityRenderer } from './rendering/EntityRenderer';
+import { HUD } from './rendering/HUD';
+import { AudioEngine } from './audio/AudioEngine';
+import { loadSettings } from './state/Settings';
+import { MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
-<div class="ticks"></div>
+const app = document.querySelector<HTMLDivElement>('#app');
+if (!app) throw new Error('#app container not found');
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+// --- State (pure) ---------------------------------------------------------
+const game = createGameState();
+loadSettings();
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+// --- Adapters & rendering (impure; read state) ----------------------------
+const controls = new Controls(app);
+const scene = new SceneManager(app);
+const dungeon = new DungeonRenderer(scene.scene);
+dungeon.build(game.room);
+const entities = new EntityRenderer(scene.scene);
+const hud = new HUD(app);
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+// Frame the camera on the room centre.
+scene.lookAt(
+  (game.room.tilesX * game.room.tileSize) / 2,
+  (game.room.tilesY * game.room.tileSize) / 2,
+);
+
+// Audio context is created now but only resumed after a user gesture.
+const audio = new AudioEngine();
+audio.init();
+const unlockAudio = (): void => {
+  void audio.resume();
+  window.removeEventListener('pointerdown', unlockAudio);
+  window.removeEventListener('keydown', unlockAudio);
+};
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+
+// --- Loop -----------------------------------------------------------------
+let lastMs = performance.now();
+let accumulator = 0;
+let fps = 0;
+
+function frame(nowMs: number): void {
+  let dt = (nowMs - lastMs) / 1000;
+  lastMs = nowMs;
+  dt = Math.min(dt, MAX_FRAME_DT);
+  // Smoothed FPS for the debug overlay (avoids per-frame allocation).
+  fps = fps === 0 ? 1 / dt : fps * 0.9 + (1 / dt) * 0.1;
+
+  accumulator += dt;
+  while (accumulator >= TIMESTEP) {
+    update(game, controls.intent, TIMESTEP);
+    accumulator -= TIMESTEP;
+  }
+
+  entities.sync(game);
+  scene.render();
+  hud.update(game, fps);
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
