@@ -1,0 +1,55 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, off-peak. Monday 07:23 UTC — staggered from OSV-Scanner's
+    # Wednesday slot so the two security scans don't contend for runners.
+    - cron: "23 7 * * 1"
+
+permissions:
+  # security-events: write to upload SARIF results to the Security > Code
+  # Scanning tab. contents/actions: read are required by the CodeQL action
+  # to check out the repo and read workflow run metadata.
+  security-events: write
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # build-mode: none — JS/TS is interpreted, so CodeQL extracts directly
+      # from source with no compilation step (no autobuild needed).
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          # security-extended: the full security query suite (broader coverage
+          # than the default suite) without the noise of the code-quality queries.
+          queries: security-extended
+          # Procedural geometry/audio means no committed art or vendor bundles,
+          # but exclude Vite build output and test fixtures from analysis.
+          config: |
+            paths-ignore:
+              - dist
+              - '**/__tests__/**'
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"

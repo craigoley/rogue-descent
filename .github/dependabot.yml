@@ -1,0 +1,64 @@
+# Dependabot version updates for Rogue Descent.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Conventions (schedule, grouping, commit prefixes, labels) follow the
+# OleyArcade fleet (ClawApp / neon-drift). ClawApp's ignore list is entirely
+# Expo / React Native SDK pins — NONE of which apply here: Rogue Descent is a
+# static Three.js + Vite app with no native modules. There are no held-back
+# versions in package.json (three / vite / vitest / typescript / eslint all
+# float on caret/tilde ranges with no pinning rationale), so this config carries
+# NO ignore list.
+
+version: 2
+updates:
+  # ---------------------------------------------------------------------------
+  # npm — application + dev dependencies
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      # Order matters — a package lands in the FIRST matching group.
+      # @types/* are dev-deps too, so they must come before dev-tooling.
+      type-definitions:
+        patterns:
+          - "@types/*"
+      dev-tooling:
+        dependency-type: "development"
+        patterns:
+          - "*"
+      # Production deps (e.g. three) are intentionally NOT grouped — each gets
+      # its own PR so a runtime bump can be reviewed against its impact.
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — workflow files under .github/workflows
+  # ---------------------------------------------------------------------------
+  # Low risk, high value: action-version drift causes silent CI rot. Grouping
+  # all actions into one PR keeps the weekly update to a single review.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
