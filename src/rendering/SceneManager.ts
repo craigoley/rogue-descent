@@ -1,11 +1,13 @@
 /**
  * Owns the three.js scene, the isometric OrthographicCamera, and the WebGL
- * renderer. The camera looks at a fixed target down a (offset, offset, offset)
- * diagonal, which is what produces the classic 2:1 isometric read with an
- * orthographic (non-perspective) projection.
+ * renderer. The camera looks at its focus down a (offset, offset, offset)
+ * diagonal, which is what produces the classic isometric read with an
+ * orthographic (non-perspective) projection — the Phase 0 angle, preserved.
  *
- * This layer only ever READS game state. World coordinates map to three.js as
- * (game x -> three x, game y -> three z); three's y is up.
+ * The focus smoothly FOLLOWS the player: each frame it eases toward the
+ * player's interpolated position at TUNING.camLerp (a subtle follow — not
+ * locked rigid, not floaty). This layer only READS game state; world
+ * coordinates map to three.js as (game x -> three x, game y -> three z).
  */
 
 import {
@@ -17,7 +19,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { CAMERA, PALETTE } from '../utils/constants';
+import type { GameState } from '../game/GameState';
+import { CAMERA, PALETTE, TUNING } from '../utils/constants';
+import { lerp } from '../utils/math';
 
 export class SceneManager {
   readonly scene = new Scene();
@@ -25,6 +29,9 @@ export class SceneManager {
   private readonly renderer: WebGLRenderer;
   private readonly container: HTMLElement;
   private readonly target = new Vector3(0, 0, 0);
+  /** Camera focus point on the floor plane (game x, game y). */
+  private focusX = 0;
+  private focusY = 0;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -48,19 +55,36 @@ export class SceneManager {
     window.addEventListener('resize', this.resize);
   }
 
-  /** Point the camera at a world position (e.g. the room centre). */
-  lookAt(worldX: number, worldZ: number): void {
-    this.target.set(worldX, 0, worldZ);
-    this.camera.position.set(
-      worldX + CAMERA.offset,
-      CAMERA.offset,
-      worldZ + CAMERA.offset,
-    );
-    this.camera.lookAt(this.target);
+  /** Jump the focus to a world position with no easing (use at init so the
+   *  first frame isn't a slide-in from the origin). */
+  snapFocus(worldX: number, worldY: number): void {
+    this.focusX = worldX;
+    this.focusY = worldY;
+    this.place();
+  }
+
+  /** Ease the focus toward the player's interpolated position. `dt` is the real
+   *  frame delta (camera smoothing is a render-side effect, not a sim step). */
+  updateFollow(state: GameState, alpha: number, dt: number): void {
+    const p = state.player;
+    const px = lerp(p.prevX, p.x, alpha);
+    const py = lerp(p.prevY, p.y, alpha);
+    const k = 1 - Math.exp(-TUNING.camLerp * dt);
+    this.focusX = lerp(this.focusX, px, k);
+    this.focusY = lerp(this.focusY, py, k);
+    this.place();
   }
 
   render(): void {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Reposition the camera so it views the current focus from the iso diagonal. */
+  private place(): void {
+    const { offset } = CAMERA;
+    this.target.set(this.focusX, 0, this.focusY);
+    this.camera.position.set(this.focusX + offset, offset, this.focusY + offset);
+    this.camera.lookAt(this.target);
   }
 
   private resize = (): void => {
