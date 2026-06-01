@@ -124,3 +124,20 @@ export const CAMERA = {
   near: 0.1,
   far: 200,
 } as const;
+
+/**
+ * Iso INPUT rotation, radians. The camera sits at equal +x/+z offsets from its
+ * focus, so its view is yawed `atan2(offsetZ, offsetX)` about the vertical axis
+ * (= 45° while the offsets are equal). Raw input is expressed in SCREEN axes
+ * (+x right, +y down) and the pure game layer rotates it by −ISO_YAW into the
+ * world floor plane, so "up" on screen moves the player up the screen instead of
+ * along a diagonal world axis. DERIVED from CAMERA.offset so it tracks the iso
+ * angle automatically — never hard-code the 0.785.
+ */
+export const ISO_YAW = Math.atan2(CAMERA.offset, CAMERA.offset);
+
+/** Touch virtual-stick tuning. */
+export const TOUCH = {
+  /** Drag distance (px) from the stick origin that maps to full deflection. */
+  range: 60,
+} as const;

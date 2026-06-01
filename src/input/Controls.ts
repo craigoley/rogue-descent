@@ -4,27 +4,35 @@
  * deliberately the ONLY place that touches `window`/DOM for input, so the game
  * layer (src/game/Input.ts) stays Node-testable.
  *
- * Touch and keyboard are at parity: both produce the same moveX/moveY axes, per
- * the mobile-required rule in CLAUDE.md.
+ * Keyboard and touch are at PARITY: both produce the same raw screen-space
+ * intent via the pure mappings in Input.ts, and Player applies the same iso
+ * rotation to whichever one is active — so they move identically.
+ *
+ * Touch shows a VISIBLE virtual stick: a base ring appears where the finger
+ * lands and a thumb tracks the drag (clamped to TOUCH.range). Without a visible
+ * control the game looked frozen on mobile (a tap with no drag = zero input).
  */
 
-import { createIntent, type InputIntent } from '../game/Input';
-import { clamp } from '../utils/math';
-
-const LEFT_KEYS = new Set(['arrowleft', 'a']);
-const RIGHT_KEYS = new Set(['arrowright', 'd']);
-const UP_KEYS = new Set(['arrowup', 'w']);
-const DOWN_KEYS = new Set(['arrowdown', 's']);
-
-/** Pixels of touch drag that map to full deflection on an axis. */
-const TOUCH_RANGE = 60;
+import {
+  createIntent,
+  dragAxes,
+  keyAxes,
+  type InputIntent,
+} from '../game/Input';
+import { TOUCH } from '../utils/constants';
 
 export class Controls {
   readonly intent: InputIntent = createIntent();
   private readonly pressed = new Set<string>();
+
   private touchId: number | null = null;
-  private touchOriginX = 0;
-  private touchOriginY = 0;
+  private originX = 0;
+  private originY = 0;
+
+  // Virtual-stick DOM (created once; just shown/moved/hidden on touch events).
+  private readonly stickBase: HTMLDivElement;
+  private readonly stickThumb: HTMLDivElement;
+  private readonly hint: HTMLDivElement | null = null;
 
   constructor(target: HTMLElement = document.body) {
     window.addEventListener('keydown', this.onKeyDown);
@@ -33,8 +41,24 @@ export class Controls {
     target.addEventListener('touchmove', this.onTouchMove, { passive: false });
     target.addEventListener('touchend', this.onTouchEnd);
     target.addEventListener('touchcancel', this.onTouchEnd);
+
+    this.stickBase = document.createElement('div');
+    this.stickBase.className = 'touch-stick-base';
+    this.stickThumb = document.createElement('div');
+    this.stickThumb.className = 'touch-stick-thumb';
+    target.appendChild(this.stickBase);
+    target.appendChild(this.stickThumb);
+
+    // Discoverability: a one-time hint on touch-capable devices.
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      this.hint = document.createElement('div');
+      this.hint.className = 'touch-hint';
+      this.hint.textContent = 'Drag anywhere to move';
+      target.appendChild(this.hint);
+    }
   }
 
+  // --- Keyboard -------------------------------------------------------------
   private onKeyDown = (e: KeyboardEvent): void => {
     this.pressed.add(e.key.toLowerCase());
     this.applyKeys();
@@ -46,25 +70,20 @@ export class Controls {
   };
 
   private applyKeys(): void {
-    let x = 0;
-    let y = 0;
-    for (const k of this.pressed) {
-      if (LEFT_KEYS.has(k)) x -= 1;
-      if (RIGHT_KEYS.has(k)) x += 1;
-      if (UP_KEYS.has(k)) y -= 1;
-      if (DOWN_KEYS.has(k)) y += 1;
-    }
-    this.intent.moveX = clamp(x, -1, 1);
-    this.intent.moveY = clamp(y, -1, 1);
+    const a = keyAxes(this.pressed);
+    this.intent.moveX = a.moveX;
+    this.intent.moveY = a.moveY;
   }
 
-  // Touch: a relative virtual stick anchored where the finger first lands.
+  // --- Touch: a visible virtual stick anchored where the finger lands --------
   private onTouchStart = (e: TouchEvent): void => {
     if (this.touchId !== null) return;
     const t = e.changedTouches[0];
     this.touchId = t.identifier;
-    this.touchOriginX = t.clientX;
-    this.touchOriginY = t.clientY;
+    this.originX = t.clientX;
+    this.originY = t.clientY;
+    this.showStick(t.clientX, t.clientY);
+    if (this.hint) this.hint.classList.add('is-hidden');
     e.preventDefault();
   };
 
@@ -72,8 +91,13 @@ export class Controls {
     if (this.touchId === null) return;
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier !== this.touchId) continue;
-      this.intent.moveX = clamp((t.clientX - this.touchOriginX) / TOUCH_RANGE, -1, 1);
-      this.intent.moveY = clamp((t.clientY - this.touchOriginY) / TOUCH_RANGE, -1, 1);
+      const dx = t.clientX - this.originX;
+      const dy = t.clientY - this.originY;
+      const a = dragAxes(dx, dy, TOUCH.range);
+      this.intent.moveX = a.moveX;
+      this.intent.moveY = a.moveY;
+      // Move the thumb to the (clamped) drag offset for visible feedback.
+      this.moveThumb(a.moveX * TOUCH.range, a.moveY * TOUCH.range);
       e.preventDefault();
     }
   };
@@ -84,6 +108,26 @@ export class Controls {
       this.touchId = null;
       this.intent.moveX = 0;
       this.intent.moveY = 0;
+      this.hideStick();
     }
   };
+
+  // --- Stick visuals --------------------------------------------------------
+  private showStick(x: number, y: number): void {
+    this.stickBase.style.left = `${x}px`;
+    this.stickBase.style.top = `${y}px`;
+    this.stickBase.classList.add('is-active');
+    this.moveThumb(0, 0);
+    this.stickThumb.classList.add('is-active');
+  }
+
+  private moveThumb(offX: number, offY: number): void {
+    this.stickThumb.style.left = `${this.originX + offX}px`;
+    this.stickThumb.style.top = `${this.originY + offY}px`;
+  }
+
+  private hideStick(): void {
+    this.stickBase.classList.remove('is-active');
+    this.stickThumb.classList.remove('is-active');
+  }
 }

@@ -44,6 +44,61 @@ body {
   user-select: none;
 }
 
+/* Touch virtual stick — purely visual feedback; the listeners capture touches,
+   so these never intercept pointer events. Centred on their left/top via
+   translate(-50%, -50%). Hidden until a touch is active. */
+.touch-stick-base,
+.touch-stick-thumb {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  display: none;
+  z-index: 5;
+}
+
+.touch-stick-base {
+  /* Diameter = 2 * TOUCH.range (120px). */
+  width: 120px;
+  height: 120px;
+  border: 2px solid rgba(51, 255, 204, 0.4);
+  background: rgba(51, 255, 204, 0.08);
+}
+
+.touch-stick-thumb {
+  width: 56px;
+  height: 56px;
+  background: rgba(51, 255, 204, 0.35);
+  border: 2px solid rgba(51, 255, 204, 0.7);
+  box-shadow: 0 0 16px rgba(51, 255, 204, 0.4);
+}
+
+.touch-stick-base.is-active,
+.touch-stick-thumb.is-active {
+  display: block;
+}
+
+.touch-hint {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--player);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(51, 255, 204, 0.3);
+  border-radius: 999px;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.9;
+  transition: opacity 0.4s ease;
+}
+
+.touch-hint.is-hidden {
+  opacity: 0;
+}
+
 /* ?debug=1 tuning panel — interactive (sliders), so pointer-events on. */
 .hud-panel {
   position: fixed;
