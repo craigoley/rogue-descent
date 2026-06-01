@@ -1,8 +1,9 @@
 /**
- * Owns the three.js scene, the isometric OrthographicCamera, and the WebGL
- * renderer. The camera looks at its focus down a (offset, offset, offset)
- * diagonal, which is what produces the classic isometric read with an
- * orthographic (non-perspective) projection — the Phase 0 angle, preserved.
+ * Owns the three.js scene, the OrthographicCamera, and the WebGL renderer. The
+ * camera views its focus from a ZERO-YAW, pitched-down offset (offsetX = 0,
+ * +offsetY up, +offsetZ in front) — so world x → screen-right and world z →
+ * screen-vertical, rendering the floor grid SCREEN-ALIGNED (a square grid, not a
+ * 45° diamond) while preserving the downward tilt (walls keep their height).
  *
  * The focus smoothly FOLLOWS the player: each frame it eases toward the
  * player's interpolated position at TUNING.camLerp (a subtle follow — not
@@ -37,18 +38,20 @@ export class SceneManager {
     this.container = container;
     this.scene.background = new Color(PALETTE.background);
 
-    const { offset, near, far } = CAMERA;
+    const { offsetX, offsetY, offsetZ, near, far } = CAMERA;
     this.camera = new OrthographicCamera(-1, 1, 1, -1, near, far);
-    this.camera.position.set(offset, offset, offset);
+    this.camera.position.set(offsetX, offsetY, offsetZ);
 
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
     // Flat, slightly directional lighting so wall tops read against the floor.
+    // Lit from above and slightly to one side so the screen-aligned walls cast
+    // readable shading.
     this.scene.add(new AmbientLight(0xffffff, 0.85));
     const key = new DirectionalLight(0xffffff, 0.6);
-    key.position.set(offset, offset * 1.5, offset * 0.5);
+    key.position.set(offsetZ * 0.4, offsetY * 1.5, offsetZ * 0.6);
     this.scene.add(key);
 
     this.resize();
@@ -103,11 +106,12 @@ export class SceneManager {
     return this._screenDelta;
   }
 
-  /** Reposition the camera so it views the current focus from the iso diagonal. */
+  /** Reposition the camera so it views the current focus from the zero-yaw,
+   *  pitched-down offset (in front of + above the focus). */
   private place(): void {
-    const { offset } = CAMERA;
+    const { offsetX, offsetY, offsetZ } = CAMERA;
     this.target.set(this.focusX, 0, this.focusY);
-    this.camera.position.set(this.focusX + offset, offset, this.focusY + offset);
+    this.camera.position.set(this.focusX + offsetX, offsetY, this.focusY + offsetZ);
     this.camera.lookAt(this.target);
   }
 

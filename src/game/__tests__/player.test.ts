@@ -16,14 +16,15 @@ function step(p: PlayerState, intent: Partial<InputIntent>, n: number): void {
 const speed = (p: PlayerState): number => Math.hypot(p.vx, p.vy);
 
 /**
- * Iso screen projection of a floor velocity (world x = vx, world z = vy).
- * Derived from the camera's orthographic basis — right = (1,0,-1)/√2,
- * up = (-1,2,-1)/√6 (the 45° iso yaw): screen-right ∝ (vx - vy),
- * screen-up ∝ -(vx + vy). Used to assert input maps to the intended SCREEN
- * direction (the iso-mapping regression guard).
+ * Screen projection of a floor velocity (game x = vx, game y = vy) under the
+ * SCREEN-ALIGNED camera (zero yaw). World x -> screen-right; world z (= game y)
+ * -> screen-vertical, with +z toward the viewer (down). So screen-right ∝ vx and
+ * screen-up ∝ -vy. Used to assert input maps to the intended SCREEN direction
+ * AND, since the grid lines now run along world x/z, that motion runs along a
+ * grid axis (the iso-mapping regression guard for Option 2).
  */
 function project(p: PlayerState): { right: number; up: number } {
-  return { right: p.vx - p.vy, up: -(p.vx + p.vy) };
+  return { right: p.vx, up: -p.vy };
 }
 
 describe('Player movement — snappy velocity ramp', () => {
@@ -83,29 +84,36 @@ describe('Player movement — snappy velocity ramp', () => {
   });
 });
 
-describe('Player iso input mapping (the regression guard)', () => {
-  it('"up" (0,-1) moves UP the screen — projection is up, with no sideways drift', () => {
+describe('Player iso input mapping — screen-aligned (the regression guard)', () => {
+  it('"up" (0,-1) moves UP the screen AND along a grid axis (no drift)', () => {
     const p = createPlayer(7, 7);
     step(p, { moveY: -1 }, 6);
     const s = project(p);
     expect(s.up).toBeGreaterThan(0); // goes up the screen
     expect(s.right).toBeCloseTo(0, 6); // straight up, not drifting sideways
+    // Motion runs along the world-z grid line (grid lines = world x/z): the
+    // perpendicular component is ~0, so the cube tracks a visible grid line.
+    expect(p.vx).toBeCloseTo(0, 6);
+    expect(p.vy).toBeLessThan(0);
   });
 
-  it('"right" (1,0) moves RIGHT on screen — projection is right, no vertical drift', () => {
+  it('"right" (1,0) moves RIGHT on screen AND along a grid axis (no drift)', () => {
     const p = createPlayer(7, 7);
     step(p, { moveX: 1 }, 6);
     const s = project(p);
     expect(s.right).toBeGreaterThan(0);
     expect(s.up).toBeCloseTo(0, 6);
+    expect(p.vy).toBeCloseTo(0, 6); // along the world-x grid line
+    expect(p.vx).toBeGreaterThan(0);
   });
 
-  it('rotation is actually applied — "up" is NOT a raw world axis', () => {
-    // Without the iso rotation, intent (0,-1) would give world velocity
-    // (0, -maxSpeed): vx === 0. The rotation makes BOTH components non-zero.
+  it('with the screen-aligned camera "up" IS a pure world axis (tracks the grid)', () => {
+    // Zero camera yaw => input rotation is identity => intent (0,-1) maps to
+    // world -z exactly: vx === 0. (This is the inverse of the old diamond
+    // behaviour, where "up" was a world diagonal.)
     const p = createPlayer(7, 7);
     step(p, { moveY: -1 }, 6);
-    expect(Math.abs(p.vx)).toBeGreaterThan(0.1);
+    expect(p.vx).toBeCloseTo(0, 6);
     expect(Math.abs(p.vy)).toBeGreaterThan(0.1);
   });
 });
@@ -125,10 +133,11 @@ describe('Player interpolation snapshot', () => {
 
 describe('Player wall collision (integration)', () => {
   it('drives into a wall and stops without penetrating it', () => {
-    // Intent (1,1) maps, post-rotation, to pure world +X — straight at the
-    // right wall. The body must come to rest flush and never pass through.
+    // With the screen-aligned camera the input rotation is identity, so intent
+    // (1,0) is pure world +X — straight at the right wall. The body must come to
+    // rest flush and never pass through.
     const p = createPlayer(11, 7);
-    step(p, { moveX: 1, moveY: 1 }, 90);
+    step(p, { moveX: 1 }, 90);
     const wallFaceX = (room.tilesX - 1) * room.tileSize; // 13
     expect(p.x).toBeLessThanOrEqual(wallFaceX + 1e-9);
     expect(p.x).toBeGreaterThan(11); // it did move toward the wall
