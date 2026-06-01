@@ -14,10 +14,17 @@
  * alongside the current one; the renderer lerps between them by the frame alpha.
  */
 
-import { PLAYER, TUNING } from '../utils/constants';
+import { ISO_YAW, PLAYER, TUNING } from '../utils/constants';
 import { resolveX, resolveY } from './Collision';
 import type { RoomState } from './Room';
 import type { InputIntent } from './Input';
+
+// Rotation that maps raw SCREEN input (+x right, +y down) onto the world floor
+// plane so screen-up moves up the screen. Computed ONCE from ISO_YAW (no magic
+// numbers, no per-frame trig); negative because we rotate input by the opposite
+// of the camera's yaw.
+const ISO_COS = Math.cos(-ISO_YAW);
+const ISO_SIN = Math.sin(-ISO_YAW);
 
 export interface PlayerState {
   /** Current world position, world units. */
@@ -68,14 +75,15 @@ export function updatePlayer(
   player.prevX = player.x;
   player.prevY = player.y;
 
-  // Target velocity = normalized input × maxSpeed (diagonals not faster).
-  // Normalization is inlined with scalars so the hot loop allocates nothing.
-  const ix = intent.moveX;
-  const iy = intent.moveY;
-  const len = Math.hypot(ix, iy);
+  // Rotate raw screen-space input into the world floor plane (the iso fix), then
+  // normalize so "up" moves up-screen and diagonals aren't faster. Scalar math,
+  // no per-frame allocation.
+  const rx = intent.moveX * ISO_COS - intent.moveY * ISO_SIN;
+  const ry = intent.moveX * ISO_SIN + intent.moveY * ISO_COS;
+  const len = Math.hypot(rx, ry);
   const hasInput = len > 0;
-  const targetVx = hasInput ? (ix / len) * TUNING.maxSpeed : 0;
-  const targetVy = hasInput ? (iy / len) * TUNING.maxSpeed : 0;
+  const targetVx = hasInput ? (rx / len) * TUNING.maxSpeed : 0;
+  const targetVy = hasInput ? (ry / len) * TUNING.maxSpeed : 0;
 
   // Accelerate toward the target when there's input; brake toward rest otherwise.
   const rate = hasInput ? TUNING.accel : TUNING.friction;
