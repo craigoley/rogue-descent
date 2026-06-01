@@ -11,6 +11,7 @@
  */
 
 import { clamp } from '../utils/math';
+import { ISO_YAW } from '../utils/constants';
 
 export interface InputIntent {
   /** Horizontal axis: -1 = left, +1 = right, 0 = none (screen space). */
@@ -53,4 +54,17 @@ export function dragAxes(dx: number, dy: number, range: number): InputIntent {
     moveX: clamp(dx / range, -1, 1),
     moveY: clamp(dy / range, -1, 1),
   };
+}
+
+/**
+ * DIAGNOSTIC: the iso rotation Player applies to raw input, exposed as a pure
+ * function so the ?debug=1 trace can show the "after ISO_YAW rotation" stage.
+ * This MIRRORS the inline math in updatePlayer (rotation by -ISO_YAW); it is not
+ * called by the sim. The "world velocity" trace row reads the actual player
+ * state, so comparing the two reveals any divergence between this and Player.
+ */
+export function isoRotate(moveX: number, moveY: number): { x: number; y: number } {
+  const c = Math.cos(-ISO_YAW);
+  const s = Math.sin(-ISO_YAW);
+  return { x: moveX * c - moveY * s, y: moveX * s + moveY * c };
 }

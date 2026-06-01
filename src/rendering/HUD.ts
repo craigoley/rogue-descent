@@ -12,7 +12,24 @@
  */
 
 import type { GameState } from '../game/GameState';
+import { isoRotate, type InputIntent } from '../game/Input';
+import type { SceneManager } from './SceneManager';
 import { CSS_PALETTE, TUNING, TUNING_RANGES } from '../utils/constants';
+
+const f2 = (n: number): string => n.toFixed(2);
+/** Format an NDC screen delta and tag the dominant visual direction. */
+function screenLabel(s: { x: number; y: number }): string {
+  const mag = Math.hypot(s.x, s.y);
+  if (mag < 1e-4) return `(${f2(s.x)}, ${f2(s.y)})  —`;
+  const horiz = s.x > 0 ? 'right' : 'left';
+  const vert = s.y > 0 ? 'up' : 'down';
+  // "pure" if one component dominates the other by 10x.
+  let dir: string;
+  if (Math.abs(s.x) < Math.abs(s.y) / 10) dir = vert;
+  else if (Math.abs(s.y) < Math.abs(s.x) / 10) dir = horiz;
+  else dir = `${vert}-${horiz}`;
+  return `(${f2(s.x)}, ${f2(s.y)})  ${dir}`;
+}
 
 /** True when the page was loaded with `?debug=1`. */
 export function isDebugEnabled(): boolean {
@@ -78,15 +95,54 @@ export class HUD {
     return row;
   }
 
-  /** Refresh the live readout. No-op when debug is off. */
-  update(state: GameState, fps: number, steps: number, alpha: number): void {
+  /**
+   * Refresh the live readout + the full input→screen TRACE. No-op when debug
+   * off. The trace shows every stage of the transform for the CURRENT input so
+   * we can read on-device exactly where "screen-up" stops being up:
+   *
+   *   1 raw input            (from Controls, screen axes: +x right, +y down)
+   *   2 after ISO_YAW        (Input.isoRotate — mirrors Player's rotation)
+   *   3 world velocity       (ACTUAL, read from player state)
+   *   4 pos delta / step     (ACTUAL, current - prev)
+   *   5 motion → SCREEN      (world velocity through the REAL camera.project)
+   *
+   * Plus the real-camera projection of the world axes, so the grid orientation
+   * (grid lines run along world X / Z) is visible next to the motion.
+   */
+  update(
+    state: GameState,
+    fps: number,
+    steps: number,
+    alpha: number,
+    intent: InputIntent,
+    scene: SceneManager,
+  ): void {
     if (!this.readoutEl) return;
     const p = state.player;
-    const speed = Math.hypot(p.vx, p.vy);
+    const rot = isoRotate(intent.moveX, intent.moveY);
+    const dpx = p.x - p.prevX;
+    const dpy = p.y - p.prevY;
+
+    // Stage 5: project the live world velocity (game x -> three x, game y ->
+    // three z) through the actual camera. Read the scratch immediately each call.
+    const motion = screenLabel(scene.screenDelta(p.x, 0, p.y, p.vx, 0, p.vy));
+    const axX = screenLabel(scene.screenDelta(p.x, 0, p.y, 1, 0, 0));
+    const axZ = screenLabel(scene.screenDelta(p.x, 0, p.y, 0, 0, 1));
+    const axUp = screenLabel(scene.screenDelta(p.x, 0, p.y, 0, 1, 0));
+
     this.readoutEl.textContent =
-      `fps    ${fps.toFixed(0)}\n` +
-      `steps  ${steps}/frame   alpha ${alpha.toFixed(2)}\n` +
-      `pos    ${p.x.toFixed(2)}, ${p.y.toFixed(2)}\n` +
-      `vel    ${p.vx.toFixed(2)}, ${p.vy.toFixed(2)}  (${speed.toFixed(2)})`;
+      `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
+      `\n` +
+      `INPUT TRACE (press a direction)\n` +
+      `1 raw input     ${f2(intent.moveX)}, ${f2(intent.moveY)}\n` +
+      `2 after ISO_YAW ${f2(rot.x)}, ${f2(rot.y)}\n` +
+      `3 world vel     ${f2(p.vx)}, ${f2(p.vy)}\n` +
+      `4 pos delta     ${f2(dpx)}, ${f2(dpy)}\n` +
+      `5 motion→screen ${motion}\n` +
+      `\n` +
+      `CAMERA basis (real .project, x=right y=up)\n` +
+      `world +X        ${axX}\n` +
+      `world +Z (g.y)  ${axZ}\n` +
+      `world +Y (up)   ${axUp}`;
   }
 }

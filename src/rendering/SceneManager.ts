@@ -79,6 +79,30 @@ export class SceneManager {
     this.renderer.render(this.scene, this.camera);
   }
 
+  // --- Diagnostics ----------------------------------------------------------
+  // Project through the REAL camera (no re-derived basis). Reused scratch so the
+  // hot loop allocates nothing; the returned object is overwritten each call, so
+  // read it immediately. Returns the NDC screen delta of a world vector
+  // (ax, ay, az) based at world (ox, oy, oz): x = screen-right, y = screen-UP
+  // (NDC y is up-positive). DIAGNOSTIC ONLY — nothing in the sim reads this.
+  private readonly _projA = new Vector3();
+  private readonly _projB = new Vector3();
+  private readonly _screenDelta = { x: 0, y: 0 };
+  screenDelta(
+    ox: number,
+    oy: number,
+    oz: number,
+    ax: number,
+    ay: number,
+    az: number,
+  ): { x: number; y: number } {
+    this._projA.set(ox, oy, oz).project(this.camera);
+    this._projB.set(ox + ax, oy + ay, oz + az).project(this.camera);
+    this._screenDelta.x = this._projB.x - this._projA.x;
+    this._screenDelta.y = this._projB.y - this._projA.y;
+    return this._screenDelta;
+  }
+
   /** Reposition the camera so it views the current focus from the iso diagonal. */
   private place(): void {
     const { offset } = CAMERA;
