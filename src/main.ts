@@ -79,7 +79,7 @@ function frame(nowMs: number): void {
   entities.sync(game, alpha);
   scene.updateFollow(game, alpha, dt);
   scene.render();
-  hud.update(game, fps, steps, alpha);
+  hud.update(game, fps, steps, alpha, controls.intent, scene);
 
   requestAnimationFrame(frame);
 }
