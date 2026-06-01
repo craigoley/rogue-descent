@@ -1,0 +1,46 @@
+name: OSV-Scanner
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, off-peak. Wednesday 07:17 UTC.
+    - cron: "17 7 * * 3"
+
+permissions:
+  # security-events: write to upload SARIF to the Security tab; actions/contents
+  # read are required by the reusable workflows (and for SARIF upload).
+  security-events: write
+  contents: read
+  actions: read
+
+jobs:
+  # PR scan: diff-aware. Compares the PR branch against the base and fails only
+  # when the PR introduces NEW vulnerabilities — pre-existing ones don't block.
+  scan-pr:
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.3.8
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    with:
+      scan-args: |-
+        --recursive
+        ./
+
+  # Full scan: entire dependency tree on push to main + weekly. Uploads SARIF to
+  # Security > Code Scanning so findings sit alongside any other code scanners.
+  scan-full:
+    if: github.event_name != 'pull_request'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    with:
+      scan-args: |-
+        --recursive
+        ./
