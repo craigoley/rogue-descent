@@ -16,7 +16,7 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import type { RoomState } from '../game/GameState';
+import type { RoomState } from '../game/Room';
 import { PALETTE, ROOM } from '../utils/constants';
 
 export class DungeonRenderer {

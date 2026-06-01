@@ -1,19 +1,19 @@
 /**
- * Entry point + the fixed-timestep game loop.
+ * Entry point + the fixed-timestep game loop with render interpolation.
  *
- * The loop is the contract every later phase builds on:
+ *   gather input -> step sim in fixed SIM_DT slices -> render(interpolated)
  *
- *     gather input  ->  update(state, intent, dt)  ->  render(state)  ->  repeat
- *
- * Simulation advances in fixed TIMESTEP increments off an accumulator, so the
- * game logic is deterministic and frame-rate independent; rendering happens once
- * per animation frame and only READS state. The player moves because
- * GameState.update mutates PlayerState — never because input is wired straight
- * into this loop.
+ * Real frame time is accumulated and the sim is advanced in whole SIM_DT steps;
+ * the leftover remainder becomes `alpha` (0..1), and the renderers lerp each
+ * entity between its previous and current sim-step position by that alpha. So
+ * the simulation stays deterministic and frame-rate independent while motion
+ * looks smooth at 60 or 120 Hz. The player moves because GameState.update
+ * mutates PlayerState — never because input is wired straight into this loop.
  */
 
 import './style.css';
 import { createGameState, update } from './game/GameState';
+import { roomCenter } from './game/Room';
 import { Controls } from './input/Controls';
 import { SceneManager } from './rendering/SceneManager';
 import { DungeonRenderer } from './rendering/DungeonRenderer';
@@ -21,7 +21,7 @@ import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD } from './rendering/HUD';
 import { AudioEngine } from './audio/AudioEngine';
 import { loadSettings } from './state/Settings';
-import { MAX_FRAME_DT, TIMESTEP } from './utils/constants';
+import { MAX_FRAME_DT, SIM_DT } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
@@ -38,11 +38,9 @@ dungeon.build(game.room);
 const entities = new EntityRenderer(scene.scene);
 const hud = new HUD(app);
 
-// Frame the camera on the room centre.
-scene.lookAt(
-  (game.room.tilesX * game.room.tileSize) / 2,
-  (game.room.tilesY * game.room.tileSize) / 2,
-);
+// Start the camera framed on the player (room centre) — no slide-in on frame 1.
+const center = roomCenter(game.room);
+scene.snapFocus(center.x, center.y);
 
 // Audio context is created now but only resumed after a user gesture.
 const audio = new AudioEngine();
@@ -64,18 +62,24 @@ function frame(nowMs: number): void {
   let dt = (nowMs - lastMs) / 1000;
   lastMs = nowMs;
   dt = Math.min(dt, MAX_FRAME_DT);
-  // Smoothed FPS for the debug overlay (avoids per-frame allocation).
+  // Smoothed FPS for the debug overlay (no per-frame allocation).
   fps = fps === 0 ? 1 / dt : fps * 0.9 + (1 / dt) * 0.1;
 
+  // Step the sim in fixed slices; count steps for the debug readout.
   accumulator += dt;
-  while (accumulator >= TIMESTEP) {
-    update(game, controls.intent, TIMESTEP);
-    accumulator -= TIMESTEP;
+  let steps = 0;
+  while (accumulator >= SIM_DT) {
+    update(game, controls.intent, SIM_DT);
+    accumulator -= SIM_DT;
+    steps++;
   }
+  const alpha = accumulator / SIM_DT;
 
-  entities.sync(game);
+  // Render the interpolated state. Renderers read prev+current; never mutate.
+  entities.sync(game, alpha);
+  scene.updateFollow(game, alpha, dt);
   scene.render();
-  hud.update(game, fps);
+  hud.update(game, fps, steps, alpha);
 
   requestAnimationFrame(frame);
 }
