@@ -1,10 +1,20 @@
 /**
- * Renders all dynamic entities — player, enemies, projectiles, hit-sparks — plus
- * the melee swing and the dash trail. Everything is POOLED: a fixed set of
- * meshes created once at construction and shown/hidden/positioned each frame
- * from the (read-only) game state. Nothing allocates per frame. Positions are
- * INTERPOLATED between each entity's previous and current sim-step position by
- * the frame `alpha`, so motion is smooth at any refresh rate.
+ * Renders all dynamic entities — player + enemies as procedural humanoid FIGURES
+ * (CylinderGeometry body + SphereGeometry head + a front visor "eye" indicator),
+ * plus projectiles, hit-sparks, the melee swing and the dash trail.
+ *
+ * Everything is POOLED exactly as the placeholder cubes were: a fixed set of
+ * meshes/groups created ONCE in the constructor and only shown/hidden, moved,
+ * rotated, scaled and recoloured each frame from the (read-only) game state.
+ * Nothing allocates geometry or materials per frame. Positions INTERPOLATE
+ * between each entity's previous and current sim-step position by the frame
+ * `alpha`. This layer never mutates game state.
+ *
+ * FACING (the iso trap — a bare cylinder looks the same from many angles):
+ *  - Player figure faces the AIM vector (the exact vector the ranged/aim system
+ *    uses — resolved here via the pure `aimDirection`, no sim state added).
+ *  - Enemy figure faces the player (its chase/telegraph/strike target).
+ *  - A bright front visor makes the facing unambiguous from the iso camera.
  *
  * Game (x, y) maps to three (x, z); the floor is y = 0.
  */
@@ -12,29 +22,64 @@
 import {
   BoxGeometry,
   CircleGeometry,
+  CylinderGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   type Scene,
+  SphereGeometry,
 } from 'three';
 import type { GameState } from '../game/GameState';
+import { aimDirection } from '../game/Combat';
+import type { InputIntent } from '../game/Input';
 import {
   ENEMY,
+  FIGURE,
   MELEE,
   PALETTE,
-  PLAYER,
   POOL,
   RANGED,
   VFX,
 } from '../utils/constants';
-import { lerp } from '../utils/math';
+import { lerp, type Vec2 } from '../utils/math';
+
+/** Geometry + child Y offsets for one figure type (shared across a pool). */
+interface FigureGeos {
+  body: CylinderGeometry;
+  head: SphereGeometry;
+  visor: BoxGeometry;
+  bodyCenterY: number;
+  headCenterY: number;
+  visorX: number;
+  visorY: number;
+}
+
+/** One built figure: an outer group (position/facing/scale) wrapping an inner
+ *  group (tilt/lean), plus the body+head material for state recolouring. */
+interface Figure {
+  group: Group;
+  inner: Group;
+  bodyMat: MeshStandardMaterial;
+}
+
+/** Structural dimensions for one figure type (player and enemy both satisfy it;
+ *  a `typeof FIGURE.player` would bind to that variant's literal numbers). */
+interface FigureDims {
+  bodyRadiusTop: number;
+  bodyRadiusBottom: number;
+  bodyHeight: number;
+  headRadius: number;
+  visorSize: number;
+}
 
 export class EntityRenderer {
-  private readonly player: Mesh;
-  private readonly playerMat: MeshStandardMaterial;
-  private readonly enemies: Mesh[] = [];
-  private readonly enemyMats: MeshStandardMaterial[] = [];
+  private readonly player: Figure;
+  private readonly playerBodyCenterY: number;
+  private playerLean = 0;
+  private lastNow = 0;
+
+  private readonly enemies: Figure[] = [];
   private readonly projectiles: Mesh[] = [];
   private readonly particles: Mesh[] = [];
   private readonly trail: Mesh[] = [];
@@ -43,22 +88,20 @@ export class EntityRenderer {
   private readonly meleeGroup: Group;
   private readonly meleeMat: MeshBasicMaterial;
 
-  constructor(scene: Scene) {
-    // --- Player ---
-    const size = PLAYER.radius * 2;
-    this.playerMat = new MeshStandardMaterial({
-      color: PALETTE.player,
-      emissive: PALETTE.player,
-      emissiveIntensity: VFX.playerEmissive,
-      roughness: 0.5,
-    });
-    this.player = new Mesh(new BoxGeometry(size, size, size), this.playerMat);
-    scene.add(this.player);
+  /** Reused scratch for the resolved aim direction — no per-frame allocation. */
+  private readonly aim: Vec2 = { x: 0, y: 0 };
 
-    // --- Dash trail (afterimages) ---
+  constructor(scene: Scene) {
+    // --- Player figure ---
+    const playerGeos = this.makeGeos(FIGURE.player);
+    this.playerBodyCenterY = playerGeos.bodyCenterY;
+    this.player = this.makeFigure(playerGeos, PALETTE.player, VFX.playerEmissive, PALETTE.invuln);
+    scene.add(this.player.group);
+
+    // --- Dash trail: faded ghosts of the player BODY (shared geometry) ---
     for (let i = 0; i < VFX.trailLength; i++) {
       const m = new Mesh(
-        new BoxGeometry(size, size, size),
+        playerGeos.body,
         new MeshBasicMaterial({ color: PALETTE.player, transparent: true, opacity: 0 }),
       );
       m.visible = false;
@@ -68,21 +111,13 @@ export class EntityRenderer {
       scene.add(m);
     }
 
-    // --- Enemies (pooled, individual materials for per-enemy tint/flash) ---
-    const eSize = ENEMY.radius * 2;
-    const eGeo = new BoxGeometry(eSize, eSize, eSize);
+    // --- Enemy figures (pooled; shared geometry, per-enemy materials) ---
+    const enemyGeos = this.makeGeos(FIGURE.enemy);
     for (let i = 0; i < POOL.enemies; i++) {
-      const mat = new MeshStandardMaterial({
-        color: PALETTE.enemy,
-        emissive: PALETTE.enemy,
-        emissiveIntensity: 0.25,
-        roughness: 0.6,
-      });
-      const m = new Mesh(eGeo, mat);
-      m.visible = false;
-      this.enemies.push(m);
-      this.enemyMats.push(mat);
-      scene.add(m);
+      const fig = this.makeFigure(enemyGeos, PALETTE.enemy, VFX.enemyEmissive, PALETTE.enemyTelegraph);
+      fig.group.visible = false;
+      this.enemies.push(fig);
+      scene.add(fig.group);
     }
 
     // --- Projectiles (pooled, shared material) ---
@@ -106,11 +141,7 @@ export class EntityRenderer {
     }
 
     // --- Melee swing (flat sector, oriented via a parent group) ---
-    this.meleeMat = new MeshBasicMaterial({
-      color: PALETTE.player,
-      transparent: true,
-      opacity: 0,
-    });
+    this.meleeMat = new MeshBasicMaterial({ color: PALETTE.player, transparent: true, opacity: 0 });
     const sector = new Mesh(
       new CircleGeometry(MELEE.range, 18, -MELEE.halfArc, MELEE.halfArc * 2),
       this.meleeMat,
@@ -122,50 +153,110 @@ export class EntityRenderer {
     scene.add(this.meleeGroup);
   }
 
+  /** Build the shared geometry + child offsets for a figure type. Called twice
+   *  (player, enemy) at construction — never per frame. */
+  private makeGeos(d: FigureDims): FigureGeos {
+    return {
+      body: new CylinderGeometry(d.bodyRadiusTop, d.bodyRadiusBottom, d.bodyHeight, FIGURE.segments),
+      head: new SphereGeometry(d.headRadius, FIGURE.segments, FIGURE.segments),
+      // A wide-but-thin bar across the front of the face (long axis = local z).
+      visor: new BoxGeometry(d.visorSize * 0.5, d.visorSize * 0.7, d.visorSize * 1.7),
+      bodyCenterY: d.bodyHeight / 2,
+      headCenterY: d.bodyHeight + d.headRadius * 0.7,
+      visorX: d.headRadius * 0.85, // poke out the +x (front) face of the head
+      visorY: d.bodyHeight + d.headRadius * 0.7,
+    };
+  }
+
+  /** Compose one figure (outer group → inner group → body + head + visor). The
+   *  body & head share one material so combat state recolours the whole figure;
+   *  the visor has its own bright always-glowing material. Front = local +x. */
+  private makeFigure(geos: FigureGeos, bodyColor: number, bodyEmissive: number, visorColor: number): Figure {
+    const bodyMat = new MeshStandardMaterial({
+      color: bodyColor,
+      emissive: bodyColor,
+      emissiveIntensity: bodyEmissive,
+      roughness: 0.5,
+    });
+    const visorMat = new MeshStandardMaterial({
+      color: visorColor,
+      emissive: visorColor,
+      emissiveIntensity: VFX.visorEmissive,
+      roughness: 0.4,
+    });
+    const body = new Mesh(geos.body, bodyMat);
+    body.position.y = geos.bodyCenterY;
+    const head = new Mesh(geos.head, bodyMat);
+    head.position.y = geos.headCenterY;
+    const visor = new Mesh(geos.visor, visorMat);
+    visor.position.set(geos.visorX, geos.visorY, 0);
+
+    const inner = new Group();
+    inner.add(body, head, visor);
+    const group = new Group();
+    group.add(inner);
+    return { group, inner, bodyMat };
+  }
+
   /** Sync all meshes to the interpolated game state. Read-only on `state`. */
-  sync(state: GameState, alpha: number): void {
+  sync(state: GameState, alpha: number, intent: InputIntent): void {
+    const now = performance.now();
+    const frameDt = this.lastNow === 0 ? 1 / 60 : Math.min(0.1, (now - this.lastNow) / 1000);
+    this.lastNow = now;
+
     const p = state.player;
     const px = lerp(p.prevX, p.x, alpha);
     const py = lerp(p.prevY, p.y, alpha);
 
-    // Player combat-state read (priority: hit-flash > dodge confirm > i-frame
-    // glow > resting). The dash i-frames now make the cube GLOW bright cyan and
-    // throb — invulnerability is unmistakable — instead of the old blink that
-    // just flickered the player out of sight. A negated hit adds a white "dodge!"
-    // pop. The cube stays visible throughout.
-    this.player.position.set(px, PLAYER.radius, py);
-    this.player.visible = p.alive;
+    // --- Player figure ---
+    this.player.group.position.set(px, 0, py);
+    this.player.group.visible = p.alive;
+
+    // Face the AIM vector (resolved exactly as the sim does; pure, no state add).
+    const aim = aimDirection(p, intent, this.aim);
+    this.player.group.rotation.y = Math.atan2(-aim.y, aim.x);
+
+    // State recolour/emissive (priority: hit-flash > dodge > i-frame glow >
+    // resting). Same legibility contract as the cube (PR #11) — applied to the
+    // whole figure via the shared body/head material; the cube STAYS VISIBLE.
     const invuln = p.iframeTimer > 0;
     const dodging = p.dodgeFxTimer > 0;
+    const mat = this.player.bodyMat;
     if (p.hitFlashTimer > 0) {
-      this.playerMat.color.setHex(PALETTE.hitFlash);
-      this.playerMat.emissiveIntensity = VFX.invulnEmissive;
+      mat.color.setHex(PALETTE.hitFlash);
+      mat.emissiveIntensity = VFX.invulnEmissive;
     } else if (dodging) {
-      this.playerMat.color.setHex(PALETTE.dodge);
-      this.playerMat.emissiveIntensity = VFX.dodgeEmissive;
+      mat.color.setHex(PALETTE.dodge);
+      mat.emissiveIntensity = VFX.dodgeEmissive;
     } else if (invuln) {
-      this.playerMat.color.setHex(PALETTE.invuln);
-      this.playerMat.emissiveIntensity = VFX.invulnEmissive;
+      mat.color.setHex(PALETTE.invuln);
+      mat.emissiveIntensity = VFX.invulnEmissive;
     } else {
-      this.playerMat.color.setHex(PALETTE.player);
-      this.playerMat.emissiveIntensity = VFX.playerEmissive;
+      mat.color.setHex(PALETTE.player);
+      mat.emissiveIntensity = VFX.playerEmissive;
     }
-    // Subtle "powered" throb while invulnerable or mid-dodge (render-only clock).
+
+    // "Powered" throb while invulnerable / mid-dodge (render-only clock).
     const pulse =
       invuln || dodging
-        ? 1 + VFX.invulnPulse * (0.5 + 0.5 * Math.sin(performance.now() * 0.001 * VFX.invulnPulseRate))
+        ? 1 + VFX.invulnPulse * (0.5 + 0.5 * Math.sin(now * 0.001 * VFX.invulnPulseRate))
         : 1;
-    this.player.scale.setScalar(pulse);
+    this.player.group.scale.setScalar(pulse);
+
+    // Dash lean — the figure tips forward (toward local +x = front) during the
+    // committed burst, eased so it isn't a pop.
+    const targetLean = p.dashTimer > 0 ? FIGURE.dashLean : 0;
+    this.playerLean += (targetLean - this.playerLean) * (1 - Math.exp(-FIGURE.leanLerp * frameDt));
+    this.player.inner.rotation.z = -this.playerLean;
 
     this.syncTrail(p, px, py);
-    this.syncEnemies(state, alpha);
+    this.syncEnemies(state, alpha, px, py);
     this.syncProjectiles(state, alpha);
     this.syncParticles(state);
-    this.syncMelee(p, px, py);
+    this.syncMelee(p, px, py, aim.x, aim.y);
   }
 
   private syncTrail(p: GameState['player'], px: number, py: number): void {
-    // Shift history and record the latest interpolated position.
     for (let i = this.trail.length - 1; i > 0; i--) {
       this.trailX[i] = this.trailX[i - 1];
       this.trailY[i] = this.trailY[i - 1];
@@ -181,39 +272,46 @@ export class EntityRenderer {
         continue;
       }
       m.visible = true;
-      m.position.set(this.trailX[i], PLAYER.radius, this.trailY[i]);
-      const mat = m.material as MeshBasicMaterial;
-      mat.opacity = VFX.trailOpacity * (1 - i / this.trail.length);
+      m.position.set(this.trailX[i], this.playerBodyCenterY, this.trailY[i]);
+      (m.material as MeshBasicMaterial).opacity = VFX.trailOpacity * (1 - i / this.trail.length);
     }
   }
 
-  private syncEnemies(state: GameState, alpha: number): void {
+  private syncEnemies(state: GameState, alpha: number, px: number, py: number): void {
     const list = state.enemies;
     for (let i = 0; i < this.enemies.length; i++) {
       const e = list[i];
-      const m = this.enemies[i];
+      const fig = this.enemies[i];
       if (!e.active) {
-        m.visible = false;
+        fig.group.visible = false;
         continue;
       }
-      m.visible = true;
-      m.position.set(
-        lerp(e.prevX, e.x, alpha),
-        ENEMY.radius,
-        lerp(e.prevY, e.y, alpha),
-      );
-      const mat = this.enemyMats[i];
+      fig.group.visible = true;
+      const ex = lerp(e.prevX, e.x, alpha);
+      const ey = lerp(e.prevY, e.y, alpha);
+      fig.group.position.set(ex, 0, ey);
+
+      // Face the player (chase/telegraph/strike target). Keep prior facing if
+      // exactly coincident (degenerate).
+      const dx = px - ex;
+      const dy = py - ey;
+      if (dx * dx + dy * dy > 1e-6) fig.group.rotation.y = Math.atan2(-dy, dx);
+
+      const mat = fig.bodyMat;
       if (e.flashTimer > 0) {
         mat.color.setHex(PALETTE.hitFlash);
-        m.scale.setScalar(1);
+        mat.emissiveIntensity = VFX.invulnEmissive;
+        fig.group.scale.setScalar(1);
       } else if (e.phase === 'telegraph') {
         // Wind-up tell: warning colour + grow as the strike approaches.
         mat.color.setHex(PALETTE.enemyTelegraph);
+        mat.emissiveIntensity = VFX.enemyEmissive;
         const t = 1 - e.timer / ENEMY.telegraph; // 0 -> 1 across the wind-up
-        m.scale.setScalar(1 + VFX.telegraphScale * t);
+        fig.group.scale.setScalar(1 + VFX.telegraphScale * t);
       } else {
         mat.color.setHex(PALETTE.enemy);
-        m.scale.setScalar(1);
+        mat.emissiveIntensity = VFX.enemyEmissive;
+        fig.group.scale.setScalar(1);
       }
     }
   }
@@ -228,11 +326,7 @@ export class EntityRenderer {
         continue;
       }
       m.visible = true;
-      m.position.set(
-        lerp(pr.prevX, pr.x, alpha),
-        VFX.projectileHeight,
-        lerp(pr.prevY, pr.y, alpha),
-      );
+      m.position.set(lerp(pr.prevX, pr.x, alpha), VFX.projectileHeight, lerp(pr.prevY, pr.y, alpha));
     }
   }
 
@@ -251,15 +345,22 @@ export class EntityRenderer {
     }
   }
 
-  private syncMelee(p: GameState['player'], px: number, py: number): void {
+  private syncMelee(
+    p: GameState['player'],
+    px: number,
+    py: number,
+    aimX: number,
+    aimY: number,
+  ): void {
     if (p.meleeAnimTimer <= 0) {
       this.meleeGroup.visible = false;
       return;
     }
     this.meleeGroup.visible = true;
     this.meleeGroup.position.set(px, VFX.meleeArcHeight, py);
-    // Aim the flat sector along the player's facing (world x,y -> three x,z).
-    this.meleeGroup.rotation.y = Math.atan2(-p.facingY, p.facingX);
+    // Aim the swing along the resolved aim (matches both the figure's facing and
+    // the actual hit direction, which the sim also resolves from aim).
+    this.meleeGroup.rotation.y = Math.atan2(-aimY, aimX);
     this.meleeMat.opacity = VFX.meleeArcOpacity * (p.meleeAnimTimer / MELEE.active);
   }
 }

@@ -91,7 +91,7 @@ function frame(nowMs: number): void {
   // Render the interpolated state. Renderers read prev+current; never mutate.
   const shake = game.shakeTimer > 0 ? (game.shakeTimer / SHAKE.duration) * TUNING.shake : 0;
   scene.setShake(shake);
-  entities.sync(game, alpha);
+  entities.sync(game, alpha, controls.intent);
   scene.updateFollow(game, alpha, dt);
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene);
