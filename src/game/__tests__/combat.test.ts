@@ -18,7 +18,11 @@ import {
 
 const room = buildTestRoom();
 const DT = SIM_DT;
-const dashIntent = (): InputIntent => ({ ...createIntent(), moveX: 1, dash: true });
+// Screen-space (1,1) maps through the restored 45° iso yaw to a pure world +x
+// dash (see Player's input rotation). That keeps the dash on the open centre row
+// — a cardinal screen input would map to a world DIAGONAL that clips the corner
+// pillars — so the distance/commitment assertions below read in plain world x.
+const dashIntent = (): InputIntent => ({ ...createIntent(), moveX: 1, moveY: 1, dash: true });
 
 describe('Dash', () => {
   it('bursts approximately dashDist in the committed direction', () => {

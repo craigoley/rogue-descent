@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createPlayer, updatePlayer, type PlayerState } from '../Player';
 import { buildTestRoom } from '../Room';
 import { createIntent, type InputIntent } from '../Input';
-import { SIM_DT, TUNING } from '../../utils/constants';
+import { CAMERA, SIM_DT, TUNING } from '../../utils/constants';
 
 const room = buildTestRoom();
 const DT = SIM_DT;
@@ -17,14 +17,33 @@ const speed = (p: PlayerState): number => Math.hypot(p.vx, p.vy);
 
 /**
  * Screen projection of a floor velocity (game x = vx, game y = vy) under the
- * SCREEN-ALIGNED camera (zero yaw). World x -> screen-right; world z (= game y)
- * -> screen-vertical, with +z toward the viewer (down). So screen-right ∝ vx and
- * screen-up ∝ -vy. Used to assert input maps to the intended SCREEN direction
- * AND, since the grid lines now run along world x/z, that motion runs along a
- * grid axis (the iso-mapping regression guard for Option 2).
+ * REAL iso camera, derived purely from CAMERA's offset (no three.js). The camera
+ * sits at offset (ox, oy, oz) looking at the focus with world-up = +y; this
+ * mirrors three's lookAt basis:
+ *   Zc = normalize(ox, oy, oz)            (focus -> camera)
+ *   Xc = normalize(worldUp × Zc) = normalize(oz, 0, -ox)   (screen-right)
+ *   Yc = Zc × Xc                                            (screen-up)
+ * A floor velocity is (vx, 0, vy) in three coords; screen-right = v·Xc,
+ * screen-up = v·Yc. This is the iso-mapping regression guard: under the restored
+ * 45° yaw, "up" input must still project straight up the screen even though it
+ * is a world diagonal.
  */
 function project(p: PlayerState): { right: number; up: number } {
-  return { right: p.vx, up: -p.vy };
+  const { offsetX: ox, offsetY: oy, offsetZ: oz } = CAMERA;
+  const zl = Math.hypot(ox, oy, oz);
+  const zc = [ox / zl, oy / zl, oz / zl];
+  const xl = Math.hypot(oz, ox);
+  const xc = [oz / xl, 0, -ox / xl];
+  const yc = [
+    zc[1] * xc[2] - zc[2] * xc[1],
+    zc[2] * xc[0] - zc[0] * xc[2],
+    zc[0] * xc[1] - zc[1] * xc[0],
+  ];
+  const v = [p.vx, 0, p.vy];
+  return {
+    right: v[0] * xc[0] + v[1] * xc[1] + v[2] * xc[2],
+    up: v[0] * yc[0] + v[1] * yc[1] + v[2] * yc[2],
+  };
 }
 
 describe('Player movement — snappy velocity ramp', () => {
@@ -84,37 +103,32 @@ describe('Player movement — snappy velocity ramp', () => {
   });
 });
 
-describe('Player iso input mapping — screen-aligned (the regression guard)', () => {
-  it('"up" (0,-1) moves UP the screen AND along a grid axis (no drift)', () => {
+describe('Player iso input mapping — restored 45° diamond (the regression guard)', () => {
+  it('"up" (0,-1) projects straight UP the screen under the yawed camera', () => {
     const p = createPlayer(7, 7);
     step(p, { moveY: -1 }, 6);
     const s = project(p);
     expect(s.up).toBeGreaterThan(0); // goes up the screen
-    expect(s.right).toBeCloseTo(0, 6); // straight up, not drifting sideways
-    // Motion runs along the world-z grid line (grid lines = world x/z): the
-    // perpendicular component is ~0, so the cube tracks a visible grid line.
-    expect(p.vx).toBeCloseTo(0, 6);
-    expect(p.vy).toBeLessThan(0);
+    expect(s.right).toBeCloseTo(0, 6); // straight up, no sideways drift
   });
 
-  it('"right" (1,0) moves RIGHT on screen AND along a grid axis (no drift)', () => {
+  it('"right" (1,0) projects straight RIGHT on screen under the yawed camera', () => {
     const p = createPlayer(7, 7);
     step(p, { moveX: 1 }, 6);
     const s = project(p);
     expect(s.right).toBeGreaterThan(0);
     expect(s.up).toBeCloseTo(0, 6);
-    expect(p.vy).toBeCloseTo(0, 6); // along the world-x grid line
-    expect(p.vx).toBeGreaterThan(0);
   });
 
-  it('with the screen-aligned camera "up" IS a pure world axis (tracks the grid)', () => {
-    // Zero camera yaw => input rotation is identity => intent (0,-1) maps to
-    // world -z exactly: vx === 0. (This is the inverse of the old diamond
-    // behaviour, where "up" was a world diagonal.)
+  it('"up" is a world DIAGONAL across the diamond (grid-tracking abandoned)', () => {
+    // Restored 45° yaw => input rotation is the real π/4 => intent (0,-1) maps to
+    // a world diagonal: BOTH vx and vy are non-zero and equal magnitude. This is
+    // the iso behaviour (Hades/Diablo), the inverse of PR #8's grid-locked axis.
     const p = createPlayer(7, 7);
     step(p, { moveY: -1 }, 6);
-    expect(p.vx).toBeCloseTo(0, 6);
-    expect(Math.abs(p.vy)).toBeGreaterThan(0.1);
+    expect(p.vx).toBeLessThan(0);
+    expect(p.vy).toBeLessThan(0);
+    expect(Math.abs(p.vx)).toBeCloseTo(Math.abs(p.vy), 6); // 45° diagonal
   });
 });
 
@@ -133,9 +147,9 @@ describe('Player interpolation snapshot', () => {
 
 describe('Player wall collision (integration)', () => {
   it('drives into a wall and stops without penetrating it', () => {
-    // With the screen-aligned camera the input rotation is identity, so intent
-    // (1,0) is pure world +X — straight at the right wall. The body must come to
-    // rest flush and never pass through.
+    // Intent (1,0) has a +x world component under any camera yaw, so it drives
+    // the player into the right wall. The body must come to rest flush and never
+    // pass through.
     const p = createPlayer(11, 7);
     step(p, { moveX: 1 }, 90);
     const wallFaceX = (room.tilesX - 1) * room.tileSize; // 13

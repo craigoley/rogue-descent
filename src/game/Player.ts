@@ -18,7 +18,7 @@ import type { RoomState } from './Room';
 import type { InputIntent } from './Input';
 
 // Rotation that maps raw SCREEN input (+x right, +y down) onto the world floor
-// plane (identity while the camera has zero yaw). Computed ONCE from ISO_YAW.
+// plane (the real 45° under the restored iso camera). Computed ONCE from ISO_YAW.
 const ISO_COS = Math.cos(-ISO_YAW);
 const ISO_SIN = Math.sin(-ISO_YAW);
 
