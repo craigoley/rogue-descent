@@ -64,7 +64,18 @@ export function damageEnemy(
  *  i-frames). Triggers flash, brief i-frames and a screen shake. Death itself
  *  is detected by GameState.update (health <= 0). */
 export function damagePlayer(player: PlayerState, amount: number, state: GameState): void {
-  if (player.iframeTimer > 0 || player.hitInvulnTimer > 0) return;
+  // Dash i-frames negate the hit — and, unlike the silent post-hit window, this
+  // is the DODGE: reward it so the player SEES they pulled it off. Damage is
+  // still fully negated (logic unchanged); only feedback is added.
+  if (player.iframeTimer > 0) {
+    player.dodgeFxTimer = PLAYER_COMBAT.dodgeFx;
+    spawnParticles(state.particles, player.x, player.y, PARTICLE.dodgeCount);
+    if (PLAYER_COMBAT.dodgeHitstop > state.hitstopTimer) {
+      state.hitstopTimer = PLAYER_COMBAT.dodgeHitstop; // tiny time-dilation cue
+    }
+    return;
+  }
+  if (player.hitInvulnTimer > 0) return; // post-hit i-frames: silent
   player.health -= amount;
   player.hitFlashTimer = PLAYER_COMBAT.hitFlash;
   player.hitInvulnTimer = PLAYER_COMBAT.hitInvuln;

@@ -23,6 +23,10 @@ export const PALETTE = {
   projectile: 0x66e0ff,
   spark: 0xffffff,
   hitFlash: 0xffffff,
+  /** Dash i-frame glow — bright cyan-white so "I'm invulnerable" reads clearly. */
+  invuln: 0xaeffff,
+  /** Successful-dodge confirmation flash (a dash negated a hit). */
+  dodge: 0xffffff,
 } as const;
 
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
@@ -174,6 +178,15 @@ export const CAMERA = {
   offsetZ: 20,
   near: 0.1,
   far: 200,
+  /**
+   * Vertical FRAMING bias, as a fraction of viewSize. Shifts the orthographic
+   * frustum window up so the focus (player) sits below screen centre — leaving
+   * headroom above for approaching enemies and pushing the empty foreground
+   * floor down behind the bottom controls. This is a pure 2D pan of the image:
+   * it does NOT change the camera's view direction or the iso ANGLE (the cube
+   * still shows its 3-face hexagonal silhouette). Tune by eye on a portrait phone.
+   */
+  frameBiasY: 0.18,
 } as const;
 
 /**
@@ -218,6 +231,12 @@ export const PLAYER_COMBAT = {
   hitInvuln: 0.4,
   /** Dead time before the room auto-resets, seconds. */
   deathPause: 1.0,
+  /** Render-tell duration when a dash i-frame negates a hit (the "dodge!"
+   *  confirmation flash). VISIBILITY only — the i-frame timing is unchanged. */
+  dodgeFx: 0.28,
+  /** Tiny freeze-frame on a successful dodge — a cheap time-dilation cue so the
+   *  dodge FEELS earned. Reuses the existing hit-stop mechanism, seconds. */
+  dodgeHitstop: 0.07,
 } as const;
 
 /** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */
@@ -296,6 +315,8 @@ export const PARTICLE = {
   hitCount: 7,
   /** Particles emitted on enemy death. */
   deathCount: 16,
+  /** "Whiff" sparks emitted when a dash dodges a hit (the dodge burst). */
+  dodgeCount: 12,
 } as const;
 
 /** Screen shake decay window, seconds (magnitude is TUNING.shake). */
@@ -312,8 +333,17 @@ export const VFX = {
   /** Hit-spark cube size, world units. */
   particleSize: 0.12,
   particleHeight: 0.25,
-  /** I-frame blink rate (flickers per second). */
-  iframeBlink: 30,
+  /** Resting emissive intensity of the player cube (no combat state). */
+  playerEmissive: 0.4,
+  /** Emissive intensity of the player cube while dash i-frames are active (vs
+   *  the resting playerEmissive) — the cube glows so invuln is unmistakable. */
+  invulnEmissive: 1.5,
+  /** Scale-pulse amplitude during i-frames / a dodge (a subtle "powered" throb). */
+  invulnPulse: 0.14,
+  /** Scale-pulse speed during i-frames / a dodge, radians per second. */
+  invulnPulseRate: 16,
+  /** Emissive intensity at the peak of a successful-dodge confirmation flash. */
+  dodgeEmissive: 2.4,
   /** Dash trail afterimage peak opacity. */
   trailOpacity: 0.35,
   /** Enemy telegraph max scale boost (1 + this at full wind-up). */

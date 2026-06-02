@@ -129,6 +129,34 @@ body {
   box-shadow: 0 0 16px rgba(255, 102, 51, 0.45);
 }
 
+/* The aim stick is the persistent RANGED control: its base is ALWAYS shown —
+   dimmed + dashed at its resting "home", solid while being dragged — so ranged
+   reads as an available control at a glance, like the DASH/MELEE buttons. */
+.touch-stick-base.touch-aim.is-home {
+  display: block;
+  opacity: 0.5;
+  border-style: dashed;
+  background: rgba(255, 102, 51, 0.05);
+}
+
+.touch-aim-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font: 700 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  color: rgba(255, 153, 102, 0.95);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* While the stick is being dragged the thumb shows position, so drop the label. */
+.touch-stick-base.touch-aim.is-active .touch-aim-label {
+  opacity: 0;
+}
+
 /* On-screen action buttons (mobile): melee + dash. */
 .touch-action {
   position: fixed;
@@ -136,6 +164,11 @@ body {
   width: 76px;
   height: 76px;
   border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.1em;
   color: #fff;
@@ -144,6 +177,14 @@ body {
   z-index: 6;
   touch-action: none;
   user-select: none;
+}
+
+/* Secondary line on a button (e.g. DASH's "DODGE"), so dash=dodge reads. */
+.touch-action-sub {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  opacity: 0.78;
 }
 
 .touch-btn-melee {
@@ -184,6 +225,33 @@ body {
 
 .touch-hint.is-hidden {
   opacity: 0;
+}
+
+/* One-time dodge tutorial — centred, prominent, fades in/out. */
+.combat-tutorial {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 18px;
+  font: 700 clamp(13px, 3.4vw, 18px) / 1.2 ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  letter-spacing: 0.12em;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--player);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(51, 255, 204, 0.4);
+  border-radius: 999px;
+  text-shadow: 0 0 10px currentColor;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.combat-tutorial.is-visible {
+  opacity: 0.95;
 }
 
 /* ?debug=1 tuning panel — interactive (sliders), so pointer-events on. */

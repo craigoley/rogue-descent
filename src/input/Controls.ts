@@ -64,21 +64,50 @@ export class Controls {
     this.moveThumb = Controls.makeStick('touch-stick-thumb');
     this.aimBase = Controls.makeStick('touch-stick-base touch-aim');
     this.aimThumb = Controls.makeStick('touch-stick-thumb touch-aim');
+    // The aim stick IS the ranged control, so it carries a persistent label and
+    // rests at a visible "home" (placeAimHome) — ranged is now an obvious,
+    // always-on affordance at parity with the DASH/MELEE buttons (was an
+    // invisible right-half drag zone with only a text hint).
+    const aimLabel = document.createElement('span');
+    aimLabel.className = 'touch-aim-label';
+    aimLabel.textContent = 'AIM·FIRE';
+    this.aimBase.appendChild(aimLabel);
     target.append(this.moveBase, this.moveThumb, this.aimBase, this.aimThumb);
 
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    this.hint = document.createElement('div');
+    this.hint.className = 'touch-hint';
+    this.hint.textContent = isTouch
+      ? 'Left: MOVE   ·   Right: AIM + FIRE   ·   DASH = dodge'
+      : 'WASD move · Mouse aim · Click fire · J melee · SPACE dash (dodge)';
+    target.appendChild(this.hint);
+
+    if (isTouch) {
       this.makeButton('MELEE', 'touch-btn-melee', () => {
         this.intent.melee = true;
       });
-      this.makeButton('DASH', 'touch-btn-dash', () => {
-        this.intent.dash = true;
-      });
-      this.hint = document.createElement('div');
-      this.hint.className = 'touch-hint';
-      this.hint.textContent = 'Left: move · Right: aim+fire';
-      target.appendChild(this.hint);
+      // DASH is also the DODGE (i-frames) — label it so dash=dodge is learnable.
+      this.makeButton(
+        'DASH',
+        'touch-btn-dash',
+        () => {
+          this.intent.dash = true;
+        },
+        'DODGE',
+      );
+      this.placeAimHome(); // show the ranged stick at rest, always visible
+      window.addEventListener('resize', this.onResize);
+    } else {
+      // Desktop has no touch sticks; auto-fade the controls hint after a beat.
+      this.aimBase.classList.remove('is-home');
+      window.setTimeout(() => this.hint?.classList.add('is-hidden'), 7000);
     }
   }
+
+  private onResize = (): void => {
+    if (this.aimTouchId === null) this.placeAimHome();
+  };
 
   private static makeStick(className: string): HTMLDivElement {
     const el = document.createElement('div');
@@ -86,10 +115,25 @@ export class Controls {
     return el;
   }
 
-  private makeButton(label: string, className: string, onPress: () => void): void {
+  private makeButton(
+    label: string,
+    className: string,
+    onPress: () => void,
+    sub?: string,
+  ): void {
     const b = document.createElement('button');
     b.className = `touch-action ${className}`;
-    b.textContent = label;
+    if (sub) {
+      const main = document.createElement('span');
+      main.className = 'touch-action-label';
+      main.textContent = label;
+      const s = document.createElement('span');
+      s.className = 'touch-action-sub';
+      s.textContent = sub;
+      b.append(main, s);
+    } else {
+      b.textContent = label;
+    }
     const press = (e: Event): void => {
       e.preventDefault();
       e.stopPropagation();
@@ -177,7 +221,7 @@ export class Controls {
         this.aimTouchId = t.identifier;
         this.aimOX = t.clientX;
         this.aimOY = t.clientY;
-        Controls.showStick(this.aimBase, this.aimThumb, t.clientX, t.clientY);
+        this.showAim(t.clientX, t.clientY);
         e.preventDefault();
       }
     }
@@ -216,10 +260,36 @@ export class Controls {
         this.intent.aimY = 0;
         this.aimActive = false;
         this.updateRanged();
-        Controls.hideStick(this.aimBase, this.aimThumb);
+        this.restAim();
       }
     }
   };
+
+  // --- Aim stick: persistent "home" affordance + live drag ------------------
+  /** Activate the aim stick at the touch point (floats from its resting home). */
+  private showAim(x: number, y: number): void {
+    this.aimBase.style.left = `${x}px`;
+    this.aimBase.style.top = `${y}px`;
+    this.aimBase.classList.remove('is-home');
+    this.aimBase.classList.add('is-active');
+    this.aimThumb.style.left = `${x}px`;
+    this.aimThumb.style.top = `${y}px`;
+    this.aimThumb.classList.add('is-active');
+  }
+
+  /** Release the aim stick: hide the thumb and return the base to its home. */
+  private restAim(): void {
+    this.aimThumb.classList.remove('is-active');
+    this.aimBase.classList.remove('is-active');
+    this.placeAimHome();
+  }
+
+  /** Park the (always-visible) aim base at the lower-right home position. */
+  private placeAimHome(): void {
+    this.aimBase.style.left = `${window.innerWidth - TOUCH.range - 28}px`;
+    this.aimBase.style.top = `${Math.round(window.innerHeight * 0.6)}px`;
+    this.aimBase.classList.add('is-home');
+  }
 
   // --- Stick visuals --------------------------------------------------------
   private static showStick(base: HTMLDivElement, thumb: HTMLDivElement, x: number, y: number): void {

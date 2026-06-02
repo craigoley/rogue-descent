@@ -151,10 +151,14 @@ export class SceneManager {
     const h = this.container.clientHeight || window.innerHeight;
     const aspect = w / h;
     const v = CAMERA.viewSize;
+    // Shift the frustum window up by frameBiasY*v so the focus (player) renders
+    // BELOW screen centre — a pure vertical pan of the orthographic image. The
+    // view direction / up vector are untouched, so the iso ANGLE is preserved.
+    const bias = CAMERA.frameBiasY * v;
     this.camera.left = -v * aspect;
     this.camera.right = v * aspect;
-    this.camera.top = v;
-    this.camera.bottom = -v;
+    this.camera.top = v + bias;
+    this.camera.bottom = -v + bias;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   };
