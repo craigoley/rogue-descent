@@ -78,11 +78,13 @@ export class Controls {
 
     // Controls only — the dodge lesson lives solely in the transient centre
     // banner (HUD .combat-tutorial), so we don't teach "dash = dodge" twice.
+    // Desktop now advertises RIGHT-CLICK melee (J still works as a fallback but
+    // is no longer the taught binding — both attacks sit on the mouse hand).
     this.hint = document.createElement('div');
     this.hint.className = 'touch-hint';
     this.hint.textContent = isTouch
       ? 'Left: MOVE   ·   Right: AIM + FIRE'
-      : 'WASD move · Mouse aim · Click fire · J melee · SPACE dash';
+      : 'WASD move · Mouse aim · L-click FIRE · R-click MELEE · Space DASH';
     target.appendChild(this.hint);
 
     if (isTouch) {
