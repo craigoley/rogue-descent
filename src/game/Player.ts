@@ -55,6 +55,9 @@ export interface PlayerState {
   rangedCdTimer: number;
   /** Hit-flash window, seconds. */
   hitFlashTimer: number;
+  /** Ranged fire-rate multiplier from a within-run buff drop (1 = none, < 1 =
+   *  faster). Reset to 1 by createPlayer, so it vanishes on a death-reset. */
+  fireRateMult: number;
   /** Dodge confirmation render-tell window, seconds (> 0 right after a dash
    *  i-frame negated a hit). Drives the dodge flash; pure feedback, not logic. */
   dodgeFxTimer: number;
@@ -83,6 +86,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     rangedCdTimer: 0,
     hitFlashTimer: 0,
     dodgeFxTimer: 0,
+    fireRateMult: 1,
   };
 }
 

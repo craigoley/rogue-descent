@@ -200,9 +200,22 @@ export class HUD {
     const axZ = screenLabel(scene.screenDelta(p.x, 0, p.y, 0, 0, 1));
     const axUp = screenLabel(scene.screenDelta(p.x, 0, p.y, 0, 1, 0));
 
+    // Phase 5 funnel: room lifecycle + drops.
+    let cleared = 0;
+    let spawned = 0;
+    let collected = 0;
+    for (const enc of state.rooms) {
+      if (enc.phase === 'cleared') cleared++;
+      spawned += enc.dropsSpawned;
+      collected += enc.dropsCollected;
+    }
+
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
+      `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}` +
+      `  buff×${state.player.fireRateMult.toFixed(2)}\n` +
+      `drops spawned ${spawned} / collected ${collected}\n` +
       `\n` +
       `INPUT TRACE (press a direction)\n` +
       `1 raw input     ${f2(intent.moveX)}, ${f2(intent.moveY)}\n` +

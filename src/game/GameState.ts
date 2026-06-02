@@ -10,21 +10,12 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import {
-  MELEE,
-  PARTICLE,
-  PLAYER_COMBAT,
-  RANGED,
-  SHAKE,
-  DUNGEON,
-  ENEMY_SPAWN_OFFSETS,
-} from '../utils/constants';
+import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON } from '../utils/constants';
 import { createPlayer, updatePlayer, type PlayerState } from './Player';
-import { isSolid, type RoomState } from './Room';
+import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
 import {
   createEnemyPool,
-  spawnEnemy,
   updateEnemies,
   type Enemy,
 } from './Enemy';
@@ -40,7 +31,16 @@ import {
   updateParticles,
   type Particle,
 } from './Particle';
+import { createPickupPool, updatePickups, type Pickup } from './Pickup';
+import {
+  buildEncounters,
+  rollAndSpawnDrop,
+  updateEncounterEntry,
+  updateEncounterResolve,
+  type RoomEncounter,
+} from './Encounter';
 import { aimDirection, meleeAttack } from './Combat';
+import { createRng, type Rng } from '../utils/rng';
 import type { InputIntent } from './Input';
 import type { Vec2 } from '../utils/math';
 
@@ -56,6 +56,15 @@ export interface GameState {
   projectiles: Projectile[];
   enemies: Enemy[];
   particles: Particle[];
+  pickups: Pickup[];
+  /** Per-room encounter table (DFS order; index 0 = spawn room). */
+  rooms: RoomEncounter[];
+  /** Index of the currently-active (locked) room, or -1. At most one. */
+  activeRoom: number;
+  /** Enemy active-flags snapshot from the start of this frame, for death detection. */
+  prevEnemyActive: boolean[];
+  /** Seeded RNG for drop rolls (separate stream from generation). */
+  dropRng: Rng;
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
   /** Screen-shake countdown, seconds (renderer reads it). */
@@ -67,23 +76,8 @@ export interface GameState {
 /** Reused aim scratch — keeps `update` allocation-free. */
 const _aim: Vec2 = { x: 0, y: 0 };
 
-/** Place the (unchanged) enemies near the spawn room — offsets relative to the
- *  spawn, falling back to the spawn cell if an offset lands in a wall. Placement
- *  only; enemy behaviour/count is unchanged (real per-room spawning is Phase 5). */
-function spawnRoomEnemies(state: GameState): void {
-  const { room, spawn } = state;
-  for (const off of ENEMY_SPAWN_OFFSETS) {
-    let x = spawn.x + off.x;
-    let y = spawn.y + off.y;
-    const tx = Math.floor(x / room.tileSize);
-    const ty = Math.floor(y / room.tileSize);
-    if (isSolid(room, tx, ty)) {
-      x = spawn.x;
-      y = spawn.y;
-    }
-    spawnEnemy(state.enemies, x, y);
-  }
-}
+/** Drop RNG seed — a distinct stream from the floor generator. */
+const dropSeed = (seed: number): number => (seed + 0x9e3779b9) >>> 0;
 
 export function createGameState(): GameState {
   const state: GameState = {
@@ -95,16 +89,23 @@ export function createGameState(): GameState {
     projectiles: createProjectilePool(),
     enemies: createEnemyPool(),
     particles: createParticlePool(),
+    pickups: createPickupPool(),
+    rooms: [],
+    activeRoom: -1,
+    prevEnemyActive: [],
+    dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
   };
+  state.prevEnemyActive = state.enemies.map((e) => e.active);
   loadFloor(state, DUNGEON.defaultSeed);
   return state;
 }
 
-/** Generate the floor for `seed` and (re)initialise the player + enemies onto
- *  it. Pools are REUSED — deactivated, not reallocated. */
+/** Generate the floor for `seed` and (re)initialise everything onto it — a
+ *  WITHIN-RUN reset (Phase 6 owns persistence). Pools are REUSED; the buff and
+ *  any drops are cleared, so nothing survives this. */
 function loadFloor(state: GameState, seed: number): void {
   const floor = generateDungeon(seed);
   state.room = floor.room;
@@ -114,11 +115,15 @@ function loadFloor(state: GameState, seed: number): void {
   for (const e of state.enemies) e.active = false;
   for (const p of state.projectiles) p.active = false;
   for (const p of state.particles) p.active = false;
+  for (const pk of state.pickups) pk.active = false;
+  state.rooms = buildEncounters(floor);
+  state.activeRoom = -1;
+  state.dropRng = createRng(dropSeed(seed));
+  for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
   state.deathTimer = 0;
   state.time = 0;
-  spawnRoomEnemies(state);
 }
 
 /** Reset for a fresh attempt on the SAME floor (Phase 5 owns run structure). */
@@ -149,7 +154,13 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
 
   state.time += dt;
 
+  // Snapshot enemy liveness BEFORE this frame's deaths (for drop detection).
+  for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = state.enemies[i].active;
+
   updatePlayer(p, intent, dt, state.room);
+
+  // Encounter: entering an idle room activates it (spawns enemies + locks doors).
+  updateEncounterEntry(state);
 
   // Melee — edge-triggered, consumed here.
   if (intent.melee) {
@@ -162,15 +173,26 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
     }
   }
 
-  // Ranged — held; fires at the weapon cooldown.
+  // Ranged — held; fires at the weapon cooldown (× the within-run buff mult).
   if (intent.ranged && p.rangedCdTimer <= 0) {
     const aim = aimDirection(p, intent, _aim);
     fireProjectile(state.projectiles, p.x, p.y, aim.x, aim.y);
-    p.rangedCdTimer = RANGED.cooldown;
+    p.rangedCdTimer = RANGED.cooldown * p.fireRateMult;
   }
 
   updateProjectiles(state, dt);
   updateEnemies(state, dt);
+
+  // Deaths this frame -> seeded drop rolls at the death positions.
+  for (let i = 0; i < state.enemies.length; i++) {
+    const e = state.enemies[i];
+    if (state.prevEnemyActive[i] && !e.active) rollAndSpawnDrop(state, e.x, e.y, state.dropRng);
+  }
+  // Clear the active room if its enemies are all dead -> unlock doors.
+  updateEncounterResolve(state);
+  // Collect any pickup the player is touching.
+  updatePickups(state);
+
   updateParticles(state.particles, dt);
 
   if (state.shakeTimer > 0) state.shakeTimer -= dt;
