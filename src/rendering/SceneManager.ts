@@ -83,6 +83,26 @@ export class SceneManager {
     this.place();
   }
 
+  /** Screen-shake magnitude (world units) for THIS frame; set by the loop from
+   *  the game's shake timer. Applied as a transient camera jitter in place(). */
+  private shakeMag = 0;
+  setShake(mag: number): void {
+    this.shakeMag = mag;
+  }
+
+  /** Project a floor world position to SCREEN pixels (for mouse-aim). Reused
+   *  scratch — read immediately. */
+  private readonly _projP = new Vector3();
+  private readonly _screenPx = { x: 0, y: 0 };
+  worldToScreenPx(worldX: number, worldY: number): { x: number; y: number } {
+    this._projP.set(worldX, 0, worldY).project(this.camera);
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    this._screenPx.x = (this._projP.x * 0.5 + 0.5) * w;
+    this._screenPx.y = (-this._projP.y * 0.5 + 0.5) * h;
+    return this._screenPx;
+  }
+
   render(): void {
     this.renderer.render(this.scene, this.camera);
   }
@@ -112,11 +132,17 @@ export class SceneManager {
   }
 
   /** Reposition the camera so it views the current focus from the zero-yaw,
-   *  pitched-down offset (in front of + above the focus). */
+   *  pitched-down offset, plus a transient shake jitter (render-only random). */
   private place(): void {
     const { offsetX, offsetY, offsetZ } = CAMERA;
     this.target.set(this.focusX, 0, this.focusY);
-    this.camera.position.set(this.focusX + offsetX, offsetY, this.focusY + offsetZ);
+    let jx = 0;
+    let jz = 0;
+    if (this.shakeMag > 0) {
+      jx = (Math.random() * 2 - 1) * this.shakeMag;
+      jz = (Math.random() * 2 - 1) * this.shakeMag;
+    }
+    this.camera.position.set(this.focusX + offsetX + jx, offsetY, this.focusY + offsetZ + jz);
     this.camera.lookAt(this.target);
   }
 

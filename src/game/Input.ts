@@ -14,14 +14,25 @@ import { clamp } from '../utils/math';
 import { ISO_YAW } from '../utils/constants';
 
 export interface InputIntent {
-  /** Horizontal axis: -1 = left, +1 = right, 0 = none (screen space). */
+  /** Horizontal move axis: -1 = left, +1 = right, 0 = none (screen space). */
   moveX: number;
-  /** Vertical axis: -1 = up, +1 = down, 0 = none (screen space). */
+  /** Vertical move axis: -1 = up, +1 = down, 0 = none (screen space). */
   moveY: number;
+  /** Aim direction in SCREEN axes (mouse dir / aim stick). (0,0) = no aim, in
+   *  which case attacks use the player's facing (= last move direction). */
+  aimX: number;
+  aimY: number;
+  /** Dash request — EDGE-triggered: set true on the press, consumed (cleared)
+   *  by the sim so one press = one dash. */
+  dash: boolean;
+  /** Melee swing — EDGE-triggered, consumed by the sim. */
+  melee: boolean;
+  /** Ranged fire — LEVEL (held); the sim fires at the weapon's cooldown rate. */
+  ranged: boolean;
 }
 
 export function createIntent(): InputIntent {
-  return { moveX: 0, moveY: 0 };
+  return { moveX: 0, moveY: 0, aimX: 0, aimY: 0, dash: false, melee: false, ranged: false };
 }
 
 /** Keys (lowercased) that drive each screen direction. */
@@ -32,11 +43,18 @@ export const MOVE_KEYS = {
   down: ['arrowdown', 's'],
 } as const;
 
+/** Just the two move axes (a subset of InputIntent) — the pure keyboard/touch
+ *  mappings produce these; the adapter copies them onto the live intent. */
+export interface MoveAxes {
+  moveX: number;
+  moveY: number;
+}
+
 const has = (keys: readonly string[], pressed: ReadonlySet<string>): boolean =>
   keys.some((k) => pressed.has(k));
 
-/** Raw screen-space intent from the set of currently-held keys. Pure. */
-export function keyAxes(pressed: ReadonlySet<string>): InputIntent {
+/** Raw screen-space move axes from the set of currently-held keys. Pure. */
+export function keyAxes(pressed: ReadonlySet<string>): MoveAxes {
   let x = 0;
   let y = 0;
   if (has(MOVE_KEYS.left, pressed)) x -= 1;
@@ -46,10 +64,10 @@ export function keyAxes(pressed: ReadonlySet<string>): InputIntent {
   return { moveX: x, moveY: y };
 }
 
-/** Raw screen-space intent from a touch drag offset (px) and full-deflection
+/** Raw screen-space move axes from a touch drag offset (px) and full-deflection
  *  range (px). Up-screen drag (dy < 0) yields moveY < 0, matching the up keys
- *  — so touch and keyboard produce the SAME intent for the same direction. */
-export function dragAxes(dx: number, dy: number, range: number): InputIntent {
+ *  — so touch and keyboard produce the SAME axes for the same direction. */
+export function dragAxes(dx: number, dy: number, range: number): MoveAxes {
   return {
     moveX: clamp(dx / range, -1, 1),
     moveY: clamp(dy / range, -1, 1),

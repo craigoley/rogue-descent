@@ -14,7 +14,13 @@
 import type { GameState } from '../game/GameState';
 import { isoRotate, type InputIntent } from '../game/Input';
 import type { SceneManager } from './SceneManager';
-import { CSS_PALETTE, TUNING, TUNING_RANGES } from '../utils/constants';
+import {
+  CSS_PALETTE,
+  DASH,
+  PLAYER_COMBAT,
+  TUNING,
+  TUNING_RANGES,
+} from '../utils/constants';
 
 const f2 = (n: number): string => n.toFixed(2);
 /** Format an NDC screen delta and tag the dominant visual direction. */
@@ -41,6 +47,8 @@ type TuningKey = keyof typeof TUNING_RANGES;
 export class HUD {
   private readonly debug: boolean;
   private readonly readoutEl: HTMLPreElement | null = null;
+  private readonly healthFill: HTMLDivElement;
+  private readonly dashFill: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.debug = isDebugEnabled();
@@ -50,6 +58,23 @@ export class HUD {
     title.textContent = 'ROGUE DESCENT';
     title.style.color = CSS_PALETTE.player;
     container.appendChild(title);
+
+    // Combat HUD (always on): health bar + dash-readiness pip.
+    const bars = document.createElement('div');
+    bars.className = 'hud-bars';
+    const healthTrack = document.createElement('div');
+    healthTrack.className = 'hud-bar hud-health';
+    this.healthFill = document.createElement('div');
+    this.healthFill.className = 'hud-bar-fill';
+    healthTrack.appendChild(this.healthFill);
+    const dashTrack = document.createElement('div');
+    dashTrack.className = 'hud-bar hud-dash';
+    this.dashFill = document.createElement('div');
+    this.dashFill.className = 'hud-bar-fill';
+    dashTrack.appendChild(this.dashFill);
+    bars.appendChild(healthTrack);
+    bars.appendChild(dashTrack);
+    container.appendChild(bars);
 
     if (!this.debug) return;
 
@@ -117,8 +142,16 @@ export class HUD {
     intent: InputIntent,
     scene: SceneManager,
   ): void {
-    if (!this.readoutEl) return;
     const p = state.player;
+
+    // Combat HUD (always): health fraction + dash readiness (0 = cooling down).
+    const hp = Math.max(0, p.health) / PLAYER_COMBAT.maxHealth;
+    this.healthFill.style.width = `${(hp * 100).toFixed(1)}%`;
+    const dashTotal = DASH.duration + TUNING.dashCooldown;
+    const dashReady = 1 - Math.min(1, p.dashCdTimer / dashTotal);
+    this.dashFill.style.width = `${(dashReady * 100).toFixed(1)}%`;
+
+    if (!this.readoutEl) return;
     const rot = isoRotate(intent.moveX, intent.moveY);
     const dpx = p.x - p.prevX;
     const dpy = p.y - p.prevY;
