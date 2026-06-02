@@ -12,13 +12,13 @@
  */
 
 import './style.css';
-import { createGameState, update } from './game/GameState';
-import { roomCenter } from './game/Room';
+import { createGameState, regenerate, update } from './game/GameState';
+import { generateDungeon, isConnected } from './game/Dungeon';
 import { Controls } from './input/Controls';
 import { SceneManager } from './rendering/SceneManager';
 import { DungeonRenderer } from './rendering/DungeonRenderer';
 import { EntityRenderer } from './rendering/EntityRenderer';
-import { HUD } from './rendering/HUD';
+import { HUD, isDebugEnabled } from './rendering/HUD';
 import { AudioEngine } from './audio/AudioEngine';
 import { loadSettings } from './state/Settings';
 import { MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
@@ -38,9 +38,26 @@ dungeon.build(game.room);
 const entities = new EntityRenderer(scene.scene);
 const hud = new HUD(app);
 
-// Start the camera framed on the player (room centre) — no slide-in on frame 1.
-const center = roomCenter(game.room);
-scene.snapFocus(center.x, center.y);
+// Start the camera framed on the player's spawn — no slide-in on frame 1.
+scene.snapFocus(game.spawn.x, game.spawn.y);
+
+// Funnel telemetry: log floor stats on generation (room count + connectivity).
+function logFloor(seed: number): void {
+  const f = generateDungeon(seed);
+  console.info(`[dungeon] seed=${seed} rooms=${f.rooms.length} connected=${isConnected(f)}`);
+}
+logFloor(game.seed);
+
+// ?debug=1: press G to regenerate the floor with the next seed (cycle floors).
+if (isDebugEnabled()) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'g') return;
+    regenerate(game, game.seed + 1);
+    dungeon.build(game.room);
+    scene.snapFocus(game.spawn.x, game.spawn.y);
+    logFloor(game.seed);
+  });
+}
 
 // Audio context is created now but only resumed after a user gesture.
 const audio = new AudioEngine();
