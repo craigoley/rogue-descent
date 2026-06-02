@@ -437,3 +437,27 @@ export const DUNGEON = {
    *  this are rendered truncated and a warning is logged (see DungeonRenderer). */
   wallRenderMax: 2400,
 } as const;
+
+/**
+ * Minimap overlay (Phase: render-only). A small top-right canvas schematic of
+ * the floor — corridors dim, rooms brighter, the player as a dot, the current
+ * room highlighted. Sizes in CSS px; colours are canvas strings (reusing the
+ * CSS palette where it fits). No gameplay effect.
+ */
+export const MINIMAP = {
+  /** Square box edge, CSS px. */
+  size: 128,
+  /** Inner padding before the floor schematic, CSS px. */
+  padding: 6,
+  /** Player marker radius, CSS px. */
+  dotRadius: 3,
+  colors: {
+    bg: 'rgba(10, 10, 18, 0.55)',
+    border: 'rgba(51, 255, 204, 0.3)',
+    corridor: '#23233a',
+    room: '#3b3b63',
+    /** Current-room highlight (accent-tinted, translucent). */
+    currentRoom: 'rgba(255, 51, 102, 0.35)',
+    player: CSS_PALETTE.player,
+  },
+} as const;

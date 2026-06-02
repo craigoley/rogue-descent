@@ -8,6 +8,12 @@
      the controls hint are positioned from the same values and never overlap.
      The hint is stacked ABOVE the button row using these (see .touch-hint). */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* Vertical space the centred title wordmark occupies (margin + max font +
+     line) — the minimap sits below this so it never overlaps the title even on
+     a narrow portrait where the centred title reaches toward the right edge. */
+  --hud-title-clear: 56px;
   --touch-btn-size: 76px; /* DASH / MELEE diameter */
   --touch-btn-bottom: 28px; /* gap from the safe-area to the button row */
   --touch-btn-edge: 24px; /* MELEE inset from the right edge */
@@ -50,6 +56,18 @@ body {
   font-weight: 700;
   letter-spacing: 0.3em;
   text-shadow: 0 0 12px currentColor;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Minimap — TOP-RIGHT (the free corner: top-left has the bars, top-centre the
+   title, the bottom has the touch controls). Respects safe-area insets. The
+   canvas paints its own translucent panel + border, so no background here. */
+.minimap {
+  position: fixed;
+  top: calc(var(--safe-top) + var(--hud-title-clear));
+  right: calc(var(--safe-right) + 10px);
+  border-radius: 6px;
   pointer-events: none;
   user-select: none;
 }
