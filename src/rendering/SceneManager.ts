@@ -22,7 +22,7 @@ import {
 } from 'three';
 import type { GameState } from '../game/GameState';
 import { CAMERA, KEY_LIGHT_POS, PALETTE, TUNING } from '../utils/constants';
-import { lerp } from '../utils/math';
+import { deadZoneFollow, lerp, type Vec2 } from '../utils/math';
 
 export class SceneManager {
   readonly scene = new Scene();
@@ -33,6 +33,8 @@ export class SceneManager {
   /** Camera focus point on the floor plane (game x, game y). */
   private focusX = 0;
   private focusY = 0;
+  /** Reused scratch for the dead-zone follow result (no per-frame allocation). */
+  private readonly _focusOut: Vec2 = { x: 0, y: 0 };
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -66,15 +68,18 @@ export class SceneManager {
     this.place();
   }
 
-  /** Ease the focus toward the player's interpolated position. `dt` is the real
-   *  frame delta (camera smoothing is a render-side effect, not a sim step). */
+  /** Ease the focus toward the player's interpolated position, but only once the
+   *  player leaves the dead-zone — within it the focus holds still so the cube
+   *  drifts on screen. `dt` is the real frame delta (camera smoothing is a
+   *  render-side effect, not a sim step). */
   updateFollow(state: GameState, alpha: number, dt: number): void {
     const p = state.player;
     const px = lerp(p.prevX, p.x, alpha);
     const py = lerp(p.prevY, p.y, alpha);
     const k = 1 - Math.exp(-TUNING.camLerp * dt);
-    this.focusX = lerp(this.focusX, px, k);
-    this.focusY = lerp(this.focusY, py, k);
+    const f = deadZoneFollow(this.focusX, this.focusY, px, py, TUNING.deadZone, k, this._focusOut);
+    this.focusX = f.x;
+    this.focusY = f.y;
     this.place();
   }
 

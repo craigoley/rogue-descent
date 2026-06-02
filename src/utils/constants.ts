@@ -61,6 +61,11 @@ export const TUNING = {
   /** Camera follow rate, per second (exponential smoothing). Higher = tighter
    *  to the player; lower = floatier. */
   camLerp: 10,
+  /** Camera dead-zone radius, world units. The player can drift this far from
+   *  screen centre before the camera starts following — so the cube has its own
+   *  on-screen motion ("I'm moving") instead of being pinned dead-centre with
+   *  the world sliding under it. 0 = classic locked-centre follow. */
+  deadZone: 2,
 };
 
 /** Slider bounds for the `?debug=1` tuning panel — keyed by TUNING field. Kept
@@ -70,6 +75,7 @@ export const TUNING_RANGES = {
   accel: { min: 20, max: 400, step: 10 },
   friction: { min: 20, max: 400, step: 10 },
   camLerp: { min: 1, max: 30, step: 0.5 },
+  deadZone: { min: 0, max: 5, step: 0.25 },
 } as const;
 
 /** Player body tuning. */
