@@ -49,7 +49,7 @@ export class EntityRenderer {
     this.playerMat = new MeshStandardMaterial({
       color: PALETTE.player,
       emissive: PALETTE.player,
-      emissiveIntensity: 0.4,
+      emissiveIntensity: VFX.playerEmissive,
       roughness: 0.5,
     });
     this.player = new Mesh(new BoxGeometry(size, size, size), this.playerMat);
@@ -128,11 +128,34 @@ export class EntityRenderer {
     const px = lerp(p.prevX, p.x, alpha);
     const py = lerp(p.prevY, p.y, alpha);
 
-    // Player: flash white on hit; blink (hide every other slice) during i-frames.
+    // Player combat-state read (priority: hit-flash > dodge confirm > i-frame
+    // glow > resting). The dash i-frames now make the cube GLOW bright cyan and
+    // throb — invulnerability is unmistakable — instead of the old blink that
+    // just flickered the player out of sight. A negated hit adds a white "dodge!"
+    // pop. The cube stays visible throughout.
     this.player.position.set(px, PLAYER.radius, py);
-    const flashing = p.hitFlashTimer > 0;
-    this.playerMat.color.setHex(flashing ? PALETTE.hitFlash : PALETTE.player);
-    this.player.visible = p.alive && !(p.iframeTimer > 0 && Math.floor(p.iframeTimer * VFX.iframeBlink) % 2 === 0);
+    this.player.visible = p.alive;
+    const invuln = p.iframeTimer > 0;
+    const dodging = p.dodgeFxTimer > 0;
+    if (p.hitFlashTimer > 0) {
+      this.playerMat.color.setHex(PALETTE.hitFlash);
+      this.playerMat.emissiveIntensity = VFX.invulnEmissive;
+    } else if (dodging) {
+      this.playerMat.color.setHex(PALETTE.dodge);
+      this.playerMat.emissiveIntensity = VFX.dodgeEmissive;
+    } else if (invuln) {
+      this.playerMat.color.setHex(PALETTE.invuln);
+      this.playerMat.emissiveIntensity = VFX.invulnEmissive;
+    } else {
+      this.playerMat.color.setHex(PALETTE.player);
+      this.playerMat.emissiveIntensity = VFX.playerEmissive;
+    }
+    // Subtle "powered" throb while invulnerable or mid-dodge (render-only clock).
+    const pulse =
+      invuln || dodging
+        ? 1 + VFX.invulnPulse * (0.5 + 0.5 * Math.sin(performance.now() * 0.001 * VFX.invulnPulseRate))
+        : 1;
+    this.player.scale.setScalar(pulse);
 
     this.syncTrail(p, px, py);
     this.syncEnemies(state, alpha);

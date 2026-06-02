@@ -86,6 +86,36 @@ describe('Dash i-frames', () => {
   });
 });
 
+describe('Dash dodge feedback (visibility only — damage logic unchanged)', () => {
+  it('a dash i-frame negates the hit AND registers a dodge (tell + whiff sparks)', () => {
+    const s = createGameState();
+    const p = s.player;
+    const before = p.health;
+    const partsBefore = activeParticleCount(s.particles);
+    updatePlayer(p, dashIntent(), DT, room); // dash -> i-frames active
+    expect(isInvulnerable(p)).toBe(true);
+
+    damagePlayer(p, 50, s);
+    expect(p.health).toBe(before); // damage still FULLY negated
+    expect(p.dodgeFxTimer).toBeCloseTo(PLAYER_COMBAT.dodgeFx, 9); // dodge tell on
+    expect(s.hitstopTimer).toBeGreaterThanOrEqual(PLAYER_COMBAT.dodgeHitstop); // time-dilation
+    expect(activeParticleCount(s.particles)).toBeGreaterThan(partsBefore); // whiff burst
+  });
+
+  it('post-hit i-frames block silently — no dodge tell when not dashing', () => {
+    const s = createGameState();
+    const p = s.player;
+    damagePlayer(p, 20, s); // first hit lands, grants post-hit i-frames
+    const hp = p.health;
+    expect(p.hitInvulnTimer).toBeGreaterThan(0);
+    expect(p.iframeTimer).toBe(0); // not a dash
+
+    damagePlayer(p, 20, s); // blocked by post-hit i-frames
+    expect(p.health).toBe(hp); // no extra damage
+    expect(p.dodgeFxTimer).toBe(0); // but NOT flagged as a dodge
+  });
+});
+
 describe('Melee', () => {
   it('damages an enemy in range and inside the arc', () => {
     const s = createGameState();

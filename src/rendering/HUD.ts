@@ -49,6 +49,9 @@ export class HUD {
   private readonly readoutEl: HTMLPreElement | null = null;
   private readonly healthFill: HTMLDivElement;
   private readonly dashFill: HTMLDivElement;
+  private readonly tutorialEl: HTMLDivElement;
+  private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
+  private tutorialShownAt = 0;
 
   constructor(container: HTMLElement) {
     this.debug = isDebugEnabled();
@@ -75,6 +78,13 @@ export class HUD {
     bars.appendChild(healthTrack);
     bars.appendChild(dashTrack);
     container.appendChild(bars);
+
+    // One-time dodge tutorial — revealed the first time an enemy telegraphs (the
+    // dodge window), so the player learns dash = dodge IN CONTEXT, then it fades.
+    this.tutorialEl = document.createElement('div');
+    this.tutorialEl.className = 'combat-tutorial';
+    this.tutorialEl.textContent = 'DASH through attacks to DODGE';
+    container.appendChild(this.tutorialEl);
 
     if (!this.debug) return;
 
@@ -120,6 +130,25 @@ export class HUD {
     return row;
   }
 
+  /** Reveal the dodge tutorial on first enemy telegraph, then retire it after a
+   *  few seconds (shown once per page load). Pure DOM; reads state only. */
+  private updateTutorial(state: GameState): void {
+    if (this.tutorialState === 'done') return;
+    if (this.tutorialState === 'idle') {
+      const telegraphing = state.enemies.some((e) => e.active && e.phase === 'telegraph');
+      if (telegraphing) {
+        this.tutorialEl.classList.add('is-visible');
+        this.tutorialState = 'showing';
+        this.tutorialShownAt = state.time;
+      }
+      return;
+    }
+    if (state.time - this.tutorialShownAt > PLAYER_COMBAT.dodgeTutorialDuration) {
+      this.tutorialEl.classList.remove('is-visible');
+      this.tutorialState = 'done';
+    }
+  }
+
   /**
    * Refresh the live readout + the full input→screen TRACE. No-op when debug
    * off. The trace shows every stage of the transform for the CURRENT input so
@@ -150,6 +179,8 @@ export class HUD {
     const dashTotal = DASH.duration + TUNING.dashCooldown;
     const dashReady = 1 - Math.min(1, p.dashCdTimer / dashTotal);
     this.dashFill.style.width = `${(dashReady * 100).toFixed(1)}%`;
+
+    this.updateTutorial(state);
 
     if (!this.readoutEl) return;
     const rot = isoRotate(intent.moveX, intent.moveY);

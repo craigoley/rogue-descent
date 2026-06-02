@@ -55,6 +55,9 @@ export interface PlayerState {
   rangedCdTimer: number;
   /** Hit-flash window, seconds. */
   hitFlashTimer: number;
+  /** Dodge confirmation render-tell window, seconds (> 0 right after a dash
+   *  i-frame negated a hit). Drives the dodge flash; pure feedback, not logic. */
+  dodgeFxTimer: number;
 }
 
 export function createPlayer(x: number, y: number): PlayerState {
@@ -79,6 +82,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     meleeAnimTimer: 0,
     rangedCdTimer: 0,
     hitFlashTimer: 0,
+    dodgeFxTimer: 0,
   };
 }
 
@@ -110,6 +114,7 @@ function tickTimers(player: PlayerState, dt: number): void {
   if (player.meleeAnimTimer > 0) player.meleeAnimTimer = Math.max(0, player.meleeAnimTimer - dt);
   if (player.rangedCdTimer > 0) player.rangedCdTimer = Math.max(0, player.rangedCdTimer - dt);
   if (player.hitFlashTimer > 0) player.hitFlashTimer = Math.max(0, player.hitFlashTimer - dt);
+  if (player.dodgeFxTimer > 0) player.dodgeFxTimer = Math.max(0, player.dodgeFxTimer - dt);
 }
 
 /**
