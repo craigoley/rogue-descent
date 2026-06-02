@@ -61,6 +61,11 @@ export const TUNING = {
   /** Camera follow rate, per second (exponential smoothing). Higher = tighter
    *  to the player; lower = floatier. */
   camLerp: 10,
+  /** Camera dead-zone radius, world units. The player can drift this far from
+   *  screen centre before the camera starts following — so the cube has its own
+   *  on-screen motion ("I'm moving") instead of being pinned dead-centre with
+   *  the world sliding under it. 0 = classic locked-centre follow. */
+  deadZone: 2,
 };
 
 /** Slider bounds for the `?debug=1` tuning panel — keyed by TUNING field. Kept
@@ -70,6 +75,7 @@ export const TUNING_RANGES = {
   accel: { min: 20, max: 400, step: 10 },
   friction: { min: 20, max: 400, step: 10 },
   camLerp: { min: 1, max: 30, step: 0.5 },
+  deadZone: { min: 0, max: 5, step: 0.25 },
 } as const;
 
 /** Player body tuning. */
@@ -111,30 +117,51 @@ export const TEST_ROOM = [
   '##############',
 ] as const;
 
-/** Isometric follow camera. */
+/**
+ * Follow camera. SCREEN-ALIGNED grid (Option 2): the camera's horizontal offset
+ * is purely along +z (offsetX = 0), giving it ZERO yaw — so world x projects to
+ * screen-right and world z to screen-vertical, and the floor grid renders as a
+ * screen-aligned square grid (not a 45° diamond). offsetY / offsetZ set the
+ * downward PITCH, which is PRESERVED (still an angled view with height on walls,
+ * NOT flat top-down). The pitch matches the prior iso steepness:
+ * atan2(offsetY, offsetZ) = atan2(20, 20√2) ≈ 35.26°.
+ */
 export const CAMERA = {
   /**
    * Half-height of the orthographic frustum, world units. Smaller than the room
    * (14) so the follow actually scrolls — the room edges move past the player.
    */
   viewSize: 6,
-  /** Camera offset from its focus along each axis (equal -> classic iso angle,
-   *  preserved from Phase 0). */
-  offset: 20,
+  /** Horizontal offset along world x. 0 => zero camera yaw => screen-aligned grid. */
+  offsetX: 0,
+  /** Height above the floor plane (sets the pitch together with offsetZ). */
+  offsetY: 20,
+  /** Horizontal offset along world z (camera sits "in front of" the focus). */
+  offsetZ: 20 * Math.SQRT2,
   near: 0.1,
   far: 200,
 } as const;
 
 /**
- * Iso INPUT rotation, radians. The camera sits at equal +x/+z offsets from its
- * focus, so its view is yawed `atan2(offsetZ, offsetX)` about the vertical axis
- * (= 45° while the offsets are equal). Raw input is expressed in SCREEN axes
- * (+x right, +y down) and the pure game layer rotates it by −ISO_YAW into the
- * world floor plane, so "up" on screen moves the player up the screen instead of
- * along a diagonal world axis. DERIVED from CAMERA.offset so it tracks the iso
- * angle automatically — never hard-code the 0.785.
+ * Iso INPUT rotation, radians. Raw input is in SCREEN axes (+x right, +y down)
+ * and the pure game layer rotates it by −ISO_YAW into the world floor plane so
+ * "up" on screen moves the player up the screen. The rotation must cancel the
+ * camera's horizontal yaw, so it is DERIVED from the camera offset:
+ * atan2(offsetX, offsetZ). With offsetX = 0 (the screen-aligned camera) this is
+ * 0 — the rotation passes input through unchanged (identity), which is exactly
+ * what a zero-yaw camera needs: input "up" → world −z → straight up the screen,
+ * along a grid line. Player's rotation code is UNCHANGED; only this derived
+ * value moved to 0. (When the camera had equal x/z offsets this was 45°.)
  */
-export const ISO_YAW = Math.atan2(CAMERA.offset, CAMERA.offset);
+export const ISO_YAW = Math.atan2(CAMERA.offsetX, CAMERA.offsetZ);
+
+/** Key directional light position (absolute world coordinates, derived from
+ *  camera offsets so the light tracks the camera angle automatically). */
+export const KEY_LIGHT_POS = {
+  x: CAMERA.offsetZ * 0.4,
+  y: CAMERA.offsetY * 1.5,
+  z: CAMERA.offsetZ * 0.6,
+} as const;
 
 /** Touch virtual-stick tuning. */
 export const TOUCH = {
