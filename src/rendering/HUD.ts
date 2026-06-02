@@ -143,7 +143,7 @@ export class HUD {
       }
       return;
     }
-    if (state.time - this.tutorialShownAt > 3.5) {
+    if (state.time - this.tutorialShownAt > PLAYER_COMBAT.dodgeTutorialDuration) {
       this.tutorialEl.classList.remove('is-visible');
       this.tutorialState = 'done';
     }

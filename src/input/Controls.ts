@@ -101,7 +101,7 @@ export class Controls {
     } else {
       // Desktop has no touch sticks; auto-fade the controls hint after a beat.
       this.aimBase.classList.remove('is-home');
-      window.setTimeout(() => this.hint?.classList.add('is-hidden'), 7000);
+      window.setTimeout(() => this.hint?.classList.add('is-hidden'), TOUCH.hintFadeMs);
     }
   }
 
@@ -286,8 +286,8 @@ export class Controls {
 
   /** Park the (always-visible) aim base at the lower-right home position. */
   private placeAimHome(): void {
-    this.aimBase.style.left = `${window.innerWidth - TOUCH.range - 28}px`;
-    this.aimBase.style.top = `${Math.round(window.innerHeight * 0.6)}px`;
+    this.aimBase.style.left = `${window.innerWidth - TOUCH.range - TOUCH.aimHomeMargin}px`;
+    this.aimBase.style.top = `${Math.round(window.innerHeight * TOUCH.aimHomeY)}px`;
     this.aimBase.classList.add('is-home');
   }
 

@@ -214,6 +214,12 @@ export const KEY_LIGHT_POS = {
 export const TOUCH = {
   /** Drag distance (px) from the stick origin that maps to full deflection. */
   range: 60,
+  /** Aim stick resting position: right-edge inset, px. */
+  aimHomeMargin: 28,
+  /** Aim stick resting position: vertical fraction of viewport height. */
+  aimHomeY: 0.6,
+  /** Desktop controls-hint auto-fade delay, ms. */
+  hintFadeMs: 7000,
 } as const;
 
 // ============================================================================
@@ -237,6 +243,8 @@ export const PLAYER_COMBAT = {
   /** Tiny freeze-frame on a successful dodge — a cheap time-dilation cue so the
    *  dodge FEELS earned. Reuses the existing hit-stop mechanism, seconds. */
   dodgeHitstop: 0.07,
+  /** How long the one-time dodge tutorial stays on screen, seconds. */
+  dodgeTutorialDuration: 3.5,
 } as const;
 
 /** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */
