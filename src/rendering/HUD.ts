@@ -14,6 +14,7 @@
 import type { GameState } from '../game/GameState';
 import { isoRotate, type InputIntent } from '../game/Input';
 import type { SceneManager } from './SceneManager';
+import { Minimap } from './Minimap';
 import {
   CSS_PALETTE,
   DASH,
@@ -52,9 +53,11 @@ export class HUD {
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
+  private readonly minimap: Minimap;
 
   constructor(container: HTMLElement) {
     this.debug = isDebugEnabled();
+    this.minimap = new Minimap(container);
 
     const title = document.createElement('div');
     title.className = 'hud-title';
@@ -179,6 +182,9 @@ export class HUD {
     const dashTotal = DASH.duration + TUNING.dashCooldown;
     const dashReady = 1 - Math.min(1, p.dashCdTimer / dashTotal);
     this.dashFill.style.width = `${(dashReady * 100).toFixed(1)}%`;
+
+    // Minimap (always on) — rebuilds itself on floor-change (seed change).
+    this.minimap.update(state, alpha);
 
     this.updateTutorial(state);
 
