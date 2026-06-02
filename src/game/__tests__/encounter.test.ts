@@ -78,15 +78,28 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     for (let k = 0; k < 30; k++) expect(rollDrop(a)).toBe(rollDrop(b));
   });
 
-  it('rollDrop yields only null | health | buff', () => {
+  it('rollDrop yields only null | health | pierce | knockback', () => {
     const rng = createRng(99);
-    for (let k = 0; k < 200; k++) {
+    const seen = new Set<string>();
+    for (let k = 0; k < 400; k++) {
       const d = rollDrop(rng);
-      expect(d === null || d === 'health' || d === 'buff').toBe(true);
+      expect(d === null || d === 'health' || d === 'pierce' || d === 'knockback').toBe(true);
+      seen.add(String(d));
     }
+    // All four outcomes are reachable from this seed (distribution sanity).
+    expect(seen.has('health')).toBe(true);
+    expect(seen.has('pierce')).toBe(true);
+    expect(seen.has('knockback')).toBe(true);
+    expect(seen.has('null')).toBe(true);
   });
 
-  it('health restores HP capped at max; buff sets the fire-rate multiplier', () => {
+  it('rollDrop is deterministic for a given seed', () => {
+    const a = createRng(7);
+    const b = createRng(7);
+    for (let k = 0; k < 50; k++) expect(rollDrop(a)).toBe(rollDrop(b));
+  });
+
+  it('health restores HP capped at max; powerups flip a behaviour toggle', () => {
     const s = createGameState();
     s.player.health = PLAYER_COMBAT.maxHealth - 5;
     applyPickup(s.player, 'health');
@@ -96,9 +109,14 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     applyPickup(s.player, 'health');
     expect(s.player.health).toBe(Math.min(PLAYER_COMBAT.maxHealth, 10 + DROP.healAmount));
 
-    expect(s.player.fireRateMult).toBe(1);
-    applyPickup(s.player, 'buff');
-    expect(s.player.fireRateMult).toBe(DROP.buffFireRateMult);
+    // Powerups are binary toggles; health does not flip them.
+    expect(s.player.pierce).toBe(false);
+    expect(s.player.meleeKnockback).toBe(false);
+    applyPickup(s.player, 'pierce');
+    expect(s.player.pierce).toBe(true);
+    expect(s.player.meleeKnockback).toBe(false);
+    applyPickup(s.player, 'knockback');
+    expect(s.player.meleeKnockback).toBe(true);
   });
 
   it('rollAndSpawnDrop spawns a pickup attributed to the active room', () => {
@@ -141,12 +159,14 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
   });
 });
 
-describe('Within-run only — drops + buff do NOT survive a death-reset', () => {
-  it('a death-reset clears the buff, pickups, and re-arms the rooms', () => {
+describe('Within-run only — drops + powerups do NOT survive a death-reset', () => {
+  it('a death-reset clears both powerup toggles, pickups, and re-arms the rooms', () => {
     const s = createGameState();
-    // Grant a buff and spawn a pickup, activate a room.
-    applyPickup(s.player, 'buff');
-    expect(s.player.fireRateMult).toBe(DROP.buffFireRateMult);
+    // Grant BOTH powerups and spawn a pickup, activate a room.
+    applyPickup(s.player, 'pierce');
+    applyPickup(s.player, 'knockback');
+    expect(s.player.pierce).toBe(true);
+    expect(s.player.meleeKnockback).toBe(true);
     const i = firstIdleRoom(s);
     placeInRoom(s, i);
     update(s, idle(), DT);
@@ -161,7 +181,8 @@ describe('Within-run only — drops + buff do NOT survive a death-reset', () => 
     for (let k = 0; k < steps; k++) update(s, idle(), DT);
 
     expect(s.player.alive).toBe(true);
-    expect(s.player.fireRateMult).toBe(1); // buff GONE (within-run only)
+    expect(s.player.pierce).toBe(false); // powerup GONE (within-run only)
+    expect(s.player.meleeKnockback).toBe(false); // powerup GONE (within-run only)
     expect(activePickupCount(s.pickups)).toBe(0); // drops GONE
     expect(s.rooms.every((e, idx) => (idx === 0 ? e.phase === 'cleared' : e.phase === 'idle'))).toBe(
       true,

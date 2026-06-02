@@ -1,10 +1,12 @@
 /**
- * Within-run drops: EXACTLY two kinds — health (restore HP) and one fire-rate
- * buff (lasts the rest of the run, vanishes on death). Pure: ZERO three/DOM.
- * FIXED-SIZE pool (POOL.pickups); spawning never grows it.
+ * Within-run drops: EXACTLY three kinds — health (restore HP) and two
+ * VERB-COUPLED powerups: PIERCE (ranged shots pass through enemies) and
+ * KNOCKBACK (melee hits launch enemies). Powerups are binary toggles that change
+ * what a verb DOES; they last the rest of the run and vanish on death. Pure:
+ * ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning never grows it.
  *
- * NOT an item system: no inventory, no rarity, no pool of items — two kinds,
- * rolled by a seeded RNG, applied immediately on touch.
+ * NOT an item system: no inventory, no rarity, no stacking — three kinds, rolled
+ * by a seeded RNG, applied immediately on touch.
  */
 
 import { DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL } from '../utils/constants';
@@ -12,7 +14,7 @@ import type { Rng } from '../utils/rng';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 
-export type PickupKind = 'health' | 'buff';
+export type PickupKind = 'health' | 'pierce' | 'knockback';
 
 export interface Pickup {
   active: boolean;
@@ -58,19 +60,24 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, or buff. Deterministic per RNG state. */
+/** Seeded drop roll: nothing, health, pierce, or knockback. Deterministic per
+ *  RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the second
+ *  (only consumed for a powerup) splits pierce vs knockback. */
 export function rollDrop(rng: Rng): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
-  return rng.next() < DROP.healthShare ? 'health' : 'buff';
+  if (rng.next() < DROP.healthShare) return 'health';
+  return rng.next() < DROP.pierceShare ? 'pierce' : 'knockback';
 }
 
-/** Apply a pickup's effect immediately. Health is capped at max; the buff sets a
- *  within-run fire-rate multiplier (reset on death via createPlayer). Pure. */
+/** Apply a pickup's effect immediately. Health is capped at max; the powerups
+ *  flip a within-run behaviour toggle (reset on death via createPlayer). Pure. */
 export function applyPickup(player: PlayerState, kind: PickupKind): void {
   if (kind === 'health') {
     player.health = Math.min(PLAYER_COMBAT.maxHealth, player.health + DROP.healAmount);
+  } else if (kind === 'pierce') {
+    player.pierce = true;
   } else {
-    player.fireRateMult = DROP.buffFireRateMult;
+    player.meleeKnockback = true;
   }
 }
 

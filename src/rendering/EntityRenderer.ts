@@ -36,6 +36,7 @@ import {
 import type { GameState } from '../game/GameState';
 import { aimDirection } from '../game/Combat';
 import type { InputIntent } from '../game/Input';
+import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
   ENEMY,
@@ -54,7 +55,7 @@ import { lerp, type Vec2 } from '../utils/math';
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
 
-/** A small square icon texture drawn once (cross for health, bolt for buff). */
+/** A small square icon texture drawn once (per-kind glyph: cross / arrow / burst). */
 function iconTexture(draw: (g: CanvasRenderingContext2D, s: number) => void): CanvasTexture {
   const s = 64;
   const c = document.createElement('canvas');
@@ -100,24 +101,58 @@ function drawCross(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.fillRect(m, s / 2 - t / 2, s - 2 * m, t); // horizontal
 }
 
-/** A lightning bolt filling the icon canvas (fire-rate buff). */
-function drawBolt(g: CanvasRenderingContext2D, s: number, color: string): void {
-  const p = (fx: number, fy: number): [number, number] => [fx * s, fy * s];
-  const pts = [
-    p(0.58, 0.08),
-    p(0.28, 0.54),
-    p(0.46, 0.54),
-    p(0.36, 0.92),
-    p(0.74, 0.42),
-    p(0.54, 0.42),
-  ];
+/** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
+ *  Long shaft + head reads as penetration, distinct from the burst silhouette. */
+function drawArrow(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const cy = s / 2;
+  const th = s * 0.16; // shaft thickness
   g.fillStyle = color;
-  g.beginPath();
-  g.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.fillRect(s * 0.1, cy - th / 2, s * 0.5, th); // shaft
+  g.beginPath(); // head
+  g.moveTo(s * 0.54, cy - s * 0.26);
+  g.lineTo(s * 0.92, cy);
+  g.lineTo(s * 0.54, cy + s * 0.26);
   g.closePath();
   g.fill();
 }
+
+/** A radiating burst filling the icon canvas (KNOCKBACK — melee launches enemies
+ *  outward). Eight spokes read as an outward shove, distinct from the arrow. */
+function drawBurst(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const c = s / 2;
+  const inner = s * 0.1;
+  const outer = s * 0.42;
+  g.strokeStyle = color;
+  g.lineWidth = s * 0.11;
+  g.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(c + Math.cos(a) * inner, c + Math.sin(a) * inner);
+    g.lineTo(c + Math.cos(a) * outer, c + Math.sin(a) * outer);
+    g.stroke();
+  }
+}
+
+/** Per-drop-kind presentation: VERB colour + glyph + toast label. Powerups
+ *  borrow the verb colour (pierce = projectile blue, knockback = melee orange)
+ *  so the drop reads as the verb it upgrades; health keeps its own green. */
+const DROP_COLOR: Record<PickupKind, number> = {
+  health: PALETTE.pickupHealth,
+  pierce: PALETTE.projectile,
+  knockback: PALETTE.melee,
+};
+const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
+  health: drawCross,
+  pierce: drawArrow,
+  knockback: drawBurst,
+};
+const DROP_LABEL: Record<PickupKind, string> = {
+  health: '+HP',
+  pierce: 'PIERCE',
+  knockback: 'KNOCKBACK',
+};
+const DROP_KINDS: PickupKind[] = ['health', 'pierce', 'knockback'];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
 interface FigureGeos {
@@ -167,15 +202,15 @@ export class EntityRenderer {
   private readonly barriers: Mesh[] = [];
   // Floating type-icons above each pickup (billboarded — always face the camera).
   private readonly pickupIcons: Sprite[] = [];
-  private iconMatHealth!: SpriteMaterial;
-  private iconMatBuff!: SpriteMaterial;
+  /** One shared icon material per drop kind (cross / arrow / burst). */
+  private iconMats!: Record<PickupKind, SpriteMaterial>;
   /** Render-side snapshot of pickup liveness, to detect collection (-> toast). */
   private readonly prevPickupActive: boolean[] = [];
-  // On-collect toasts ("+HP" / "FIRE RATE UP") — pooled, per-toast material.
+  // On-collect toasts ("+HP" / "PIERCE" / "KNOCKBACK") — pooled, per-toast material.
   private readonly toasts: Sprite[] = [];
   private readonly toastLife: number[] = [];
-  private toastTexHealth!: CanvasTexture;
-  private toastTexBuff!: CanvasTexture;
+  /** One shared toast texture per drop kind. */
+  private toastTex!: Record<PickupKind, CanvasTexture>;
   private toastAspect = 4;
 
   /** Reused scratch for the resolved aim direction — no per-frame allocation. */
@@ -259,19 +294,21 @@ export class EntityRenderer {
       scene.add(m);
     }
 
-    // --- Pickup type-icons: a ＋ cross (health) / ⚡ bolt (buff) billboard so the
-    // drop's MEANING reads at a glance, not just its colour. Two shared
-    // materials; one pooled sprite per pickup slot. ---
-    this.iconMatHealth = new SpriteMaterial({
-      map: iconTexture((g, s) => drawCross(g, s, cssHex(PALETTE.pickupHealth))),
-      transparent: true,
-    });
-    this.iconMatBuff = new SpriteMaterial({
-      map: iconTexture((g, s) => drawBolt(g, s, cssHex(PALETTE.pickupBuff))),
-      transparent: true,
-    });
+    // --- Pickup type-icons: a billboard glyph per kind (cross = health, arrow =
+    // pierce, burst = knockback) so the drop's MEANING reads at a glance, not
+    // just its colour. One shared material per kind; one pooled sprite per slot. ---
+    this.iconMats = {
+      health: new SpriteMaterial({ transparent: true }),
+      pierce: new SpriteMaterial({ transparent: true }),
+      knockback: new SpriteMaterial({ transparent: true }),
+    };
+    for (const kind of DROP_KINDS) {
+      this.iconMats[kind].map = iconTexture((g, s) =>
+        DROP_GLYPH[kind](g, s, cssHex(DROP_COLOR[kind])),
+      );
+    }
     for (let i = 0; i < POOL.pickups; i++) {
-      const sp = new Sprite(this.iconMatHealth);
+      const sp = new Sprite(this.iconMats.health);
       sp.scale.set(PICKUP.iconSize, PICKUP.iconSize, 1);
       sp.visible = false;
       this.pickupIcons.push(sp);
@@ -280,11 +317,13 @@ export class EntityRenderer {
     }
 
     // --- On-collect toasts (pooled; each its own material so they fade
-    // independently). Two shared textures, swapped onto a toast when it fires. ---
-    const th = textTexture('+HP', cssHex(PALETTE.pickupHealth));
-    const tb = textTexture('FIRE RATE UP', cssHex(PALETTE.pickupBuff));
-    this.toastTexHealth = th.tex;
-    this.toastTexBuff = tb.tex;
+    // independently). One shared texture per kind, swapped onto a toast on fire. ---
+    const th = textTexture(DROP_LABEL.health, cssHex(DROP_COLOR.health));
+    this.toastTex = {
+      health: th.tex,
+      pierce: textTexture(DROP_LABEL.pierce, cssHex(DROP_COLOR.pierce)).tex,
+      knockback: textTexture(DROP_LABEL.knockback, cssHex(DROP_COLOR.knockback)).tex,
+    };
     this.toastAspect = th.aspect;
     for (let i = 0; i < TOAST.count; i++) {
       const sp = new Sprite(new SpriteMaterial({ transparent: true, opacity: 0, depthTest: false }));
@@ -425,7 +464,7 @@ export class EntityRenderer {
       const icon = this.pickupIcons[i];
 
       // Collection = active last frame, inactive now (pickups only deactivate on
-      // pickup). Fire a rising "+HP" / "FIRE RATE UP" toast at its position.
+      // pickup). Fire a rising "+HP" / "PIERCE" / "KNOCKBACK" toast at its position.
       if (this.prevPickupActive[i] && !pk.active) {
         this.spawnToast(pk.x, pk.y, pk.kind);
       }
@@ -436,7 +475,7 @@ export class EntityRenderer {
         icon.visible = false;
         continue;
       }
-      const color = pk.kind === 'health' ? PALETTE.pickupHealth : PALETTE.pickupBuff;
+      const color = DROP_COLOR[pk.kind];
       m.visible = true;
       m.position.set(pk.x, PICKUP.height + bob, pk.y);
       m.rotation.y = now * PICKUP.spinRate;
@@ -444,20 +483,21 @@ export class EntityRenderer {
       mat.color.setHex(color);
       mat.emissive.setHex(color);
 
-      // Floating type-icon (the legibility win): cross = health, bolt = buff.
+      // Floating type-icon (the legibility win): cross = health, arrow = pierce,
+      // burst = knockback.
       icon.visible = true;
-      icon.material = pk.kind === 'health' ? this.iconMatHealth : this.iconMatBuff;
+      icon.material = this.iconMats[pk.kind];
       icon.position.set(pk.x, PICKUP.height + PICKUP.iconOffset + bob, pk.y);
     }
   }
 
   /** Activate a pooled toast at (x, y) for the collected kind. */
-  private spawnToast(x: number, y: number, kind: 'health' | 'buff'): void {
+  private spawnToast(x: number, y: number, kind: PickupKind): void {
     for (let i = 0; i < this.toasts.length; i++) {
       if (this.toastLife[i] > 0) continue;
       const sp = this.toasts[i];
       const m = sp.material as SpriteMaterial;
-      m.map = kind === 'health' ? this.toastTexHealth : this.toastTexBuff;
+      m.map = this.toastTex[kind];
       m.needsUpdate = true;
       sp.position.set(x, PICKUP.height + TOAST.startOffset, y);
       sp.visible = true;

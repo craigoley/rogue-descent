@@ -37,11 +37,11 @@ export const PALETTE = {
   invuln: 0xaeffff,
   /** Successful-dodge confirmation flash (a dash negated a hit). */
   dodge: 0xffffff,
-  // Phase 5 — drops + gating.
+  // Phase 5/6 — drops + gating. Powerup drops borrow the VERB colours so the
+  // drop reads as the verb it upgrades: PIERCE = projectile blue, KNOCKBACK =
+  // melee orange. Health keeps its own green (it isn't a verb).
   /** Health pickup (green = restore). */
   pickupHealth: 0x44ff88,
-  /** Buff pickup (violet = power-up). */
-  pickupBuff: 0xc080ff,
   /** Locked-door barrier (accent red so "sealed, clear the room" reads). */
   barrier: 0xff3366,
 } as const;
@@ -344,16 +344,22 @@ export const ENCOUNTER = {
   spawnSpread: 1.5,
 } as const;
 
-/** Within-run drops. EXACTLY two kinds: health + one fire-rate buff. */
+/** Within-run drops. EXACTLY three kinds: health + two VERB-COUPLED powerups
+ *  (PIERCE for ranged, KNOCKBACK for melee). Powerups are binary toggles — they
+ *  change what a verb DOES, not its stats; not stackable; reset on death. */
 export const DROP = {
   /** Chance a slain enemy drops anything (seeded roll). */
   chance: 0.45,
-  /** Of the drops that happen, the share that are health (rest = buff). */
+  /** Of the drops that happen, the share that are health (rest = a powerup). */
   healthShare: 0.6,
+  /** Of the powerup drops, the share that are PIERCE (rest = KNOCKBACK). */
+  pierceShare: 0.5,
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
-  /** Ranged fire-rate multiplier the buff applies (< 1 = faster). Within-run. */
-  buffFireRateMult: 0.55,
+  /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much
+   *  stronger than the base MELEE.knockback shove so the upgraded swing reads as
+   *  a launcher — the behaviour change is felt, not a subtle stat nudge. */
+  meleeKnockback: 18,
 } as const;
 
 /** Pickup tuning. */
@@ -369,14 +375,15 @@ export const PICKUP = {
   bobRate: 3,
   /** Y-axis spin speed (radians per ms), render-only. */
   spinRate: 0.002,
-  /** Floating type-icon (cross / bolt) sprite size, world units. */
+  /** Floating type-icon (cross / arrow / burst) sprite size, world units. */
   iconSize: 0.7,
   /** Height of the floating icon above the pickup cube, world units. */
   iconOffset: 0.6,
 } as const;
 
-/** On-collect floating toast ("+HP" / "FIRE RATE UP") — render-only feedback so
- *  the player learns what they grabbed. Pooled sprites that rise and fade. */
+/** On-collect floating toast ("+HP" / "PIERCE" / "KNOCKBACK") — render-only
+ *  feedback so the player learns what they grabbed. Pooled sprites that rise
+ *  and fade. */
 export const TOAST = {
   count: 8,
   /** Toast height (world units); width follows the texture aspect. */

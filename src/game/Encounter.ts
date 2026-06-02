@@ -122,6 +122,7 @@ export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rn
   if (!kind) return;
   const room = state.activeRoom;
   if (spawnPickup(state.pickups, x, y, kind, room)) {
+    state.dropCounts[kind]++; // ?debug funnel tally
     if (room >= 0) state.rooms[room].dropsSpawned++;
   }
 }

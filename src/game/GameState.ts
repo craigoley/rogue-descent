@@ -65,6 +65,8 @@ export interface GameState {
   prevEnemyActive: boolean[];
   /** Seeded RNG for drop rolls (separate stream from generation). */
   dropRng: Rng;
+  /** Per-kind drop tally for the ?debug funnel (within-run; reset on death). */
+  dropCounts: { health: number; pierce: number; knockback: number };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
   /** Screen-shake countdown, seconds (renderer reads it). */
@@ -94,6 +96,7 @@ export function createGameState(): GameState {
     activeRoom: -1,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
+    dropCounts: { health: 0, pierce: 0, knockback: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -104,8 +107,8 @@ export function createGameState(): GameState {
 }
 
 /** Generate the floor for `seed` and (re)initialise everything onto it — a
- *  WITHIN-RUN reset (Phase 6 owns persistence). Pools are REUSED; the buff and
- *  any drops are cleared, so nothing survives this. */
+ *  WITHIN-RUN reset (Phase 6 owns persistence). Pools are REUSED; the powerup
+ *  toggles (via createPlayer) and any drops are cleared, so nothing survives. */
 function loadFloor(state: GameState, seed: number): void {
   const floor = generateDungeon(seed);
   state.room = floor.room;
@@ -119,6 +122,9 @@ function loadFloor(state: GameState, seed: number): void {
   state.rooms = buildEncounters(floor);
   state.activeRoom = -1;
   state.dropRng = createRng(dropSeed(seed));
+  state.dropCounts.health = 0;
+  state.dropCounts.pierce = 0;
+  state.dropCounts.knockback = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -173,11 +179,12 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
     }
   }
 
-  // Ranged — held; fires at the weapon cooldown (× the within-run buff mult).
+  // Ranged — held; fires at the weapon cooldown. (The PIERCE powerup changes
+  // what a shot DOES, not how fast it fires — fire rate is fixed.)
   if (intent.ranged && p.rangedCdTimer <= 0) {
     const aim = aimDirection(p, intent, _aim);
     fireProjectile(state.projectiles, p.x, p.y, aim.x, aim.y);
-    p.rangedCdTimer = RANGED.cooldown * p.fireRateMult;
+    p.rangedCdTimer = RANGED.cooldown;
   }
 
   updateProjectiles(state, dt);
