@@ -164,7 +164,7 @@ export class Controls {
 
   // --- Touch: move stick (left) + aim stick (right) -------------------------
   private onTouchStart = (e: TouchEvent): void => {
-    for (const t of Array.from(e.changedTouches)) {
+    for (const t of e.changedTouches) {
       const leftHalf = t.clientX < window.innerWidth / 2;
       if (leftHalf && this.moveTouchId === null) {
         this.moveTouchId = t.identifier;
@@ -184,7 +184,7 @@ export class Controls {
   };
 
   private onTouchMove = (e: TouchEvent): void => {
-    for (const t of Array.from(e.changedTouches)) {
+    for (const t of e.changedTouches) {
       if (t.identifier === this.moveTouchId) {
         const a = dragAxes(t.clientX - this.moveOX, t.clientY - this.moveOY, TOUCH.range);
         this.intent.moveX = a.moveX;
@@ -204,7 +204,7 @@ export class Controls {
   };
 
   private onTouchEnd = (e: TouchEvent): void => {
-    for (const t of Array.from(e.changedTouches)) {
+    for (const t of e.changedTouches) {
       if (t.identifier === this.moveTouchId) {
         this.moveTouchId = null;
         this.intent.moveX = 0;

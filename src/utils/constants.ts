@@ -286,6 +286,8 @@ export const POOL = {
 export const PARTICLE = {
   lifetime: 0.4,
   speed: 5,
+  /** Per-step drag multiplier (sim runs at fixed SIM_DT). */
+  drag: 0.9,
   /** Particles emitted per enemy hit. */
   hitCount: 7,
   /** Particles emitted on enemy death. */
@@ -306,6 +308,16 @@ export const VFX = {
   /** Hit-spark cube size, world units. */
   particleSize: 0.12,
   particleHeight: 0.25,
+  /** I-frame blink rate (flickers per second). */
+  iframeBlink: 30,
+  /** Dash trail afterimage peak opacity. */
+  trailOpacity: 0.35,
+  /** Enemy telegraph max scale boost (1 + this at full wind-up). */
+  telegraphScale: 0.3,
+  /** Melee arc indicator Y position above the floor, world units. */
+  meleeArcHeight: 0.05,
+  /** Melee arc indicator peak opacity. */
+  meleeArcOpacity: 0.5,
 } as const;
 
 /** Enemy spawn points for the test room (open floor tiles, world units). One

@@ -66,8 +66,8 @@ export function updateParticles(pool: Particle[], dt: number): void {
     if (!p.active) continue;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vx *= 0.9; // per-step drag (sim runs at fixed SIM_DT)
-    p.vy *= 0.9;
+    p.vx *= PARTICLE.drag;
+    p.vy *= PARTICLE.drag;
     p.life -= dt;
     if (p.life <= 0) p.active = false;
   }

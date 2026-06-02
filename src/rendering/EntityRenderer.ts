@@ -132,7 +132,7 @@ export class EntityRenderer {
     this.player.position.set(px, PLAYER.radius, py);
     const flashing = p.hitFlashTimer > 0;
     this.playerMat.color.setHex(flashing ? PALETTE.hitFlash : PALETTE.player);
-    this.player.visible = p.alive && !(p.iframeTimer > 0 && Math.floor(p.iframeTimer * 30) % 2 === 0);
+    this.player.visible = p.alive && !(p.iframeTimer > 0 && Math.floor(p.iframeTimer * VFX.iframeBlink) % 2 === 0);
 
     this.syncTrail(p, px, py);
     this.syncEnemies(state, alpha);
@@ -160,7 +160,7 @@ export class EntityRenderer {
       m.visible = true;
       m.position.set(this.trailX[i], PLAYER.radius, this.trailY[i]);
       const mat = m.material as MeshBasicMaterial;
-      mat.opacity = 0.35 * (1 - i / this.trail.length);
+      mat.opacity = VFX.trailOpacity * (1 - i / this.trail.length);
     }
   }
 
@@ -187,7 +187,7 @@ export class EntityRenderer {
         // Wind-up tell: warning colour + grow as the strike approaches.
         mat.color.setHex(PALETTE.enemyTelegraph);
         const t = 1 - e.timer / ENEMY.telegraph; // 0 -> 1 across the wind-up
-        m.scale.setScalar(1 + 0.3 * t);
+        m.scale.setScalar(1 + VFX.telegraphScale * t);
       } else {
         mat.color.setHex(PALETTE.enemy);
         m.scale.setScalar(1);
@@ -234,9 +234,9 @@ export class EntityRenderer {
       return;
     }
     this.meleeGroup.visible = true;
-    this.meleeGroup.position.set(px, 0.05, py);
+    this.meleeGroup.position.set(px, VFX.meleeArcHeight, py);
     // Aim the flat sector along the player's facing (world x,y -> three x,z).
     this.meleeGroup.rotation.y = Math.atan2(-p.facingY, p.facingX);
-    this.meleeMat.opacity = 0.5 * (p.meleeAnimTimer / MELEE.active);
+    this.meleeMat.opacity = VFX.meleeArcOpacity * (p.meleeAnimTimer / MELEE.active);
   }
 }
