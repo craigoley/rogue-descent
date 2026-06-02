@@ -231,7 +231,8 @@ export class EntityRenderer {
     }
 
     // --- Melee swing (flat sector, oriented via a parent group) ---
-    this.meleeMat = new MeshBasicMaterial({ color: PALETTE.player, transparent: true, opacity: 0 });
+    // Uses the dedicated melee verb colour (no longer aliases the player body).
+    this.meleeMat = new MeshBasicMaterial({ color: PALETTE.melee, transparent: true, opacity: 0 });
     const sector = new Mesh(
       new CircleGeometry(MELEE.range, 18, -MELEE.halfArc, MELEE.halfArc * 2),
       this.meleeMat,
