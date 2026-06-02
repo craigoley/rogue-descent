@@ -16,10 +16,12 @@ import {
   PLAYER_COMBAT,
   RANGED,
   SHAKE,
-  ENEMY_SPAWNS,
+  DUNGEON,
+  ENEMY_SPAWN_OFFSETS,
 } from '../utils/constants';
 import { createPlayer, updatePlayer, type PlayerState } from './Player';
-import { buildTestRoom, roomCenter, type RoomState } from './Room';
+import { isSolid, type RoomState } from './Room';
+import { generateDungeon } from './Dungeon';
 import {
   createEnemyPool,
   spawnEnemy,
@@ -45,6 +47,10 @@ import type { Vec2 } from '../utils/math';
 export interface GameState {
   player: PlayerState;
   room: RoomState;
+  /** Player spawn (world units) — centre of the generated floor's spawn room. */
+  spawn: { x: number; y: number };
+  /** Seed the current floor was generated from. */
+  seed: number;
   /** Seconds elapsed in the current life. */
   time: number;
   projectiles: Projectile[];
@@ -61,16 +67,30 @@ export interface GameState {
 /** Reused aim scratch — keeps `update` allocation-free. */
 const _aim: Vec2 = { x: 0, y: 0 };
 
+/** Place the (unchanged) enemies near the spawn room — offsets relative to the
+ *  spawn, falling back to the spawn cell if an offset lands in a wall. Placement
+ *  only; enemy behaviour/count is unchanged (real per-room spawning is Phase 5). */
 function spawnRoomEnemies(state: GameState): void {
-  for (const s of ENEMY_SPAWNS) spawnEnemy(state.enemies, s.x, s.y);
+  const { room, spawn } = state;
+  for (const off of ENEMY_SPAWN_OFFSETS) {
+    let x = spawn.x + off.x;
+    let y = spawn.y + off.y;
+    const tx = Math.floor(x / room.tileSize);
+    const ty = Math.floor(y / room.tileSize);
+    if (isSolid(room, tx, ty)) {
+      x = spawn.x;
+      y = spawn.y;
+    }
+    spawnEnemy(state.enemies, x, y);
+  }
 }
 
 export function createGameState(): GameState {
-  const room = buildTestRoom();
-  const c = roomCenter(room);
   const state: GameState = {
-    player: createPlayer(c.x, c.y),
-    room,
+    player: createPlayer(0, 0),
+    room: { tilesX: 0, tilesY: 0, tileSize: 1, walls: [], solid: [] },
+    spawn: { x: 0, y: 0 },
+    seed: DUNGEON.defaultSeed,
     time: 0,
     projectiles: createProjectilePool(),
     enemies: createEnemyPool(),
@@ -79,15 +99,18 @@ export function createGameState(): GameState {
     shakeTimer: 0,
     deathTimer: 0,
   };
-  spawnRoomEnemies(state);
+  loadFloor(state, DUNGEON.defaultSeed);
   return state;
 }
 
-/** Reset for a fresh attempt (Phase 4 adds real run structure; this just lets
- *  you keep playing). Pools are REUSED — deactivated, not reallocated. */
-export function resetRun(state: GameState): void {
-  const c = roomCenter(state.room);
-  state.player = createPlayer(c.x, c.y);
+/** Generate the floor for `seed` and (re)initialise the player + enemies onto
+ *  it. Pools are REUSED — deactivated, not reallocated. */
+function loadFloor(state: GameState, seed: number): void {
+  const floor = generateDungeon(seed);
+  state.room = floor.room;
+  state.spawn = floor.spawn;
+  state.seed = seed;
+  state.player = createPlayer(floor.spawn.x, floor.spawn.y);
   for (const e of state.enemies) e.active = false;
   for (const p of state.projectiles) p.active = false;
   for (const p of state.particles) p.active = false;
@@ -96,6 +119,16 @@ export function resetRun(state: GameState): void {
   state.deathTimer = 0;
   state.time = 0;
   spawnRoomEnemies(state);
+}
+
+/** Reset for a fresh attempt on the SAME floor (Phase 5 owns run structure). */
+export function resetRun(state: GameState): void {
+  loadFloor(state, state.seed);
+}
+
+/** Regenerate the floor with a new seed (debug "cycle floors" affordance). */
+export function regenerate(state: GameState, seed: number): void {
+  loadFloor(state, seed);
 }
 
 export function update(state: GameState, intent: InputIntent, dt: number): void {

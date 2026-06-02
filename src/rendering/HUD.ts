@@ -196,6 +196,7 @@ export class HUD {
 
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
+      `floor seed ${state.seed}   (press G to regenerate)\n` +
       `\n` +
       `INPUT TRACE (press a direction)\n` +
       `1 raw input     ${f2(intent.moveX)}, ${f2(intent.moveY)}\n` +

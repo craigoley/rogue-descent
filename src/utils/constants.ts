@@ -397,10 +397,43 @@ export const FIGURE = {
   leanLerp: 16,
 } as const;
 
-/** Enemy spawn points for the test room (open floor tiles, world units). One
- *  enemy type only — these are just placements for the feel test. */
-export const ENEMY_SPAWNS = [
-  { x: 4, y: 5 },
-  { x: 10, y: 5 },
-  { x: 7, y: 10 },
+/** The existing enemies' placements, now RELATIVE to the spawn room centre
+ *  (world units) — the absolute coords assumed the old single TEST_ROOM and
+ *  would land in walls on a generated floor. Count + behaviour are unchanged;
+ *  Phase 5 owns real per-room encounter spawning. */
+export const ENEMY_SPAWN_OFFSETS = [
+  { x: 2, y: 0 },
+  { x: -2, y: 0 },
+  { x: 0, y: 2 },
 ] as const;
+
+// ============================================================================
+// DUNGEON (Phase 4) — deterministic BSP room-and-corridor generator. All tuning
+// here; the generator (src/game/Dungeon.ts) is pure and seeded.
+// ============================================================================
+export const DUNGEON = {
+  /** Floor size in tiles. */
+  tilesX: 48,
+  tilesY: 40,
+  /** A BSP region won't split on an axis if a half would be below this. */
+  minLeaf: 10,
+  /** Recursion depth cap (<= 2^maxDepth leaves). */
+  maxDepth: 4,
+  /** Split position jitter: the split fraction is 0.5 ± up to this. */
+  splitJitter: 0.12,
+  /** Minimum room side, tiles (minLeaf must be >= minRoom + 2*roomPadding). */
+  minRoom: 6,
+  /** Gap (tiles) between a room and its BSP leaf edges — keeps the outer ring
+   *  solid and rooms off the leaf seams. */
+  roomPadding: 1,
+  /** Corridor thickness, tiles. */
+  corridorWidth: 2,
+  /** Acceptance bounds for the generated room count (asserted by tests). */
+  minRooms: 4,
+  maxRooms: 16,
+  /** Default floor seed used at startup. */
+  defaultSeed: 1,
+  /** Max wall boxes the renderer pools. Floors whose border-wall count exceeds
+   *  this are rendered truncated and a warning is logged (see DungeonRenderer). */
+  wallRenderMax: 2400,
+} as const;

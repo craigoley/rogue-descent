@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, update } from '../GameState';
+import { createGameState, update, type GameState } from '../GameState';
 import { createPlayer, updatePlayer, isInvulnerable } from '../Player';
 import { createIntent, type InputIntent } from '../Input';
-import { buildTestRoom } from '../Room';
+import { buildTestRoom, roomCenter } from '../Room';
 import { createEnemyPool, spawnEnemy } from '../Enemy';
 import { activeProjectileCount } from '../Projectile';
 import { activeParticleCount } from '../Particle';
@@ -23,6 +23,21 @@ const DT = SIM_DT;
 // — a cardinal screen input would map to a world DIAGONAL that clips the corner
 // pillars — so the distance/commitment assertions below read in plain world x.
 const dashIntent = (): InputIntent => ({ ...createIntent(), moveX: 1, moveY: 1, dash: true });
+
+/**
+ * Combat tests run in the controlled, open TEST_ROOM arena — combat mechanics
+ * shouldn't depend on a random generated floor. (Production createGameState now
+ * builds a BSP dungeon; we override its room here and centre the player.)
+ */
+function arena(): GameState {
+  const s = createGameState();
+  s.room = buildTestRoom();
+  const c = roomCenter(s.room);
+  s.spawn = { x: c.x, y: c.y };
+  s.player = createPlayer(c.x, c.y);
+  for (const e of s.enemies) e.active = false;
+  return s;
+}
 
 describe('Dash', () => {
   it('bursts approximately dashDist in the committed direction', () => {
@@ -66,7 +81,7 @@ describe('Dash', () => {
 
 describe('Dash i-frames', () => {
   it('block damage during the window, then damage lands after it expires', () => {
-    const s = createGameState();
+    const s = arena();
     const p = s.player;
     updatePlayer(p, dashIntent(), DT, room);
     expect(isInvulnerable(p)).toBe(true);
@@ -88,7 +103,7 @@ describe('Dash i-frames', () => {
 
 describe('Dash dodge feedback (visibility only — damage logic unchanged)', () => {
   it('a dash i-frame negates the hit AND registers a dodge (tell + whiff sparks)', () => {
-    const s = createGameState();
+    const s = arena();
     const p = s.player;
     const before = p.health;
     const partsBefore = activeParticleCount(s.particles);
@@ -103,7 +118,7 @@ describe('Dash dodge feedback (visibility only — damage logic unchanged)', () 
   });
 
   it('post-hit i-frames block silently — no dodge tell when not dashing', () => {
-    const s = createGameState();
+    const s = arena();
     const p = s.player;
     damagePlayer(p, 20, s); // first hit lands, grants post-hit i-frames
     const hp = p.health;
@@ -118,7 +133,7 @@ describe('Dash dodge feedback (visibility only — damage logic unchanged)', () 
 
 describe('Melee', () => {
   it('damages an enemy in range and inside the arc', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     s.player.facingX = 1;
     s.player.facingY = 0;
@@ -130,7 +145,7 @@ describe('Melee', () => {
   });
 
   it('misses an enemy behind the aim direction (outside the arc)', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     s.player.facingX = 1;
     s.player.facingY = 0;
@@ -142,7 +157,7 @@ describe('Melee', () => {
   });
 
   it('misses an enemy out of range', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     s.player.facingX = 1;
     s.player.facingY = 0;
@@ -156,7 +171,7 @@ describe('Melee', () => {
 
 describe('Ranged', () => {
   it('spawns a projectile that travels, damages an enemy, and returns to the pool', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     s.player.facingX = 1;
     s.player.facingY = 0;
@@ -179,7 +194,7 @@ describe('Ranged', () => {
 
 describe('Enemy telegraph -> strike', () => {
   it('telegraphs on reaching range, then the strike damages the player', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     const p = s.player;
     spawnEnemy(s.enemies, p.x + ENEMY.attackRange * 0.5, p.y); // already in range
@@ -196,7 +211,7 @@ describe('Enemy telegraph -> strike', () => {
   });
 
   it('dashing through the strike (i-frames) takes no damage', () => {
-    const s = createGameState();
+    const s = arena();
     for (const e of s.enemies) e.active = false;
     const p = s.player;
     spawnEnemy(s.enemies, p.x + ENEMY.attackRange * 0.5, p.y);
@@ -213,7 +228,7 @@ describe('Enemy telegraph -> strike', () => {
 
 describe('Death + reset', () => {
   it('player dies at zero health and the room auto-resets after the pause', () => {
-    const s = createGameState();
+    const s = arena();
     s.player.health = 5;
     s.player.iframeTimer = 0;
     s.player.hitInvulnTimer = 0;
@@ -233,7 +248,7 @@ describe('Death + reset', () => {
 
 describe('Pools are fixed-size and reused (zero growth)', () => {
   it('sustained firing never grows the projectile/particle/enemy arrays', () => {
-    const s = createGameState();
+    const s = arena();
     const projLen = s.projectiles.length;
     const partLen = s.particles.length;
     const enemyLen = s.enemies.length;
