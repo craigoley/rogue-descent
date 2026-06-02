@@ -213,9 +213,11 @@ export class HUD {
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
-      `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}` +
-      `  buff×${state.player.fireRateMult.toFixed(2)}\n` +
-      `drops spawned ${spawned} / collected ${collected}\n` +
+      `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
+      `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
+      `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}\n` +
+      `drops spawned ${spawned} / collected ${collected}` +
+      `   (hp ${state.dropCounts.health} · pierce ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback})\n` +
       `\n` +
       `INPUT TRACE (press a direction)\n` +
       `1 raw input     ${f2(intent.moveX)}, ${f2(intent.moveY)}\n` +

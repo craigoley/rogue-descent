@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { ENEMY, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { DROP, ENEMY, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -92,6 +92,9 @@ export function meleeAttack(state: GameState, aimX: number, aimY: number): void 
   const { player, enemies } = state;
   const reach = MELEE.range + ENEMY.radius;
   const arcCos = Math.cos(MELEE.halfArc);
+  // KNOCKBACK powerup turns the swing into a launcher: same hit, far stronger
+  // shove. Damage is unchanged — this is a behaviour toggle, not a damage buff.
+  const kbForce = player.meleeKnockback ? DROP.meleeKnockback : MELEE.knockback;
   for (const e of enemies) {
     if (!e.active) continue;
     const dx = e.x - player.x;
@@ -101,6 +104,6 @@ export function meleeAttack(state: GameState, aimX: number, aimY: number): void 
     // Within the arc if the angle to the enemy is <= halfArc from the aim dir.
     const dot = (dx / d) * aimX + (dy / d) * aimY;
     if (dot < arcCos) continue;
-    damageEnemy(e, TUNING.meleeDamage, dx / d, dy / d, MELEE.knockback, state);
+    damageEnemy(e, TUNING.meleeDamage, dx / d, dy / d, kbForce, state);
   }
 }

@@ -6,10 +6,12 @@ import { buildTestRoom, roomCenter } from '../Room';
 import { createEnemyPool, spawnEnemy } from '../Enemy';
 import { activeProjectileCount } from '../Projectile';
 import { activeParticleCount } from '../Particle';
-import { damagePlayer } from '../Combat';
+import { damagePlayer, meleeAttack } from '../Combat';
 import {
   DASH,
+  DROP,
   ENEMY,
+  MELEE,
   PLAYER_COMBAT,
   POOL,
   SIM_DT,
@@ -171,6 +173,30 @@ describe('Melee', () => {
     update(s, { ...createIntent(), melee: true }, DT);
     expect(e.health).toBe(hp);
   });
+
+  it('KNOCKBACK powerup launches the enemy much harder, same damage', () => {
+    // Baseline swing (no powerup): the enemy gets the base shove.
+    const base = arena();
+    for (const e of base.enemies) e.active = false;
+    spawnEnemy(base.enemies, base.player.x + 1.0, base.player.y); // dead ahead (+x)
+    const eb = base.enemies.find((x) => x.active)!;
+    const hpb = eb.health;
+    meleeAttack(base, 1, 0); // direct call isolates the impulse (no enemy update)
+    expect(eb.kbVx).toBeCloseTo(MELEE.knockback, 5); // base shove along +x
+    expect(eb.health).toBe(hpb - TUNING.meleeDamage);
+
+    // Powered swing: same hit, far stronger shove, identical damage.
+    const buf = arena();
+    for (const e of buf.enemies) e.active = false;
+    buf.player.meleeKnockback = true;
+    spawnEnemy(buf.enemies, buf.player.x + 1.0, buf.player.y);
+    const ep = buf.enemies.find((x) => x.active)!;
+    const hpp = ep.health;
+    meleeAttack(buf, 1, 0);
+    expect(ep.kbVx).toBeCloseTo(DROP.meleeKnockback, 5); // launched
+    expect(ep.kbVx).toBeGreaterThan(eb.kbVx); // strictly harder than base
+    expect(ep.health).toBe(hpp - TUNING.meleeDamage); // damage UNCHANGED
+  });
 });
 
 describe('Ranged', () => {
@@ -193,6 +219,51 @@ describe('Ranged', () => {
     }
     expect(e.health).toBeLessThan(hp); // it connected
     expect(activeProjectileCount(s.projectiles)).toBe(0); // back in the pool
+  });
+
+  it('without PIERCE, a shot stops at the first enemy (second untouched)', () => {
+    const s = arena();
+    for (const e of s.enemies) e.active = false;
+    s.player.facingX = 1;
+    s.player.facingY = 0;
+    spawnEnemy(s.enemies, s.player.x + 2, s.player.y); // first in the line
+    spawnEnemy(s.enemies, s.player.x + 4, s.player.y); // second, further out
+    const [e1, e2] = s.enemies.filter((e) => e.active);
+    const hp1 = e1.health;
+    const hp2 = e2.health;
+    update(s, { ...createIntent(), ranged: true }, DT); // ONE shot, pierce off
+
+    let guard = 0;
+    while (activeProjectileCount(s.projectiles) > 0 && guard < 1000) {
+      update(s, createIntent(), DT);
+      guard++;
+    }
+    expect(e1.health).toBe(hp1 - TUNING.rangedDamage); // first took the hit
+    expect(e2.health).toBe(hp2); // second never touched — shot despawned
+  });
+
+  it('PIERCE shot passes through and damages a line of enemies, ONCE each', () => {
+    const s = arena();
+    for (const e of s.enemies) e.active = false;
+    s.player.facingX = 1;
+    s.player.facingY = 0;
+    s.player.pierce = true; // POWERUP ON
+    spawnEnemy(s.enemies, s.player.x + 2, s.player.y);
+    spawnEnemy(s.enemies, s.player.x + 4, s.player.y);
+    const [e1, e2] = s.enemies.filter((e) => e.active);
+    const hp1 = e1.health;
+    const hp2 = e2.health;
+    update(s, { ...createIntent(), ranged: true }, DT); // ONE shot
+
+    let guard = 0;
+    while (activeProjectileCount(s.projectiles) > 0 && guard < 1000) {
+      update(s, createIntent(), DT);
+      guard++;
+    }
+    // Both hit, and EXACTLY once each (the per-shot hit-set blocks re-hits across
+    // the several frames the projectile overlaps each enemy).
+    expect(e1.health).toBe(hp1 - TUNING.rangedDamage);
+    expect(e2.health).toBe(hp2 - TUNING.rangedDamage);
   });
 });
 

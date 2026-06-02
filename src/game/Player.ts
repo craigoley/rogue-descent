@@ -55,9 +55,14 @@ export interface PlayerState {
   rangedCdTimer: number;
   /** Hit-flash window, seconds. */
   hitFlashTimer: number;
-  /** Ranged fire-rate multiplier from a within-run buff drop (1 = none, < 1 =
-   *  faster). Reset to 1 by createPlayer, so it vanishes on a death-reset. */
-  fireRateMult: number;
+  /** PIERCE powerup (within-run): ranged shots pass THROUGH enemies instead of
+   *  despawning on the first hit. Binary toggle; reset to false on death via
+   *  createPlayer. */
+  pierce: boolean;
+  /** KNOCKBACK powerup (within-run): melee hits apply a much stronger shove
+   *  (DROP.meleeKnockback vs the base MELEE.knockback). Binary toggle; reset to
+   *  false on death via createPlayer. */
+  meleeKnockback: boolean;
   /** Dodge confirmation render-tell window, seconds (> 0 right after a dash
    *  i-frame negated a hit). Drives the dodge flash; pure feedback, not logic. */
   dodgeFxTimer: number;
@@ -86,7 +91,8 @@ export function createPlayer(x: number, y: number): PlayerState {
     rangedCdTimer: 0,
     hitFlashTimer: 0,
     dodgeFxTimer: 0,
-    fireRateMult: 1,
+    pierce: false,
+    meleeKnockback: false,
   };
 }
 
