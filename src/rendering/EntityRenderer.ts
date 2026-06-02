@@ -464,7 +464,7 @@ export class EntityRenderer {
       const icon = this.pickupIcons[i];
 
       // Collection = active last frame, inactive now (pickups only deactivate on
-      // pickup). Fire a rising "+HP" / "FIRE RATE UP" toast at its position.
+      // pickup). Fire a rising "+HP" / "PIERCE" / "KNOCKBACK" toast at its position.
       if (this.prevPickupActive[i] && !pk.active) {
         this.spawnToast(pk.x, pk.y, pk.kind);
       }

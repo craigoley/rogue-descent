@@ -375,14 +375,15 @@ export const PICKUP = {
   bobRate: 3,
   /** Y-axis spin speed (radians per ms), render-only. */
   spinRate: 0.002,
-  /** Floating type-icon (cross / bolt) sprite size, world units. */
+  /** Floating type-icon (cross / arrow / burst) sprite size, world units. */
   iconSize: 0.7,
   /** Height of the floating icon above the pickup cube, world units. */
   iconOffset: 0.6,
 } as const;
 
-/** On-collect floating toast ("+HP" / "FIRE RATE UP") — render-only feedback so
- *  the player learns what they grabbed. Pooled sprites that rise and fade. */
+/** On-collect floating toast ("+HP" / "PIERCE" / "KNOCKBACK") — render-only
+ *  feedback so the player learns what they grabbed. Pooled sprites that rise
+ *  and fade. */
 export const TOAST = {
   count: 8,
   /** Toast height (world units); width follows the texture aspect. */
