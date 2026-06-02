@@ -20,7 +20,17 @@ export const PALETTE = {
   // Combat (Phase 2).
   enemy: 0xff4466,
   enemyTelegraph: 0xffcc33,
-  projectile: 0x66e0ff,
+  /**
+   * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
+   * temperature poles so they read as distinct verbs — and both stay clear of
+   * the teal player body (0x33ffcc). Orange↔blue separates by hue AND luminance
+   * (colourblind-robust), not hue alone.
+   */
+  /** MELEE — warm orange (close-range, physical). Was aliasing PALETTE.player. */
+  melee: 0xff7a1a,
+  /** RANGED projectile — cool electric blue (pulled out of the cyan/teal family
+   *  so it no longer blurs with the player). */
+  projectile: 0x4488ff,
   spark: 0xffffff,
   hitFlash: 0xffffff,
   /** Dash i-frame glow — bright cyan-white so "I'm invulnerable" reads clearly. */
