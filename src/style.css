@@ -44,6 +44,46 @@ body {
   user-select: none;
 }
 
+/* Combat HUD — health + dash bars, top-left. Always visible. */
+.hud-bars {
+  position: fixed;
+  top: env(safe-area-inset-top, 10px);
+  left: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hud-bar {
+  width: min(220px, 45vw);
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.hud-bar-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.08s linear;
+}
+
+.hud-health .hud-bar-fill {
+  background: linear-gradient(90deg, #ff3366, #ff6688);
+}
+
+.hud-dash {
+  height: 8px;
+}
+
+.hud-dash .hud-bar-fill {
+  background: var(--player);
+}
+
 /* Touch virtual stick — purely visual feedback; the listeners capture touches,
    so these never intercept pointer events. Centred on their left/top via
    translate(-50%, -50%). Hidden until a touch is active. */
@@ -76,6 +116,53 @@ body {
 .touch-stick-base.is-active,
 .touch-stick-thumb.is-active {
   display: block;
+}
+
+/* Aim stick tinted with the accent so it reads distinctly from the move stick. */
+.touch-stick-base.touch-aim {
+  border-color: rgba(255, 102, 51, 0.5);
+  background: rgba(255, 102, 51, 0.1);
+}
+.touch-stick-thumb.touch-aim {
+  background: rgba(255, 102, 51, 0.4);
+  border-color: rgba(255, 102, 51, 0.8);
+  box-shadow: 0 0 16px rgba(255, 102, 51, 0.45);
+}
+
+/* On-screen action buttons (mobile): melee + dash. */
+.touch-action {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.1em;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  z-index: 6;
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-btn-melee {
+  right: 24px;
+  color: var(--accent);
+  border-color: rgba(255, 51, 102, 0.6);
+}
+
+.touch-btn-dash {
+  right: 112px;
+  color: var(--player);
+  border-color: rgba(51, 255, 204, 0.6);
+}
+
+/* Action buttons only make sense with touch; hide where there's no touch. */
+@media (hover: hover) and (pointer: fine) {
+  .touch-action {
+    display: none;
+  }
 }
 
 .touch-hint {
