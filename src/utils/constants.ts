@@ -397,8 +397,6 @@ export const FIGURE = {
   leanLerp: 16,
 } as const;
 
-/** Enemy spawn points for the test room (open floor tiles, world units). One
- *  enemy type only — these are just placements for the feel test. */
 /** The existing enemies' placements, now RELATIVE to the spawn room centre
  *  (world units) — the absolute coords assumed the old single TEST_ROOM and
  *  would land in walls on a generated floor. Count + behaviour are unchanged;
