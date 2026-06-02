@@ -76,11 +76,13 @@ export class Controls {
 
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+    // Controls only — the dodge lesson lives solely in the transient centre
+    // banner (HUD .combat-tutorial), so we don't teach "dash = dodge" twice.
     this.hint = document.createElement('div');
     this.hint.className = 'touch-hint';
     this.hint.textContent = isTouch
-      ? 'Left: MOVE   ·   Right: AIM + FIRE   ·   DASH = dodge'
-      : 'WASD move · Mouse aim · Click fire · J melee · SPACE dash (dodge)';
+      ? 'Left: MOVE   ·   Right: AIM + FIRE'
+      : 'WASD move · Mouse aim · Click fire · J melee · SPACE dash';
     target.appendChild(this.hint);
 
     if (isTouch) {

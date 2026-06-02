@@ -3,6 +3,16 @@
   --player: #33ffcc;
   --accent: #ff3366;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Bottom-HUD layout tokens — single source of truth so the action buttons and
+     the controls hint are positioned from the same values and never overlap.
+     The hint is stacked ABOVE the button row using these (see .touch-hint). */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --touch-btn-size: 76px; /* DASH / MELEE diameter */
+  --touch-btn-bottom: 28px; /* gap from the safe-area to the button row */
+  --touch-btn-edge: 24px; /* MELEE inset from the right edge */
+  --touch-btn-gap: 12px; /* horizontal gap between DASH and MELEE */
+  --hud-row-gap: 12px; /* vertical gap between the hint row and the button row */
 }
 
 * {
@@ -160,9 +170,9 @@ body {
 /* On-screen action buttons (mobile): melee + dash. */
 .touch-action {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
-  width: 76px;
-  height: 76px;
+  bottom: calc(var(--safe-bottom) + var(--touch-btn-bottom));
+  width: var(--touch-btn-size);
+  height: var(--touch-btn-size);
   border-radius: 50%;
   display: flex;
   flex-direction: column;
@@ -188,13 +198,14 @@ body {
 }
 
 .touch-btn-melee {
-  right: 24px;
+  right: var(--touch-btn-edge);
   color: var(--accent);
   border-color: rgba(255, 51, 102, 0.6);
 }
 
+/* DASH sits one button-width + gap to the left of MELEE (derived, not a literal). */
 .touch-btn-dash {
-  right: 112px;
+  right: calc(var(--touch-btn-edge) + var(--touch-btn-size) + var(--touch-btn-gap));
   color: var(--player);
   border-color: rgba(51, 255, 204, 0.6);
 }
@@ -206,11 +217,18 @@ body {
   }
 }
 
+/* Stacked ABOVE the button row (button-row top + a gap), so the centered hint
+   never shares the bottom band with the right-anchored DASH/MELEE buttons at any
+   width. On desktop the buttons are hidden but this still sits cleanly low. */
 .touch-hint {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  bottom: calc(
+    var(--safe-bottom) + var(--touch-btn-bottom) + var(--touch-btn-size) + var(--hud-row-gap)
+  );
   left: 50%;
   transform: translateX(-50%);
+  max-width: calc(100vw - 24px);
+  text-align: center;
   padding: 8px 14px;
   font-size: 13px;
   color: var(--player);
