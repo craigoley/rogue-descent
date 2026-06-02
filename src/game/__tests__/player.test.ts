@@ -147,9 +147,9 @@ describe('Player interpolation snapshot', () => {
 
 describe('Player wall collision (integration)', () => {
   it('drives into a wall and stops without penetrating it', () => {
-    // With the screen-aligned camera the input rotation is identity, so intent
-    // (1,0) is pure world +X — straight at the right wall. The body must come to
-    // rest flush and never pass through.
+    // Intent (1,0) has a +x world component under any camera yaw, so it drives
+    // the player into the right wall. The body must come to rest flush and never
+    // pass through.
     const p = createPlayer(11, 7);
     step(p, { moveX: 1 }, 90);
     const wallFaceX = (room.tilesX - 1) * room.tileSize; // 13
