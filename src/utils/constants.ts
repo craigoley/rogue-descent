@@ -149,6 +149,14 @@ export const CAMERA = {
  */
 export const ISO_YAW = Math.atan2(CAMERA.offsetX, CAMERA.offsetZ);
 
+/** Key directional light position (absolute world coordinates, derived from
+ *  camera offsets so the light tracks the camera angle automatically). */
+export const KEY_LIGHT_POS = {
+  x: CAMERA.offsetZ * 0.4,
+  y: CAMERA.offsetY * 1.5,
+  z: CAMERA.offsetZ * 0.6,
+} as const;
+
 /** Touch virtual-stick tuning. */
 export const TOUCH = {
   /** Drag distance (px) from the stick origin that maps to full deflection. */

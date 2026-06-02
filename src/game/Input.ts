@@ -62,9 +62,15 @@ export function dragAxes(dx: number, dy: number, range: number): InputIntent {
  * This MIRRORS the inline math in updatePlayer (rotation by -ISO_YAW); it is not
  * called by the sim. The "world velocity" trace row reads the actual player
  * state, so comparing the two reveals any divergence between this and Player.
+ *
+ * Returns a REUSED scratch object — read it immediately; the next call
+ * overwrites it. Trig is precomputed at module scope (matching Player.ts).
  */
+const _isoCos = Math.cos(-ISO_YAW);
+const _isoSin = Math.sin(-ISO_YAW);
+const _isoScratch = { x: 0, y: 0 };
 export function isoRotate(moveX: number, moveY: number): { x: number; y: number } {
-  const c = Math.cos(-ISO_YAW);
-  const s = Math.sin(-ISO_YAW);
-  return { x: moveX * c - moveY * s, y: moveX * s + moveY * c };
+  _isoScratch.x = moveX * _isoCos - moveY * _isoSin;
+  _isoScratch.y = moveX * _isoSin + moveY * _isoCos;
+  return _isoScratch;
 }

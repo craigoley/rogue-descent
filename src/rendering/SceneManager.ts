@@ -21,7 +21,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import type { GameState } from '../game/GameState';
-import { CAMERA, PALETTE, TUNING } from '../utils/constants';
+import { CAMERA, KEY_LIGHT_POS, PALETTE, TUNING } from '../utils/constants';
 import { lerp } from '../utils/math';
 
 export class SceneManager {
@@ -51,7 +51,7 @@ export class SceneManager {
     // readable shading.
     this.scene.add(new AmbientLight(0xffffff, 0.85));
     const key = new DirectionalLight(0xffffff, 0.6);
-    key.position.set(offsetZ * 0.4, offsetY * 1.5, offsetZ * 0.6);
+    key.position.set(KEY_LIGHT_POS.x, KEY_LIGHT_POS.y, KEY_LIGHT_POS.z);
     this.scene.add(key);
 
     this.resize();
