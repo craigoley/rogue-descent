@@ -164,7 +164,7 @@ export class EntityRenderer {
       const mat = new MeshStandardMaterial({
         color: PALETTE.pickupHealth,
         emissive: PALETTE.pickupHealth,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: VFX.pickupEmissive,
         roughness: 0.4,
       });
       const m = new Mesh(pickGeo, mat);
@@ -305,7 +305,7 @@ export class EntityRenderer {
       }
       m.visible = true;
       m.position.set(pk.x, PICKUP.height + bob, pk.y);
-      m.rotation.y = now * 0.002; // slow spin so drops read as "collectible"
+      m.rotation.y = now * PICKUP.spinRate;
       const color = pk.kind === 'health' ? PALETTE.pickupHealth : PALETTE.pickupBuff;
       const mat = this.pickupMats[i];
       mat.color.setHex(color);

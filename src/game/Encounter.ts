@@ -55,7 +55,7 @@ function computeSpawns(rect: Rect): { x: number; y: number }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
   const n = ENCOUNTER.enemiesPerRoom;
-  const spread = 1.5;
+  const spread = ENCOUNTER.spawnSpread;
   const out: { x: number; y: number }[] = [];
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2;

@@ -330,6 +330,8 @@ export const POOL = {
 export const ENCOUNTER = {
   /** Enemies spawned when a room activates (must be <= POOL.enemies). */
   enemiesPerRoom: 3,
+  /** Radius (world units) of the spawn ring around a room's centre. */
+  spawnSpread: 1.5,
 } as const;
 
 /** Within-run drops. EXACTLY two kinds: health + one fire-rate buff. */
@@ -355,6 +357,8 @@ export const PICKUP = {
   /** Hover bob amplitude + speed (render-only). */
   bob: 0.12,
   bobRate: 3,
+  /** Y-axis spin speed (radians per ms), render-only. */
+  spinRate: 0.002,
 } as const;
 
 /** Locked-door barrier visuals (render-only). */
@@ -414,6 +418,8 @@ export const VFX = {
   meleeArcOpacity: 0.5,
   /** Resting emissive intensity of an enemy figure. */
   enemyEmissive: 0.25,
+  /** Emissive intensity of pickup meshes. */
+  pickupEmissive: 0.8,
   /** Emissive intensity of the front visor "eye" (the facing indicator) so it
    *  reads as a bright neon glow regardless of body state. */
   visorEmissive: 1.3,
@@ -448,16 +454,6 @@ export const FIGURE = {
   /** Lean ease rate toward the target lean, per second (exp smoothing). */
   leanLerp: 16,
 } as const;
-
-/** The existing enemies' placements, now RELATIVE to the spawn room centre
- *  (world units) — the absolute coords assumed the old single TEST_ROOM and
- *  would land in walls on a generated floor. Count + behaviour are unchanged;
- *  Phase 5 owns real per-room encounter spawning. */
-export const ENEMY_SPAWN_OFFSETS = [
-  { x: 2, y: 0 },
-  { x: -2, y: 0 },
-  { x: 0, y: 2 },
-] as const;
 
 // ============================================================================
 // DUNGEON (Phase 4) — deterministic BSP room-and-corridor generator. All tuning
