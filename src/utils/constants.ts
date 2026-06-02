@@ -118,13 +118,17 @@ export const TEST_ROOM = [
 ] as const;
 
 /**
- * Follow camera. SCREEN-ALIGNED grid (Option 2): the camera's horizontal offset
- * is purely along +z (offsetX = 0), giving it ZERO yaw — so world x projects to
- * screen-right and world z to screen-vertical, and the floor grid renders as a
- * screen-aligned square grid (not a 45° diamond). offsetY / offsetZ set the
- * downward PITCH, which is PRESERVED (still an angled view with height on walls,
- * NOT flat top-down). The pitch matches the prior iso steepness:
- * atan2(offsetY, offsetZ) = atan2(20, 20√2) ≈ 35.26°.
+ * Isometric follow camera (restored from Phase 1). The camera sits at an offset
+ * with EQUAL horizontal components (offsetX = offsetZ) plus a height component,
+ * so it looks down the room's body diagonal: a 45° YAW (the floor renders as a
+ * 45° diamond, NOT a screen-aligned square) and a downward PITCH of
+ * atan2(offsetY, √(offsetX²+offsetZ²)) = atan2(20, 20√2) ≈ 35.26° (classic iso).
+ * A cube viewed down this body diagonal shows three faces (top + two sides),
+ * projecting as a hexagonal silhouette — true 3D, not a flat top-down tile.
+ *
+ * PR #8 zeroed offsetX to chase grid-alignment, collapsing the yaw to 0 and
+ * flattening the view. Grid-tracking is abandoned: the cube moves diagonally
+ * across the diamond (standard for iso action games), which is intended.
  */
 export const CAMERA = {
   /**
@@ -132,12 +136,12 @@ export const CAMERA = {
    * (14) so the follow actually scrolls — the room edges move past the player.
    */
   viewSize: 6,
-  /** Horizontal offset along world x. 0 => zero camera yaw => screen-aligned grid. */
-  offsetX: 0,
-  /** Height above the floor plane (sets the pitch together with offsetZ). */
+  /** Horizontal offset along world x. Equal to offsetZ => 45° camera yaw. */
+  offsetX: 20,
+  /** Height above the floor plane (sets the pitch together with offsetX/offsetZ). */
   offsetY: 20,
-  /** Horizontal offset along world z (camera sits "in front of" the focus). */
-  offsetZ: 20 * Math.SQRT2,
+  /** Horizontal offset along world z. Equal to offsetX => 45° camera yaw. */
+  offsetZ: 20,
   near: 0.1,
   far: 200,
 } as const;
@@ -147,11 +151,11 @@ export const CAMERA = {
  * and the pure game layer rotates it by −ISO_YAW into the world floor plane so
  * "up" on screen moves the player up the screen. The rotation must cancel the
  * camera's horizontal yaw, so it is DERIVED from the camera offset:
- * atan2(offsetX, offsetZ). With offsetX = 0 (the screen-aligned camera) this is
- * 0 — the rotation passes input through unchanged (identity), which is exactly
- * what a zero-yaw camera needs: input "up" → world −z → straight up the screen,
- * along a grid line. Player's rotation code is UNCHANGED; only this derived
- * value moved to 0. (When the camera had equal x/z offsets this was 45°.)
+ * atan2(offsetX, offsetZ). With the restored iso camera (offsetX = offsetZ) this
+ * is the real 45° (π/4): input "up" → a world DIAGONAL that still projects
+ * straight up the screen under the yawed camera (up=up holds; movement runs
+ * diagonally across the diamond, which is intended). Player's rotation code is
+ * UNCHANGED; this derived value tracks whatever yaw the camera offset implies.
  */
 export const ISO_YAW = Math.atan2(CAMERA.offsetX, CAMERA.offsetZ);
 

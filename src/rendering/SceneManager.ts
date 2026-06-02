@@ -1,9 +1,9 @@
 /**
  * Owns the three.js scene, the OrthographicCamera, and the WebGL renderer. The
- * camera views its focus from a ZERO-YAW, pitched-down offset (offsetX = 0,
- * +offsetY up, +offsetZ in front) — so world x → screen-right and world z →
- * screen-vertical, rendering the floor grid SCREEN-ALIGNED (a square grid, not a
- * 45° diamond) while preserving the downward tilt (walls keep their height).
+ * camera views its focus from a classic ISOMETRIC offset (equal offsetX/offsetZ
+ * for a 45° yaw, +offsetY for the downward pitch) — so it looks down the body
+ * diagonal: the floor renders as a 45° DIAMOND and cubes show three faces (top +
+ * two sides, a hexagonal silhouette), i.e. true 3D height, not flat top-down.
  *
  * The focus smoothly FOLLOWS the player: each frame it eases toward the
  * player's interpolated position at TUNING.camLerp (a subtle follow — not
@@ -48,9 +48,8 @@ export class SceneManager {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
-    // Flat, slightly directional lighting so wall tops read against the floor.
-    // Lit from above and slightly to one side so the screen-aligned walls cast
-    // readable shading.
+    // Slightly directional lighting so wall tops read against the floor. Lit
+    // from above and to one side so the iso walls cast readable shading.
     this.scene.add(new AmbientLight(0xffffff, 0.85));
     const key = new DirectionalLight(0xffffff, 0.6);
     key.position.set(KEY_LIGHT_POS.x, KEY_LIGHT_POS.y, KEY_LIGHT_POS.z);
@@ -111,8 +110,8 @@ export class SceneManager {
     return this._screenDelta;
   }
 
-  /** Reposition the camera so it views the current focus from the zero-yaw,
-   *  pitched-down offset (in front of + above the focus). */
+  /** Reposition the camera so it views the current focus from the iso offset
+   *  (equal x/z for the 45° yaw, +y above for the downward pitch). */
   private place(): void {
     const { offsetX, offsetY, offsetZ } = CAMERA;
     this.target.set(this.focusX, 0, this.focusY);
