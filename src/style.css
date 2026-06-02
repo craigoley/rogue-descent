@@ -11,9 +11,11 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   /* Vertical space the centred title wordmark occupies (margin + max font +
-     line) — the minimap sits below this so it never overlaps the title even on
-     a narrow portrait where the centred title reaches toward the right edge. */
-  --hud-title-clear: 56px;
+     line). The corner widgets — minimap (top-right) AND health/dash bars
+     (top-left) — sit BELOW this, so the centred, letter-spaced title (which
+     reaches toward both corners on a narrow portrait) never shares the top band
+     with them. Measured from --safe-top (the title shares that origin). */
+  --hud-title-clear: 60px;
   --touch-btn-size: 76px; /* DASH / MELEE diameter */
   --touch-btn-bottom: 28px; /* gap from the safe-area to the button row */
   --touch-btn-edge: 24px; /* MELEE inset from the right edge */
@@ -48,7 +50,9 @@ body {
 
 .hud-title {
   position: fixed;
-  top: env(safe-area-inset-top, 12px);
+  /* Shares --safe-top with the corner widgets so --hud-title-clear measures the
+     same origin (the title owns this top row; bars + minimap sit below it). */
+  top: var(--safe-top);
   left: 50%;
   transform: translateX(-50%);
   margin-top: 12px;
@@ -75,9 +79,10 @@ body {
 /* Combat HUD — health + dash bars, top-left. Always visible. */
 .hud-bars {
   position: fixed;
-  top: env(safe-area-inset-top, 10px);
+  /* Below the title band (same row as the top-right minimap) so the bars never
+     paint over the centred title at any width. */
+  top: calc(var(--safe-top) + var(--hud-title-clear));
   left: 10px;
-  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
