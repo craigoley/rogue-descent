@@ -70,6 +70,36 @@ const unlockAudio = (): void => {
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
 
+// Phase 5 funnel telemetry (?debug only): log room lifecycle + drop transitions.
+const debug = isDebugEnabled();
+const prevPhase: string[] = [];
+let prevSpawned = 0;
+let prevCollected = 0;
+function logEncounters(): void {
+  for (let i = 0; i < game.rooms.length; i++) {
+    const ph = game.rooms[i].phase;
+    if (prevPhase[i] !== ph) {
+      const tag = ph === 'active' ? ' (doors LOCKED)' : ph === 'cleared' ? ' (doors unlocked)' : '';
+      console.info(`[encounter] room ${i} -> ${ph}${tag}`);
+      prevPhase[i] = ph;
+    }
+  }
+  let spawned = 0;
+  let collected = 0;
+  for (const r of game.rooms) {
+    spawned += r.dropsSpawned;
+    collected += r.dropsCollected;
+  }
+  if (spawned !== prevSpawned) {
+    console.info(`[drop] spawned total ${spawned}`);
+    prevSpawned = spawned;
+  }
+  if (collected !== prevCollected) {
+    console.info(`[drop] collected total ${collected}`);
+    prevCollected = collected;
+  }
+}
+
 // --- Loop -----------------------------------------------------------------
 let lastMs = performance.now();
 let accumulator = 0;
@@ -112,6 +142,7 @@ function frame(nowMs: number): void {
   scene.updateFollow(game, alpha, dt);
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene);
+  if (debug) logEncounters();
 
   requestAnimationFrame(frame);
 }

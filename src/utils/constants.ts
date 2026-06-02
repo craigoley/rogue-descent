@@ -27,6 +27,13 @@ export const PALETTE = {
   invuln: 0xaeffff,
   /** Successful-dodge confirmation flash (a dash negated a hit). */
   dodge: 0xffffff,
+  // Phase 5 — drops + gating.
+  /** Health pickup (green = restore). */
+  pickupHealth: 0x44ff88,
+  /** Buff pickup (violet = power-up). */
+  pickupBuff: 0xc080ff,
+  /** Locked-door barrier (accent red so "sealed, clear the room" reads). */
+  barrier: 0xff3366,
 } as const;
 
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
@@ -311,6 +318,55 @@ export const POOL = {
   projectiles: 32,
   enemies: 8,
   particles: 96,
+  pickups: 16,
+} as const;
+
+// ============================================================================
+// ENCOUNTERS + DROPS (Phase 5) — within-run only (reset on death; persistence
+// is Phase 6). All seeded/deterministic; tuned by hand at playtest.
+// ============================================================================
+
+/** Per-room encounter shape. */
+export const ENCOUNTER = {
+  /** Enemies spawned when a room activates (must be <= POOL.enemies). */
+  enemiesPerRoom: 3,
+  /** Radius (world units) of the spawn ring around a room's centre. */
+  spawnSpread: 1.5,
+} as const;
+
+/** Within-run drops. EXACTLY two kinds: health + one fire-rate buff. */
+export const DROP = {
+  /** Chance a slain enemy drops anything (seeded roll). */
+  chance: 0.45,
+  /** Of the drops that happen, the share that are health (rest = buff). */
+  healthShare: 0.6,
+  /** HP a health pickup restores (capped at max). */
+  healAmount: 30,
+  /** Ranged fire-rate multiplier the buff applies (< 1 = faster). Within-run. */
+  buffFireRateMult: 0.55,
+} as const;
+
+/** Pickup tuning. */
+export const PICKUP = {
+  /** Touch-collection radius, world units. */
+  radius: 0.45,
+  /** Visual size (render), world units. */
+  size: 0.35,
+  /** Hover height above the floor (render), world units. */
+  height: 0.5,
+  /** Hover bob amplitude + speed (render-only). */
+  bob: 0.12,
+  bobRate: 3,
+  /** Y-axis spin speed (radians per ms), render-only. */
+  spinRate: 0.002,
+} as const;
+
+/** Locked-door barrier visuals (render-only). */
+export const BARRIER = {
+  /** Pooled barrier boxes (>= max doorway cells of any single room). */
+  renderMax: 48,
+  /** Translucency of the barrier. */
+  opacity: 0.4,
 } as const;
 
 /** Hit-spark particles (pure, deterministic spread — no RNG in the sim). */
@@ -362,6 +418,8 @@ export const VFX = {
   meleeArcOpacity: 0.5,
   /** Resting emissive intensity of an enemy figure. */
   enemyEmissive: 0.25,
+  /** Emissive intensity of pickup meshes. */
+  pickupEmissive: 0.8,
   /** Emissive intensity of the front visor "eye" (the facing indicator) so it
    *  reads as a bright neon glow regardless of body state. */
   visorEmissive: 1.3,
@@ -396,16 +454,6 @@ export const FIGURE = {
   /** Lean ease rate toward the target lean, per second (exp smoothing). */
   leanLerp: 16,
 } as const;
-
-/** The existing enemies' placements, now RELATIVE to the spawn room centre
- *  (world units) — the absolute coords assumed the old single TEST_ROOM and
- *  would land in walls on a generated floor. Count + behaviour are unchanged;
- *  Phase 5 owns real per-room encounter spawning. */
-export const ENEMY_SPAWN_OFFSETS = [
-  { x: 2, y: 0 },
-  { x: -2, y: 0 },
-  { x: 0, y: 2 },
-] as const;
 
 // ============================================================================
 // DUNGEON (Phase 4) — deterministic BSP room-and-corridor generator. All tuning
@@ -459,5 +507,9 @@ export const MINIMAP = {
     /** Current-room highlight (accent-tinted, translucent). */
     currentRoom: 'rgba(255, 51, 102, 0.35)',
     player: CSS_PALETTE.player,
+    /** Cleared room tint (teal, subtle — "done"). */
+    clearedRoom: 'rgba(51, 255, 204, 0.18)',
+    /** Active (locked) room tint (amber — "fighting"). */
+    activeRoom: 'rgba(255, 204, 51, 0.28)',
   },
 } as const;

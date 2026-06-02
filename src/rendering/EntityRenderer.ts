@@ -34,12 +34,15 @@ import type { GameState } from '../game/GameState';
 import { aimDirection } from '../game/Combat';
 import type { InputIntent } from '../game/Input';
 import {
+  BARRIER,
   ENEMY,
   FIGURE,
   MELEE,
   PALETTE,
+  PICKUP,
   POOL,
   RANGED,
+  ROOM,
   VFX,
 } from '../utils/constants';
 import { lerp, type Vec2 } from '../utils/math';
@@ -87,6 +90,9 @@ export class EntityRenderer {
   private readonly trailY: number[] = [];
   private readonly meleeGroup: Group;
   private readonly meleeMat: MeshBasicMaterial;
+  private readonly pickups: Mesh[] = [];
+  private readonly pickupMats: MeshStandardMaterial[] = [];
+  private readonly barriers: Mesh[] = [];
 
   /** Reused scratch for the resolved aim direction — no per-frame allocation. */
   private readonly aim: Vec2 = { x: 0, y: 0 };
@@ -151,6 +157,36 @@ export class EntityRenderer {
     this.meleeGroup.add(sector);
     this.meleeGroup.visible = false;
     scene.add(this.meleeGroup);
+
+    // --- Pickups (pooled; per-pickup material so health/buff can recolour) ---
+    const pickGeo = new BoxGeometry(PICKUP.size, PICKUP.size, PICKUP.size);
+    for (let i = 0; i < POOL.pickups; i++) {
+      const mat = new MeshStandardMaterial({
+        color: PALETTE.pickupHealth,
+        emissive: PALETTE.pickupHealth,
+        emissiveIntensity: VFX.pickupEmissive,
+        roughness: 0.4,
+      });
+      const m = new Mesh(pickGeo, mat);
+      m.visible = false;
+      this.pickups.push(m);
+      this.pickupMats.push(mat);
+      scene.add(m);
+    }
+
+    // --- Locked-door barriers (pooled; shared translucent material) ---
+    const barGeo = new BoxGeometry(ROOM.tileSize, ROOM.wallHeight, ROOM.tileSize);
+    const barMat = new MeshBasicMaterial({
+      color: PALETTE.barrier,
+      transparent: true,
+      opacity: BARRIER.opacity,
+    });
+    for (let i = 0; i < BARRIER.renderMax; i++) {
+      const m = new Mesh(barGeo, barMat);
+      m.visible = false;
+      this.barriers.push(m);
+      scene.add(m);
+    }
   }
 
   /** Build the shared geometry + child offsets for a figure type. Called twice
@@ -254,6 +290,44 @@ export class EntityRenderer {
     this.syncProjectiles(state, alpha);
     this.syncParticles(state);
     this.syncMelee(p, px, py, aim.x, aim.y);
+    this.syncPickups(state, now);
+    this.syncBarriers(state);
+  }
+
+  private syncPickups(state: GameState, now: number): void {
+    const bob = Math.sin(now * 0.001 * PICKUP.bobRate) * PICKUP.bob;
+    for (let i = 0; i < this.pickups.length; i++) {
+      const pk = state.pickups[i];
+      const m = this.pickups[i];
+      if (!pk.active) {
+        m.visible = false;
+        continue;
+      }
+      m.visible = true;
+      m.position.set(pk.x, PICKUP.height + bob, pk.y);
+      m.rotation.y = now * PICKUP.spinRate;
+      const color = pk.kind === 'health' ? PALETTE.pickupHealth : PALETTE.pickupBuff;
+      const mat = this.pickupMats[i];
+      mat.color.setHex(color);
+      mat.emissive.setHex(color);
+    }
+  }
+
+  private syncBarriers(state: GameState): void {
+    // Show barriers across the active (locked) room's doorways; hide otherwise.
+    const ts = state.room.tileSize;
+    let n = 0;
+    if (state.activeRoom >= 0 && state.activeRoom < state.rooms.length) {
+      const cells = state.rooms[state.activeRoom].doorCells;
+      n = Math.min(cells.length, this.barriers.length);
+      for (let i = 0; i < n; i++) {
+        const c = cells[i];
+        const m = this.barriers[i];
+        m.position.set((c.tx + 0.5) * ts, ROOM.wallHeight / 2, (c.ty + 0.5) * ts);
+        m.visible = true;
+      }
+    }
+    for (let i = n; i < this.barriers.length; i++) this.barriers[i].visible = false;
   }
 
   private syncTrail(p: GameState['player'], px: number, py: number): void {

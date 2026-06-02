@@ -117,15 +117,19 @@ export class Minimap {
     const tx = wx / this.tileSize;
     const ty = wy / this.tileSize;
 
-    // Current-room highlight (read-only containment test).
-    const tileX = Math.floor(tx);
-    const tileY = Math.floor(ty);
-    for (const r of this.rooms) {
-      if (tileX >= r.x && tileX < r.x + r.w && tileY >= r.y && tileY < r.y + r.h) {
-        ctx.fillStyle = MINIMAP.colors.currentRoom;
-        ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
-        break;
-      }
+    // Encounter progress tint: cleared rooms (done) + the active (locked) room.
+    // state.rooms[i].rect is index-aligned with this.rooms (same generator).
+    for (const enc of state.rooms) {
+      const tint =
+        enc.phase === 'cleared'
+          ? MINIMAP.colors.clearedRoom
+          : enc.phase === 'active'
+            ? MINIMAP.colors.activeRoom
+            : null;
+      if (!tint) continue;
+      const r = enc.rect;
+      ctx.fillStyle = tint;
+      ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
     }
 
     // Player dot.

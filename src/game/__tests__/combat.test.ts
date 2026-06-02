@@ -36,6 +36,10 @@ function arena(): GameState {
   s.spawn = { x: c.x, y: c.y };
   s.player = createPlayer(c.x, c.y);
   for (const e of s.enemies) e.active = false;
+  // Disable the Phase-5 encounter system in the combat arena — combat mechanics
+  // are tested in isolation, not against the generated floor's rooms/gating.
+  s.rooms = [];
+  s.activeRoom = -1;
   return s;
 }
 
