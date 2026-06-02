@@ -21,6 +21,7 @@
 
 import {
   BoxGeometry,
+  CanvasTexture,
   CircleGeometry,
   CylinderGeometry,
   Group,
@@ -29,6 +30,8 @@ import {
   MeshStandardMaterial,
   type Scene,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
 } from 'three';
 import type { GameState } from '../game/GameState';
 import { aimDirection } from '../game/Combat';
@@ -43,9 +46,78 @@ import {
   POOL,
   RANGED,
   ROOM,
+  TOAST,
   VFX,
 } from '../utils/constants';
 import { lerp, type Vec2 } from '../utils/math';
+
+/** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
+const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
+
+/** A small square icon texture drawn once (cross for health, bolt for buff). */
+function iconTexture(draw: (g: CanvasRenderingContext2D, s: number) => void): CanvasTexture {
+  const s = 64;
+  const c = document.createElement('canvas');
+  c.width = s;
+  c.height = s;
+  const g = c.getContext('2d');
+  if (g) draw(g, s);
+  const t = new CanvasTexture(c);
+  t.needsUpdate = true;
+  return t;
+}
+
+/** A wide text-pill texture for the on-collect toast. Returns texture + aspect. */
+function textTexture(text: string, color: string): { tex: CanvasTexture; aspect: number } {
+  const w = 256;
+  const h = 64;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  if (g) {
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.beginPath();
+    g.roundRect(2, 8, w - 4, h - 16, 18);
+    g.fill();
+    g.font = 'bold 34px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    g.fillStyle = color;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 2);
+  }
+  const tex = new CanvasTexture(c);
+  tex.needsUpdate = true;
+  return { tex, aspect: w / h };
+}
+
+/** A thick ＋ cross filling the icon canvas (health). */
+function drawCross(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const t = s * 0.26; // arm thickness
+  const m = s * 0.16; // margin
+  g.fillStyle = color;
+  g.fillRect(s / 2 - t / 2, m, t, s - 2 * m); // vertical
+  g.fillRect(m, s / 2 - t / 2, s - 2 * m, t); // horizontal
+}
+
+/** A lightning bolt filling the icon canvas (fire-rate buff). */
+function drawBolt(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const p = (fx: number, fy: number): [number, number] => [fx * s, fy * s];
+  const pts = [
+    p(0.58, 0.08),
+    p(0.28, 0.54),
+    p(0.46, 0.54),
+    p(0.36, 0.92),
+    p(0.74, 0.42),
+    p(0.54, 0.42),
+  ];
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.closePath();
+  g.fill();
+}
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
 interface FigureGeos {
@@ -93,6 +165,18 @@ export class EntityRenderer {
   private readonly pickups: Mesh[] = [];
   private readonly pickupMats: MeshStandardMaterial[] = [];
   private readonly barriers: Mesh[] = [];
+  // Floating type-icons above each pickup (billboarded — always face the camera).
+  private readonly pickupIcons: Sprite[] = [];
+  private iconMatHealth!: SpriteMaterial;
+  private iconMatBuff!: SpriteMaterial;
+  /** Render-side snapshot of pickup liveness, to detect collection (-> toast). */
+  private readonly prevPickupActive: boolean[] = [];
+  // On-collect toasts ("+HP" / "FIRE RATE UP") — pooled, per-toast material.
+  private readonly toasts: Sprite[] = [];
+  private readonly toastLife: number[] = [];
+  private toastTexHealth!: CanvasTexture;
+  private toastTexBuff!: CanvasTexture;
+  private toastAspect = 4;
 
   /** Reused scratch for the resolved aim direction — no per-frame allocation. */
   private readonly aim: Vec2 = { x: 0, y: 0 };
@@ -172,6 +256,43 @@ export class EntityRenderer {
       this.pickups.push(m);
       this.pickupMats.push(mat);
       scene.add(m);
+    }
+
+    // --- Pickup type-icons: a ＋ cross (health) / ⚡ bolt (buff) billboard so the
+    // drop's MEANING reads at a glance, not just its colour. Two shared
+    // materials; one pooled sprite per pickup slot. ---
+    this.iconMatHealth = new SpriteMaterial({
+      map: iconTexture((g, s) => drawCross(g, s, cssHex(PALETTE.pickupHealth))),
+      transparent: true,
+    });
+    this.iconMatBuff = new SpriteMaterial({
+      map: iconTexture((g, s) => drawBolt(g, s, cssHex(PALETTE.pickupBuff))),
+      transparent: true,
+    });
+    for (let i = 0; i < POOL.pickups; i++) {
+      const sp = new Sprite(this.iconMatHealth);
+      sp.scale.set(PICKUP.iconSize, PICKUP.iconSize, 1);
+      sp.visible = false;
+      this.pickupIcons.push(sp);
+      this.prevPickupActive.push(false);
+      scene.add(sp);
+    }
+
+    // --- On-collect toasts (pooled; each its own material so they fade
+    // independently). Two shared textures, swapped onto a toast when it fires. ---
+    const th = textTexture('+HP', cssHex(PALETTE.pickupHealth));
+    const tb = textTexture('FIRE RATE UP', cssHex(PALETTE.pickupBuff));
+    this.toastTexHealth = th.tex;
+    this.toastTexBuff = tb.tex;
+    this.toastAspect = th.aspect;
+    for (let i = 0; i < TOAST.count; i++) {
+      const sp = new Sprite(new SpriteMaterial({ transparent: true, opacity: 0, depthTest: false }));
+      sp.scale.set(TOAST.size * this.toastAspect, TOAST.size, 1);
+      sp.visible = false;
+      sp.renderOrder = 10;
+      this.toasts.push(sp);
+      this.toastLife.push(0);
+      scene.add(sp);
     }
 
     // --- Locked-door barriers (pooled; shared translucent material) ---
@@ -291,6 +412,7 @@ export class EntityRenderer {
     this.syncParticles(state);
     this.syncMelee(p, px, py, aim.x, aim.y);
     this.syncPickups(state, now);
+    this.syncToasts(frameDt);
     this.syncBarriers(state);
   }
 
@@ -299,17 +421,65 @@ export class EntityRenderer {
     for (let i = 0; i < this.pickups.length; i++) {
       const pk = state.pickups[i];
       const m = this.pickups[i];
+      const icon = this.pickupIcons[i];
+
+      // Collection = active last frame, inactive now (pickups only deactivate on
+      // pickup). Fire a rising "+HP" / "FIRE RATE UP" toast at its position.
+      if (this.prevPickupActive[i] && !pk.active) {
+        this.spawnToast(pk.x, pk.y, pk.kind);
+      }
+      this.prevPickupActive[i] = pk.active;
+
       if (!pk.active) {
         m.visible = false;
+        icon.visible = false;
         continue;
       }
+      const color = pk.kind === 'health' ? PALETTE.pickupHealth : PALETTE.pickupBuff;
       m.visible = true;
       m.position.set(pk.x, PICKUP.height + bob, pk.y);
       m.rotation.y = now * PICKUP.spinRate;
-      const color = pk.kind === 'health' ? PALETTE.pickupHealth : PALETTE.pickupBuff;
       const mat = this.pickupMats[i];
       mat.color.setHex(color);
       mat.emissive.setHex(color);
+
+      // Floating type-icon (the legibility win): cross = health, bolt = buff.
+      icon.visible = true;
+      icon.material = pk.kind === 'health' ? this.iconMatHealth : this.iconMatBuff;
+      icon.position.set(pk.x, PICKUP.height + PICKUP.iconOffset + bob, pk.y);
+    }
+  }
+
+  /** Activate a pooled toast at (x, y) for the collected kind. */
+  private spawnToast(x: number, y: number, kind: 'health' | 'buff'): void {
+    for (let i = 0; i < this.toasts.length; i++) {
+      if (this.toastLife[i] > 0) continue;
+      const sp = this.toasts[i];
+      const m = sp.material as SpriteMaterial;
+      m.map = kind === 'health' ? this.toastTexHealth : this.toastTexBuff;
+      m.needsUpdate = true;
+      sp.position.set(x, PICKUP.height + TOAST.startOffset, y);
+      sp.visible = true;
+      this.toastLife[i] = TOAST.lifetime;
+      return;
+    }
+  }
+
+  /** Rise + fade active toasts. */
+  private syncToasts(frameDt: number): void {
+    for (let i = 0; i < this.toasts.length; i++) {
+      if (this.toastLife[i] <= 0) continue;
+      this.toastLife[i] -= frameDt;
+      const sp = this.toasts[i];
+      const m = sp.material as SpriteMaterial;
+      if (this.toastLife[i] <= 0) {
+        sp.visible = false;
+        m.opacity = 0;
+        continue;
+      }
+      const t = this.toastLife[i] / TOAST.lifetime; // 1 -> 0
+      sp.position.y += TOAST.rise * frameDt;
+      m.opacity = t; // fade out as it rises
     }
   }
 
