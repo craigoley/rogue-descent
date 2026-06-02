@@ -17,6 +17,12 @@ export const PALETTE = {
   wallTop: 0x4a4a8c,
   player: 0x33ffcc,
   accent: 0xff3366,
+  // Combat (Phase 2).
+  enemy: 0xff4466,
+  enemyTelegraph: 0xffcc33,
+  projectile: 0x66e0ff,
+  spark: 0xffffff,
+  hitFlash: 0xffffff,
 } as const;
 
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
@@ -66,6 +72,23 @@ export const TUNING = {
    *  on-screen motion ("I'm moving") instead of being pinned dead-centre with
    *  the world sliding under it. 0 = classic locked-centre follow. */
   deadZone: 2,
+
+  // --- Combat feel (Phase 2) — dialled in on-device via ?debug=1 sliders ---
+  /** Dash burst distance, world units. */
+  dashDist: 4.5,
+  /** Invulnerability window from the start of a dash, seconds (the skill
+   *  expression — dodge THROUGH an attack). */
+  dashIframes: 0.18,
+  /** Cooldown before the next dash, seconds. */
+  dashCooldown: 0.5,
+  /** Hit-stop freeze on landing an enemy hit, seconds (sells contact). */
+  hitstop: 0.05,
+  /** Screen-shake magnitude on taking a hit, world units of camera offset. */
+  shake: 0.35,
+  /** Melee damage per swing (high — rewards getting close). */
+  meleeDamage: 34,
+  /** Ranged damage per projectile (low — the price of safety). */
+  rangedDamage: 13,
 };
 
 /** Slider bounds for the `?debug=1` tuning panel — keyed by TUNING field. Kept
@@ -76,6 +99,13 @@ export const TUNING_RANGES = {
   friction: { min: 20, max: 400, step: 10 },
   camLerp: { min: 1, max: 30, step: 0.5 },
   deadZone: { min: 0, max: 5, step: 0.25 },
+  dashDist: { min: 1, max: 10, step: 0.5 },
+  dashIframes: { min: 0, max: 0.5, step: 0.02 },
+  dashCooldown: { min: 0.1, max: 2, step: 0.05 },
+  hitstop: { min: 0, max: 0.2, step: 0.01 },
+  shake: { min: 0, max: 1.5, step: 0.05 },
+  meleeDamage: { min: 5, max: 100, step: 1 },
+  rangedDamage: { min: 1, max: 50, step: 1 },
 } as const;
 
 /** Player body tuning. */
@@ -168,3 +198,120 @@ export const TOUCH = {
   /** Drag distance (px) from the stick origin that maps to full deflection. */
   range: 60,
 } as const;
+
+// ============================================================================
+// COMBAT (Phase 2). Feel values that benefit from on-device tuning live in
+// TUNING above (sliders). Structural values — ranges, durations, pool sizes —
+// live here. All pools are FIXED-SIZE and reused; nothing allocates per frame.
+// ============================================================================
+
+/** Player combat/health (non-feel). maxHealth is a fixed cap per the design. */
+export const PLAYER_COMBAT = {
+  maxHealth: 100,
+  /** Hit-flash duration on taking damage, seconds. */
+  hitFlash: 0.1,
+  /** Brief i-frames after being hit, so one strike can't multi-hit, seconds. */
+  hitInvuln: 0.4,
+  /** Dead time before the room auto-resets, seconds. */
+  deathPause: 1.0,
+} as const;
+
+/** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */
+export const DASH = {
+  /** Burst duration, seconds. dash speed = TUNING.dashDist / duration. */
+  duration: 0.16,
+} as const;
+
+/** Melee swing. Damage is in TUNING. */
+export const MELEE = {
+  /** Reach from the player centre, world units. */
+  range: 1.7,
+  /** Half-angle of the swing arc, radians (~60° each side => 120° arc). */
+  halfArc: 1.05,
+  /** Render/active window of the swing, seconds. */
+  active: 0.1,
+  /** Cooldown between swings, seconds. */
+  cooldown: 0.38,
+  /** Knockback impulse applied to a hit enemy, world units/sec. */
+  knockback: 7,
+} as const;
+
+/** Ranged shot. Damage is in TUNING. */
+export const RANGED = {
+  /** Projectile speed, world units/sec. */
+  speed: 14,
+  /** Fire interval, seconds. */
+  cooldown: 0.22,
+  /** Projectile collision radius, world units. */
+  radius: 0.18,
+  /** Time before a projectile despawns, seconds. */
+  lifetime: 1.2,
+  /** Knockback impulse applied to a hit enemy, world units/sec. */
+  knockback: 3,
+} as const;
+
+/** The one enemy type: chase -> telegraph -> strike -> recover. */
+export const ENEMY = {
+  maxHealth: 40,
+  /** Chase speed, world units/sec (slower than the player so kiting works). */
+  moveSpeed: 3.3,
+  /** Distance at which it stops and begins the telegraph, world units. */
+  attackRange: 1.3,
+  /** Wind-up before the strike, seconds (the dodge window). */
+  telegraph: 0.55,
+  /** Strike active window, seconds. */
+  strike: 0.12,
+  /** Post-strike pause before chasing again, seconds. */
+  recover: 0.45,
+  /** Damage dealt by a connecting strike. */
+  attackDamage: 18,
+  /** A strike connects if the player is within this distance at strike time. */
+  attackReach: 1.7,
+  /** Hit-flash duration, seconds. */
+  flash: 0.08,
+  /** Collision/visual radius, world units. */
+  radius: 0.4,
+  /** Per-second decay factor applied to knockback velocity (exp). */
+  knockbackDecay: 0.0001,
+} as const;
+
+/** Fixed pool sizes — the hard ceiling on simultaneous entities. */
+export const POOL = {
+  projectiles: 32,
+  enemies: 8,
+  particles: 96,
+} as const;
+
+/** Hit-spark particles (pure, deterministic spread — no RNG in the sim). */
+export const PARTICLE = {
+  lifetime: 0.4,
+  speed: 5,
+  /** Particles emitted per enemy hit. */
+  hitCount: 7,
+  /** Particles emitted on enemy death. */
+  deathCount: 16,
+} as const;
+
+/** Screen shake decay window, seconds (magnitude is TUNING.shake). */
+export const SHAKE = {
+  duration: 0.25,
+} as const;
+
+/** Render-only VFX dimensions (no gameplay effect). */
+export const VFX = {
+  /** Dash afterimage count. */
+  trailLength: 6,
+  /** Height above the floor for projectiles / sparks, world units. */
+  projectileHeight: 0.35,
+  /** Hit-spark cube size, world units. */
+  particleSize: 0.12,
+  particleHeight: 0.25,
+} as const;
+
+/** Enemy spawn points for the test room (open floor tiles, world units). One
+ *  enemy type only — these are just placements for the feel test. */
+export const ENEMY_SPAWNS = [
+  { x: 4, y: 5 },
+  { x: 10, y: 5 },
+  { x: 7, y: 10 },
+] as const;

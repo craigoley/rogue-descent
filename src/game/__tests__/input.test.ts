@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dragAxes, keyAxes } from '../Input';
+import { createIntent, dragAxes, keyAxes } from '../Input';
 import { createPlayer, updatePlayer, type PlayerState } from '../Player';
 import { buildTestRoom } from '../Room';
 import { SIM_DT, TOUCH } from '../../utils/constants';
@@ -33,8 +33,9 @@ describe('Input mappings — keyboard/touch parity (raw, pre-rotation)', () => {
 });
 
 describe('Input mappings — identical movement post-rotation', () => {
-  const drive = (intent: { moveX: number; moveY: number }): PlayerState => {
+  const drive = (axes: { moveX: number; moveY: number }): PlayerState => {
     const p = createPlayer(7, 7);
+    const intent = { ...createIntent(), moveX: axes.moveX, moveY: axes.moveY };
     for (let i = 0; i < 6; i++) updatePlayer(p, intent, SIM_DT, room);
     return p;
   };

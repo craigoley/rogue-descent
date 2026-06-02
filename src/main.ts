@@ -21,7 +21,7 @@ import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD } from './rendering/HUD';
 import { AudioEngine } from './audio/AudioEngine';
 import { loadSettings } from './state/Settings';
-import { MAX_FRAME_DT, SIM_DT } from './utils/constants';
+import { MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
@@ -65,6 +65,19 @@ function frame(nowMs: number): void {
   // Smoothed FPS for the debug overlay (no per-frame allocation).
   fps = fps === 0 ? 1 / dt : fps * 0.9 + (1 / dt) * 0.1;
 
+  // Desktop mouse-aim: aim from the player's screen position toward the cursor.
+  // (On touch there's no mouse, so the aim stick's value is left untouched.)
+  if (controls.hasMouse) {
+    const sp = scene.worldToScreenPx(game.player.x, game.player.y);
+    const ax = controls.mouseX - sp.x;
+    const ay = controls.mouseY - sp.y;
+    const len = Math.hypot(ax, ay);
+    if (len > 0.0001) {
+      controls.intent.aimX = ax / len;
+      controls.intent.aimY = ay / len;
+    }
+  }
+
   // Step the sim in fixed slices; count steps for the debug readout.
   accumulator += dt;
   let steps = 0;
@@ -76,6 +89,8 @@ function frame(nowMs: number): void {
   const alpha = accumulator / SIM_DT;
 
   // Render the interpolated state. Renderers read prev+current; never mutate.
+  const shake = game.shakeTimer > 0 ? (game.shakeTimer / SHAKE.duration) * TUNING.shake : 0;
+  scene.setShake(shake);
   entities.sync(game, alpha);
   scene.updateFollow(game, alpha, dt);
   scene.render();
