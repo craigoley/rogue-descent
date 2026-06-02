@@ -360,6 +360,41 @@ export const VFX = {
   meleeArcHeight: 0.05,
   /** Melee arc indicator peak opacity. */
   meleeArcOpacity: 0.5,
+  /** Resting emissive intensity of an enemy figure. */
+  enemyEmissive: 0.25,
+  /** Emissive intensity of the front visor "eye" (the facing indicator) so it
+   *  reads as a bright neon glow regardless of body state. */
+  visorEmissive: 1.3,
+} as const;
+
+/**
+ * Procedural humanoid FIGURE dimensions (Phase 3) — render-only, composed from
+ * CylinderGeometry (body) + SphereGeometry (head) + a small front visor box (the
+ * facing indicator). NO CapsuleGeometry (banned per fleet note). Distinct
+ * silhouettes: the player is taller + slimmer, the enemy shorter + bulkier with
+ * a bigger head. World units; the figure stands with its feet at y = 0.
+ */
+export const FIGURE = {
+  /** Cylinder/sphere radial segments — low enough for the faceted neon look. */
+  segments: 10,
+  player: {
+    bodyRadiusTop: 0.26,
+    bodyRadiusBottom: 0.32,
+    bodyHeight: 1.0,
+    headRadius: 0.24,
+    visorSize: 0.16,
+  },
+  enemy: {
+    bodyRadiusTop: 0.42,
+    bodyRadiusBottom: 0.4,
+    bodyHeight: 0.72,
+    headRadius: 0.3,
+    visorSize: 0.18,
+  },
+  /** Forward lean (radians) while dashing — the figure tips into the burst. */
+  dashLean: 0.4,
+  /** Lean ease rate toward the target lean, per second (exp smoothing). */
+  leanLerp: 16,
 } as const;
 
 /** Enemy spawn points for the test room (open floor tiles, world units). One
