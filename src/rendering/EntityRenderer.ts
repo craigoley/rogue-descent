@@ -32,6 +32,7 @@ import {
   SphereGeometry,
   Sprite,
   SpriteMaterial,
+  TorusGeometry,
 } from 'three';
 import type { GameState } from '../game/GameState';
 import { aimDirection } from '../game/Combat';
@@ -47,6 +48,7 @@ import {
   POOL,
   RANGED,
   ROOM,
+  STAIRS,
   TOAST,
   VFX,
 } from '../utils/constants';
@@ -200,6 +202,10 @@ export class EntityRenderer {
   private readonly pickups: Mesh[] = [];
   private readonly pickupMats: MeshStandardMaterial[] = [];
   private readonly barriers: Mesh[] = [];
+  /** Descent stairs — a single per-floor entity (ring + billboarded glyph),
+   *  shown only when the floor is cleared. Not pooled (one exit per floor). */
+  private readonly stairsRing: Mesh;
+  private readonly stairsLabel: Sprite;
   // Floating type-icons above each pickup (billboarded — always face the camera).
   private readonly pickupIcons: Sprite[] = [];
   /** One shared icon material per drop kind (cross / arrow / burst). */
@@ -348,6 +354,25 @@ export class EntityRenderer {
       this.barriers.push(m);
       scene.add(m);
     }
+
+    // --- Descent stairs: a violet floor ring + a billboarded "DESCEND" glyph,
+    // shown only when the floor is cleared so the exit reads instantly. ---
+    this.stairsRing = new Mesh(
+      new TorusGeometry(STAIRS.ringRadius, STAIRS.ringTube, 8, 32),
+      new MeshBasicMaterial({ color: PALETTE.stairs, transparent: true, opacity: 0.9 }),
+    );
+    this.stairsRing.rotation.x = -Math.PI / 2; // lay flat on the floor
+    this.stairsRing.visible = false;
+    scene.add(this.stairsRing);
+
+    const descendLabel = textTexture('DESCEND', cssHex(PALETTE.stairs));
+    this.stairsLabel = new Sprite(
+      new SpriteMaterial({ map: descendLabel.tex, transparent: true, depthTest: false }),
+    );
+    this.stairsLabel.scale.set(STAIRS.glyphSize * descendLabel.aspect, STAIRS.glyphSize, 1);
+    this.stairsLabel.visible = false;
+    this.stairsLabel.renderOrder = 10;
+    scene.add(this.stairsLabel);
   }
 
   /** Build the shared geometry + child offsets for a figure type. Called twice
@@ -454,6 +479,19 @@ export class EntityRenderer {
     this.syncPickups(state, now);
     this.syncToasts(frameDt);
     this.syncBarriers(state);
+    this.syncStairs(state, now);
+  }
+
+  /** Show + pulse the descent stairs when the floor's exit is open. */
+  private syncStairs(state: GameState, now: number): void {
+    const s = state.stairs;
+    this.stairsRing.visible = s.active;
+    this.stairsLabel.visible = s.active;
+    if (!s.active) return;
+    const pulse = 1 + STAIRS.pulseAmp * (0.5 + 0.5 * Math.sin(now * 0.001 * STAIRS.pulseRate));
+    this.stairsRing.position.set(s.x, STAIRS.ringHeight, s.y);
+    this.stairsRing.scale.setScalar(pulse);
+    this.stairsLabel.position.set(s.x, STAIRS.glyphHeight, s.y);
   }
 
   private syncPickups(state: GameState, now: number): void {

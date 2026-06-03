@@ -50,6 +50,7 @@ export class HUD {
   private readonly readoutEl: HTMLPreElement | null = null;
   private readonly healthFill: HTMLDivElement;
   private readonly dashFill: HTMLDivElement;
+  private readonly depthEl: HTMLDivElement;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -64,6 +65,12 @@ export class HUD {
     title.textContent = 'ROGUE DESCENT';
     title.style.color = CSS_PALETTE.player;
     container.appendChild(title);
+
+    // Depth indicator (under the title) — how far down this run has reached.
+    this.depthEl = document.createElement('div');
+    this.depthEl.className = 'hud-depth';
+    this.depthEl.textContent = 'DEPTH 1';
+    container.appendChild(this.depthEl);
 
     // Combat HUD (always on): health bar + dash-readiness pip.
     const bars = document.createElement('div');
@@ -183,6 +190,9 @@ export class HUD {
     const dashReady = 1 - Math.min(1, p.dashCdTimer / dashTotal);
     this.dashFill.style.width = `${(dashReady * 100).toFixed(1)}%`;
 
+    // Depth (always): current floor this run.
+    this.depthEl.textContent = `DEPTH ${state.run.depth}`;
+
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);
 
@@ -212,6 +222,10 @@ export class HUD {
 
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
+      `DESCENT  depth ${state.run.depth}  floorsCleared ${state.run.floorsCleared}  ` +
+      `kills ${state.run.kills}\n` +
+      `  all-cleared ${cleared === state.rooms.length}  stairs-active ${state.stairs.active}  ` +
+      `stairs-room ${state.stairs.roomIndex}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +

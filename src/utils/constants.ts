@@ -44,6 +44,10 @@ export const PALETTE = {
   pickupHealth: 0x44ff88,
   /** Locked-door barrier (accent red so "sealed, clear the room" reads). */
   barrier: 0xff3366,
+  /** Descent stairs / floor EXIT — bright violet. A hue unused by any verb
+   *  (melee orange / ranged blue), enemy (red), pickup (green) or the player
+   *  (teal), so "the way down" reads instantly as its own thing (portal-like). */
+  stairs: 0xb464ff,
 } as const;
 
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
@@ -344,6 +348,34 @@ export const ENCOUNTER = {
   spawnSpread: 1.5,
 } as const;
 
+/**
+ * Descent (Phase 8a). Stairs appear in the farthest room once every room is
+ * cleared; stepping onto them descends to the next floor. SIM values only —
+ * the visuals live in STAIRS below.
+ */
+export const DESCENT = {
+  /** Player-to-stairs distance (world units) that triggers descent on contact. */
+  contactRadius: 0.9,
+  /** Deterministic next-floor seed stride: nextSeed = seed + stride*depth
+   *  (32-bit, via Math.imul). The golden-ratio constant, as used by dropSeed. */
+  seedStride: 0x9e3779b9,
+} as const;
+
+/** Descent-stairs VISUALS (render-only; no gameplay effect). */
+export const STAIRS = {
+  /** Floor ring radius / tube, world units. */
+  ringRadius: 0.7,
+  ringTube: 0.12,
+  /** Ring height above the floor, world units. */
+  ringHeight: 0.06,
+  /** Scale-pulse amplitude + speed (rad/s) so the active exit throbs. */
+  pulseAmp: 0.12,
+  pulseRate: 4,
+  /** Billboarded "DESCEND" glyph height above the floor + on-screen size. */
+  glyphHeight: 1.6,
+  glyphSize: 1.1,
+} as const;
+
 /** Within-run drops. EXACTLY three kinds: health + two VERB-COUPLED powerups
  *  (PIERCE for ranged, KNOCKBACK for melee). Powerups are binary toggles — they
  *  change what a verb DOES, not its stats; not stackable; reset on death. */
@@ -546,5 +578,7 @@ export const MINIMAP = {
     clearedRoom: 'rgba(51, 255, 204, 0.18)',
     /** Active (locked) room tint (amber — "fighting"). */
     activeRoom: 'rgba(255, 204, 51, 0.28)',
+    /** Stairs room once active (violet — "the way down", matches PALETTE.stairs). */
+    stairsRoom: 'rgba(180, 100, 255, 0.55)',
   },
 } as const;

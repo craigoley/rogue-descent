@@ -132,6 +132,15 @@ export class Minimap {
       ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
     }
 
+    // Stairs room (violet) once the floor is cleared — the "where do I go" mark,
+    // drawn over the cleared tint so the exit stands out on the overview.
+    const stairs = state.stairs;
+    if (stairs.active && stairs.roomIndex >= 0) {
+      const r = state.rooms[stairs.roomIndex].rect;
+      ctx.fillStyle = MINIMAP.colors.stairsRoom;
+      ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
+    }
+
     // Player dot.
     ctx.fillStyle = MINIMAP.colors.player;
     ctx.beginPath();

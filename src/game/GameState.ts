@@ -10,10 +10,10 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON } from '../utils/constants';
+import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
 import { createPlayer, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
-import { generateDungeon } from './Dungeon';
+import { generateDungeon, farthestRoomIndex } from './Dungeon';
 import {
   createEnemyPool,
   updateEnemies,
@@ -44,9 +44,43 @@ import { createRng, type Rng } from '../utils/rng';
 import type { InputIntent } from './Input';
 import type { Vec2 } from '../utils/math';
 
+/**
+ * Run-level state (Phase 8a). Spans the WHOLE descent — it PERSISTS across a
+ * floor change (descend mutates it) and is only reset when a new run begins.
+ * loadFloor (a per-floor reset) deliberately does NOT touch this; the new-run
+ * reset is Phase 8b's job (permadeath). Keeping it a sub-object makes that seam
+ * explicit: "reset the run" = replace `run`, "load a floor" = everything else.
+ */
+export interface RunState {
+  /** Current floor, 1-based. */
+  depth: number;
+  /** Floors fully cleared + descended this run. */
+  floorsCleared: number;
+  /** Enemies killed this run. */
+  kills: number;
+  /** Wall-clock survived this run, seconds. */
+  timeSec: number;
+}
+
+/** Descent stairs for the CURRENT floor (per-floor; recomputed by loadFloor).
+ *  Inactive until every room is cleared, then steppable to descend. */
+export interface Stairs {
+  /** World position (centre of the farthest room from spawn). */
+  x: number;
+  y: number;
+  /** Index into rooms[] of the stairs room (for the minimap mark). */
+  roomIndex: number;
+  /** True once every room on the floor is cleared — the exit is open. */
+  active: boolean;
+}
+
 export interface GameState {
   player: PlayerState;
   room: RoomState;
+  /** Run-level state — PERSISTS across descents (see RunState). */
+  run: RunState;
+  /** Current floor's descent stairs (per-floor; see Stairs). */
+  stairs: Stairs;
   /** Player spawn (world units) — centre of the generated floor's spawn room. */
   spawn: { x: number; y: number };
   /** Seed the current floor was generated from. */
@@ -85,6 +119,9 @@ export function createGameState(): GameState {
   const state: GameState = {
     player: createPlayer(0, 0),
     room: { tilesX: 0, tilesY: 0, tileSize: 1, walls: [], solid: [] },
+    // Run state starts a fresh run; loadFloor below does NOT reset this.
+    run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0 },
+    stairs: { x: 0, y: 0, roomIndex: -1, active: false },
     spawn: { x: 0, y: 0 },
     seed: DUNGEON.defaultSeed,
     time: 0,
@@ -121,6 +158,15 @@ function loadFloor(state: GameState, seed: number): void {
   for (const pk of state.pickups) pk.active = false;
   state.rooms = buildEncounters(floor);
   state.activeRoom = -1;
+  // Stairs: the farthest room from spawn, inactive until the floor is cleared.
+  // Per-floor state — recomputed every load. NOTE: state.run is intentionally
+  // NOT touched here (it spans the whole run; Phase 8b owns the new-run reset).
+  const stairsIdx = farthestRoomIndex(floor);
+  const sr = floor.rooms[stairsIdx];
+  state.stairs.roomIndex = stairsIdx;
+  state.stairs.x = (sr.x + sr.w / 2) * floor.room.tileSize;
+  state.stairs.y = (sr.y + sr.h / 2) * floor.room.tileSize;
+  state.stairs.active = false;
   state.dropRng = createRng(dropSeed(seed));
   state.dropCounts.health = 0;
   state.dropCounts.pierce = 0;
@@ -135,6 +181,29 @@ function loadFloor(state: GameState, seed: number): void {
 /** Reset for a fresh attempt on the SAME floor (Phase 5 owns run structure). */
 export function resetRun(state: GameState): void {
   loadFloor(state, state.seed);
+}
+
+/** Deterministic next-floor seed from the current seed + the (new) depth. Pure +
+ *  exported so the descent is reproducible and unit-testable. 32-bit via imul. */
+export function nextFloorSeed(seed: number, depth: number): number {
+  return (seed + Math.imul(DESCENT.seedStride, depth)) >>> 0;
+}
+
+/** Refresh stairs.active from the all-cleared signal and, if the player is on the
+ *  open stairs, DESCEND: bump run depth/floorsCleared and load the next floor.
+ *  Returns true if a descent happened (caller should end the frame). */
+function descendIfReady(state: GameState): boolean {
+  const stairs = state.stairs;
+  // All-cleared is monotonic (cleared is terminal), so this just tracks progress.
+  stairs.active = state.rooms.every((r) => r.phase === 'cleared');
+  if (!stairs.active) return false;
+  const p = state.player;
+  if (Math.hypot(p.x - stairs.x, p.y - stairs.y) > DESCENT.contactRadius) return false;
+  // Descend: run state PERSISTS (mutated, not reset) across the floor change.
+  state.run.depth += 1;
+  state.run.floorsCleared += 1;
+  loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
+  return true;
 }
 
 /** Regenerate the floor with a new seed (debug "cycle floors" affordance). */
@@ -159,6 +228,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   }
 
   state.time += dt;
+  state.run.timeSec += dt; // run-level survival clock (persists across descents)
 
   // Snapshot enemy liveness BEFORE this frame's deaths (for drop detection).
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = state.enemies[i].active;
@@ -190,15 +260,22 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   updateProjectiles(state, dt);
   updateEnemies(state, dt);
 
-  // Deaths this frame -> seeded drop rolls at the death positions.
+  // Deaths this frame -> run kill tally + seeded drop rolls at the death positions.
   for (let i = 0; i < state.enemies.length; i++) {
     const e = state.enemies[i];
-    if (state.prevEnemyActive[i] && !e.active) rollAndSpawnDrop(state, e.x, e.y, state.dropRng);
+    if (state.prevEnemyActive[i] && !e.active) {
+      state.run.kills += 1;
+      rollAndSpawnDrop(state, e.x, e.y, state.dropRng);
+    }
   }
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
   // Collect any pickup the player is touching.
   updatePickups(state);
+
+  // Descent: once every room is cleared the stairs open; stepping on them loads
+  // the next floor. On descend the state is rebuilt, so end the frame here.
+  if (descendIfReady(state)) return;
 
   updateParticles(state.particles, dt);
 
