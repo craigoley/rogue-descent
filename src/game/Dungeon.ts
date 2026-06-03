@@ -225,33 +225,6 @@ function bordersWalkable(
 }
 
 /**
- * Index of the room whose centre is FARTHEST (Euclidean) from the spawn room
- * (rooms[0]) — where the descent stairs go, so the player must traverse the
- * floor to descend. Rooms are emitted in BSP DFS order, which is NOT a distance
- * order, so this must be computed, never assumed to be the last index. Squared
- * distance (no sqrt); strict `>` breaks ties toward the lowest index, so the
- * result is deterministic for a given seed.
- */
-export function farthestRoomIndex(floor: Floor): number {
-  const ts = floor.room.tileSize;
-  const sx = floor.spawn.x;
-  const sy = floor.spawn.y;
-  let best = 0;
-  let bestD = -1;
-  for (let i = 0; i < floor.rooms.length; i++) {
-    const r = floor.rooms[i];
-    const cx = (r.x + r.w / 2) * ts;
-    const cy = (r.y + r.h / 2) * ts;
-    const d = (cx - sx) ** 2 + (cy - sy) ** 2;
-    if (d > bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
-/**
  * Connectivity check (pure): BFS over walkable cells from the spawn room centre;
  * returns true iff every room's centre tile is reached. The load-bearing
  * correctness property — a disconnected floor is unplayable.

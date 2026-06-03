@@ -13,7 +13,7 @@
 import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
 import { createPlayer, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
-import { generateDungeon, farthestRoomIndex } from './Dungeon';
+import { generateDungeon } from './Dungeon';
 import {
   createEnemyPool,
   updateEnemies,
@@ -65,10 +65,10 @@ export interface RunState {
 /** Descent stairs for the CURRENT floor (per-floor; recomputed by loadFloor).
  *  Inactive until every room is cleared, then steppable to descend. */
 export interface Stairs {
-  /** World position (centre of the farthest room from spawn). */
+  /** World position (centre of the LAST-cleared room; (0,0) until first clear). */
   x: number;
   y: number;
-  /** Index into rooms[] of the stairs room (for the minimap mark). */
+  /** Index into rooms[] of the stairs room, or -1 before any room clears. */
   roomIndex: number;
   /** True once every room on the floor is cleared — the exit is open. */
   active: boolean;
@@ -158,14 +158,13 @@ function loadFloor(state: GameState, seed: number): void {
   for (const pk of state.pickups) pk.active = false;
   state.rooms = buildEncounters(floor);
   state.activeRoom = -1;
-  // Stairs: the farthest room from spawn, inactive until the floor is cleared.
-  // Per-floor state — recomputed every load. NOTE: state.run is intentionally
-  // NOT touched here (it spans the whole run; Phase 8b owns the new-run reset).
-  const stairsIdx = farthestRoomIndex(floor);
-  const sr = floor.rooms[stairsIdx];
-  state.stairs.roomIndex = stairsIdx;
-  state.stairs.x = (sr.x + sr.w / 2) * floor.room.tileSize;
-  state.stairs.y = (sr.y + sr.h / 2) * floor.room.tileSize;
+  // Stairs start UNPLACED + inactive: they're positioned by the encounter resolve
+  // as rooms clear (into the LAST-cleared room) and only shown once all rooms are
+  // cleared. NOTE: state.run is intentionally NOT touched here (it spans the whole
+  // run; Phase 8b owns the new-run reset).
+  state.stairs.roomIndex = -1;
+  state.stairs.x = 0;
+  state.stairs.y = 0;
   state.stairs.active = false;
   state.dropRng = createRng(dropSeed(seed));
   state.dropCounts.health = 0;

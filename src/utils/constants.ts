@@ -349,9 +349,10 @@ export const ENCOUNTER = {
 } as const;
 
 /**
- * Descent (Phase 8a). Stairs appear in the farthest room once every room is
- * cleared; stepping onto them descends to the next floor. SIM values only —
- * the visuals live in STAIRS below.
+ * Descent (Phase 8a/7a). Stairs appear in the LAST-cleared room once every room
+ * is cleared (so the exit lands where the final fight ended, no backtrack);
+ * stepping onto them descends to the next floor. SIM values only — the visuals
+ * live in STAIRS below.
  */
 export const DESCENT = {
   /** Player-to-stairs distance (world units) that triggers descent on contact. */
