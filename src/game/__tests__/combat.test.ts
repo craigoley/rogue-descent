@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, update, type GameState } from '../GameState';
+import { createGameState, update, startNewRun, type GameState } from '../GameState';
 import { createPlayer, updatePlayer, isInvulnerable } from '../Player';
 import { createIntent, type InputIntent } from '../Input';
 import { buildTestRoom, roomCenter } from '../Room';
@@ -301,8 +301,8 @@ describe('Enemy telegraph -> strike', () => {
   });
 });
 
-describe('Death + reset', () => {
-  it('player dies at zero health and the room auto-resets after the pause', () => {
+describe('Death + permadeath', () => {
+  it('player dies at zero health; the death pause ENDS the run (no auto-respawn)', () => {
     const s = arena();
     s.player.health = 5;
     s.player.iframeTimer = 0;
@@ -316,8 +316,14 @@ describe('Death + reset', () => {
 
     const steps = Math.ceil(PLAYER_COMBAT.deathPause / DT) + 3;
     for (let i = 0; i < steps; i++) update(s, createIntent(), DT);
-    expect(s.player.alive).toBe(true); // reset
+    expect(s.runOver).toBe(true); // Phase 7b: run over, no same-floor respawn
+    expect(s.player.alive).toBe(false);
+
+    // A fresh run restores a full-health, living player.
+    startNewRun(s, 123);
+    expect(s.player.alive).toBe(true);
     expect(s.player.health).toBe(PLAYER_COMBAT.maxHealth);
+    expect(s.runOver).toBe(false);
   });
 });
 

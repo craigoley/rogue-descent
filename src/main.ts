@@ -12,13 +12,14 @@
  */
 
 import './style.css';
-import { createGameState, regenerate, update } from './game/GameState';
+import { createGameState, regenerate, startNewRun, update } from './game/GameState';
 import { generateDungeon, isConnected } from './game/Dungeon';
 import { Controls } from './input/Controls';
 import { SceneManager } from './rendering/SceneManager';
 import { DungeonRenderer } from './rendering/DungeonRenderer';
 import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD, isDebugEnabled } from './rendering/HUD';
+import { RunSummary } from './rendering/RunSummary';
 import { AudioEngine } from './audio/AudioEngine';
 import { loadSettings } from './state/Settings';
 import { MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
@@ -38,8 +39,18 @@ dungeon.build(game.room);
 const entities = new EntityRenderer(scene.scene);
 const hud = new HUD(app);
 
+// Fresh per-run seed (impure — keeps the sim pure). The counter guarantees
+// distinct seeds even on rapid restarts within the same millisecond.
+let runSeedCounter = 0;
+const freshRunSeed = (): number => (Date.now() + Math.imul(++runSeedCounter, 0x9e3779b9)) >>> 0;
+
+// Run-over overlay: one-tap/-click/-key RESTART starts a FRESH run. The loop's
+// seed-change rebuild (below) picks up the new floor; we just mutate state here.
+const summary = new RunSummary(app, () => startNewRun(game, freshRunSeed()));
+
 // Start the camera framed on the player's spawn — no slide-in on frame 1.
 scene.snapFocus(game.spawn.x, game.spawn.y);
+let builtSeed = game.seed; // last floor the DungeonRenderer was built for
 
 // Funnel telemetry: log floor stats on generation (room count + connectivity).
 function logFloor(seed: number): void {
@@ -49,13 +60,11 @@ function logFloor(seed: number): void {
 logFloor(game.seed);
 
 // ?debug=1: press G to regenerate the floor with the next seed (cycle floors).
+// The loop's seed-change rebuild handles dungeon.build + snapFocus + logFloor.
 if (isDebugEnabled()) {
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() !== 'g') return;
     regenerate(game, game.seed + 1);
-    dungeon.build(game.room);
-    scene.snapFocus(game.spawn.x, game.spawn.y);
-    logFloor(game.seed);
   });
 }
 
@@ -139,6 +148,16 @@ function frame(nowMs: number): void {
   }
   const alpha = accumulator / SIM_DT;
 
+  // Floor changed (descent OR a fresh-run restart, both via loadFloor's new seed)
+  // -> rebuild the 3D floor + re-frame the camera. Single rebuild authority for
+  // every floor transition (also closes the 8a gap where descent didn't rebuild).
+  if (game.seed !== builtSeed) {
+    dungeon.build(game.room);
+    scene.snapFocus(game.spawn.x, game.spawn.y);
+    logFloor(game.seed);
+    builtSeed = game.seed;
+  }
+
   // Render the interpolated state. Renderers read prev+current; never mutate.
   const shake = game.shakeTimer > 0 ? (game.shakeTimer / SHAKE.duration) * TUNING.shake : 0;
   scene.setShake(shake);
@@ -146,6 +165,7 @@ function frame(nowMs: number): void {
   scene.updateFollow(game, alpha, dt);
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene, controls);
+  summary.update(game);
   if (debug) logEncounters();
 
   requestAnimationFrame(frame);

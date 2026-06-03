@@ -341,6 +341,82 @@ body {
   opacity: 0.95;
 }
 
+/* Run-over / game-over overlay (permadeath). Full-screen scrim so it reads as a
+   hard stop, not a same-run respawn; hidden until .is-visible. */
+.run-summary {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  background: rgba(10, 10, 18, 0.82);
+  color: #cfeee6;
+  text-align: center;
+  user-select: none;
+}
+
+.run-summary.is-visible {
+  display: flex;
+}
+
+.run-summary-title {
+  font-size: clamp(28px, 9vw, 56px);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 16px currentColor;
+}
+
+.run-summary-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(280px, 78vw);
+  font-size: clamp(14px, 3.6vw, 18px);
+}
+
+.run-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+}
+
+.run-summary-label {
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+
+.run-summary-value {
+  font-weight: 700;
+  color: #fff;
+}
+
+.run-summary-best {
+  font-size: clamp(15px, 4vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--stairs);
+  text-shadow: 0 0 10px currentColor;
+}
+
+.run-summary-restart {
+  margin-top: 8px;
+  padding: 14px 36px;
+  font: 700 clamp(16px, 4.5vw, 20px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.18em;
+  background: rgba(51, 255, 204, 0.1);
+  border: 2px solid rgba(51, 255, 204, 0.6);
+  border-radius: 10px;
+  box-shadow: 0 0 18px rgba(51, 255, 204, 0.25);
+  cursor: pointer;
+  touch-action: none;
+}
+
 /* ?debug=1 tuning panel — interactive (sliders), so pointer-events on. */
 .hud-panel {
   position: fixed;
