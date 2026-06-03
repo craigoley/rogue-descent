@@ -78,19 +78,19 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     for (let k = 0; k < 30; k++) expect(rollDrop(a)).toBe(rollDrop(b));
   });
 
-  it('rollDrop yields only null | health | pierce | knockback', () => {
+  it('rollDrop yields only null | health | the four powerups', () => {
+    const allowed = new Set(['null', 'health', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge']);
     const rng = createRng(99);
     const seen = new Set<string>();
-    for (let k = 0; k < 400; k++) {
+    for (let k = 0; k < 800; k++) {
       const d = rollDrop(rng);
-      expect(d === null || d === 'health' || d === 'pierce' || d === 'knockback').toBe(true);
+      expect(allowed.has(String(d))).toBe(true);
       seen.add(String(d));
     }
-    // All four outcomes are reachable from this seed (distribution sanity).
-    expect(seen.has('health')).toBe(true);
-    expect(seen.has('pierce')).toBe(true);
-    expect(seen.has('knockback')).toBe(true);
-    expect(seen.has('null')).toBe(true);
+    // All outcomes are reachable from this seed (distribution sanity).
+    for (const kind of ['null', 'health', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge']) {
+      expect(seen.has(kind)).toBe(true);
+    }
   });
 
   it('rollDrop is deterministic for a given seed', () => {

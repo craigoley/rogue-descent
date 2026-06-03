@@ -161,12 +161,29 @@ body {
   background: linear-gradient(90deg, #ff3366, #ff6688);
 }
 
-.hud-dash {
+/* Dash charge pips — same width budget as a bar, split into segments (1 per max
+   charge). A pip is a mini-track; its fill (teal) shows full / recharging / empty. */
+.hud-dash-pips {
+  display: flex;
+  gap: 4px;
+  width: min(220px, 45vw);
   height: 8px;
 }
 
-.hud-dash .hud-bar-fill {
+.hud-dash-pip {
+  flex: 1 1 0;
+  height: 100%;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.hud-dash-pip-fill {
+  height: 100%;
+  width: 100%;
   background: var(--player);
+  transition: width 0.08s linear;
 }
 
 /* Active-powerup chips (third row in .hud-bars). The row IS the chip flex

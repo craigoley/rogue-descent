@@ -48,6 +48,11 @@ export const PALETTE = {
    *  (melee orange / ranged blue), enemy (red), pickup (green) or the player
    *  (teal), so "the way down" reads instantly as its own thing (portal-like). */
   stairs: 0xb464ff,
+  /** DASH powerups (extra-charge + faster-recharge) — magenta. Distinct from
+   *  every other hue (player teal, health green, pierce blue, knockback orange,
+   *  stairs violet, enemy/telegraph red/amber); the two dash drops share it and
+   *  differ by GLYPH, since they're one system (the dash economy). */
+  dash: 0xff5ad8,
 } as const;
 
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
@@ -108,8 +113,12 @@ export const TUNING = {
   /** Invulnerability window from the start of a dash, seconds (the skill
    *  expression — dodge THROUGH an attack). */
   dashIframes: 0.18,
-  /** Cooldown before the next dash, seconds. */
-  dashCooldown: 0.5,
+  /** Base recharge time for ONE dash charge, seconds. Slower than the old 0.5
+   *  cooldown so dash is a managed resource (charges refill one at a time). The
+   *  FASTER-RECHARGE powerup multiplies this by dashFasterRechargeFactor. */
+  dashRecharge: 1.6,
+  /** FASTER-RECHARGE powerup multiplier on dashRecharge (<1 = quicker refill). */
+  dashFasterRechargeFactor: 0.6,
   /** Hit-stop freeze on landing an enemy hit, seconds (sells contact). */
   hitstop: 0.05,
   /** Screen-shake magnitude on taking a hit, world units of camera offset. */
@@ -130,7 +139,8 @@ export const TUNING_RANGES = {
   deadZone: { min: 0, max: 5, step: 0.25 },
   dashDist: { min: 1, max: 10, step: 0.5 },
   dashIframes: { min: 0, max: 0.5, step: 0.02 },
-  dashCooldown: { min: 0.1, max: 2, step: 0.05 },
+  dashRecharge: { min: 0.3, max: 4, step: 0.1 },
+  dashFasterRechargeFactor: { min: 0.2, max: 1, step: 0.05 },
   hitstop: { min: 0, max: 0.2, step: 0.01 },
   shake: { min: 0, max: 1.5, step: 0.05 },
   meleeDamage: { min: 5, max: 100, step: 1 },
@@ -289,6 +299,10 @@ export const PLAYER_COMBAT = {
 export const DASH = {
   /** Burst duration, seconds. dash speed = TUNING.dashDist / duration. */
   duration: 0.16,
+  /** Dash charges without any powerup. */
+  baseCharges: 1,
+  /** Extra charges granted by the EXTRA-CHARGE powerup (-> 2 total). */
+  extraChargeBonus: 1,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */
@@ -431,10 +445,9 @@ export const STAIRS = {
 export const DROP = {
   /** Chance a slain enemy drops anything (seeded roll). */
   chance: 0.45,
-  /** Of the drops that happen, the share that are health (rest = a powerup). */
+  /** Of the drops that happen, the share that are health (rest = a powerup,
+   *  picked uniformly among the powerup kinds — see Pickup.rollDrop). */
   healthShare: 0.6,
-  /** Of the powerup drops, the share that are PIERCE (rest = KNOCKBACK). */
-  pierceShare: 0.5,
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much

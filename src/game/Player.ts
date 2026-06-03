@@ -41,8 +41,12 @@ export interface PlayerState {
   dashTimer: number;
   dashDirX: number;
   dashDirY: number;
-  /** Time until the next dash is allowed, seconds. */
-  dashCdTimer: number;
+  /** Dash charges currently available (the dash ECONOMY). Starts full
+   *  (= maxCharges). Each dash spends one; they refill ONE AT A TIME at the
+   *  (faster-recharge-adjusted) rate. max = DASH.baseCharges + (extraCharge?bonus:0). */
+  dashCharges: number;
+  /** Time left until the next charge regenerates, seconds (0 = idle/at-max). */
+  dashRechargeTimer: number;
   /** Invulnerability from a dash, seconds. */
   iframeTimer: number;
   /** Brief invulnerability after taking a hit, seconds. */
@@ -63,6 +67,12 @@ export interface PlayerState {
    *  (DROP.meleeKnockback vs the base MELEE.knockback). Binary toggle; reset to
    *  false on death via createPlayer. */
   meleeKnockback: boolean;
+  /** EXTRA-CHARGE powerup (within-run): +DASH.extraChargeBonus dash charges (a
+   *  second dash before recharge). Binary toggle; reset on death via createPlayer. */
+  extraCharge: boolean;
+  /** FASTER-RECHARGE powerup (within-run): dash charges refill quicker
+   *  (×TUNING.dashFasterRechargeFactor). Binary toggle; reset via createPlayer. */
+  fasterRecharge: boolean;
   /** Dodge confirmation render-tell window, seconds (> 0 right after a dash
    *  i-frame negated a hit). Drives the dodge flash; pure feedback, not logic. */
   dodgeFxTimer: number;
@@ -83,7 +93,9 @@ export function createPlayer(x: number, y: number): PlayerState {
     dashTimer: 0,
     dashDirX: 0,
     dashDirY: 1,
-    dashCdTimer: 0,
+    // Starts FULL: no powerups yet, so max = base charges.
+    dashCharges: DASH.baseCharges,
+    dashRechargeTimer: 0,
     iframeTimer: 0,
     hitInvulnTimer: 0,
     meleeCdTimer: 0,
@@ -93,7 +105,14 @@ export function createPlayer(x: number, y: number): PlayerState {
     dodgeFxTimer: 0,
     pierce: false,
     meleeKnockback: false,
+    extraCharge: false,
+    fasterRecharge: false,
   };
+}
+
+/** Max dash charges given the player's powerups (base + extra-charge bonus). */
+export function dashMaxCharges(player: PlayerState): number {
+  return DASH.baseCharges + (player.extraCharge ? DASH.extraChargeBonus : 0);
 }
 
 /** True while the player can't be damaged (dash i-frames or post-hit i-frames). */
@@ -115,9 +134,25 @@ function approachVelocity(player: PlayerState, tx: number, ty: number, maxDelta:
   player.vy += (dvy / dist) * maxDelta;
 }
 
+/** Refill dash charges one at a time at the (faster-recharge-adjusted) rate.
+ *  Idle (timer 0) once at max; a fresh charge restarts the timer if still below. */
+function tickDashRecharge(player: PlayerState, dt: number): void {
+  const max = dashMaxCharges(player);
+  if (player.dashCharges >= max) {
+    player.dashRechargeTimer = 0;
+    return;
+  }
+  const rechargeTime = TUNING.dashRecharge * (player.fasterRecharge ? TUNING.dashFasterRechargeFactor : 1);
+  if (player.dashRechargeTimer <= 0) player.dashRechargeTimer = rechargeTime; // (re)start
+  player.dashRechargeTimer -= dt;
+  if (player.dashRechargeTimer <= 0) {
+    player.dashCharges += 1;
+    player.dashRechargeTimer = 0; // next step restarts it if still below max
+  }
+}
+
 function tickTimers(player: PlayerState, dt: number): void {
   if (player.dashTimer > 0) player.dashTimer = Math.max(0, player.dashTimer - dt);
-  if (player.dashCdTimer > 0) player.dashCdTimer = Math.max(0, player.dashCdTimer - dt);
   if (player.iframeTimer > 0) player.iframeTimer = Math.max(0, player.iframeTimer - dt);
   if (player.hitInvulnTimer > 0) player.hitInvulnTimer = Math.max(0, player.hitInvulnTimer - dt);
   if (player.meleeCdTimer > 0) player.meleeCdTimer = Math.max(0, player.meleeCdTimer - dt);
@@ -141,6 +176,7 @@ export function updatePlayer(
   player.prevX = player.x;
   player.prevY = player.y;
   tickTimers(player, dt);
+  tickDashRecharge(player, dt);
   if (!player.alive) return;
 
   // Rotate raw screen input into the world floor plane, then normalize.
@@ -156,12 +192,13 @@ export function updatePlayer(
     player.facingY = mdy;
   }
 
-  // Dash (edge-triggered, consumed here so one press = one dash).
+  // Dash (edge-triggered, consumed here so one press = one dash). Spends a charge
+  // (the dash economy); recharge above refills them one at a time.
   if (intent.dash) {
     intent.dash = false;
-    if (player.dashCdTimer <= 0 && player.dashTimer <= 0) {
+    if (player.dashCharges >= 1 && player.dashTimer <= 0) {
+      player.dashCharges -= 1;
       player.dashTimer = DASH.duration;
-      player.dashCdTimer = DASH.duration + TUNING.dashCooldown;
       player.iframeTimer = TUNING.dashIframes;
       player.dashDirX = hasInput ? mdx : player.facingX;
       player.dashDirY = hasInput ? mdy : player.facingY;
