@@ -92,7 +92,7 @@ export class Controls {
     this.hint = document.createElement('div');
     this.hint.className = 'touch-hint';
     this.hint.textContent = isTouch
-      ? 'Left: MOVE   ·   Right: AIM + FIRE'
+      ? 'Left: MOVE   ·   Right: AIM'
       : 'WASD move · Mouse aim · L-click FIRE · R-click MELEE · Space DASH';
     target.appendChild(this.hint);
 
