@@ -5,6 +5,9 @@
   /* = PALETTE.projectile (0x4488ff): the ranged/firing colour, so the aim
      ring's auto-fire state reads as "ranged active". */
   --ranged: #4488ff;
+  /* = PALETTE.stairs (0xb464ff): the descent/exit violet, reused by the depth
+     indicator so depth ↔ descent read as the same system. */
+  --stairs: #b464ff;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Bottom-HUD layout tokens — single source of truth so the action buttons and
@@ -49,6 +52,21 @@ body {
 
 #app canvas {
   display: block;
+}
+
+/* Depth indicator — centred just below the title, between the corner widgets.
+   Violet (= PALETTE.stairs) ties it to the descent system. */
+.hud-depth {
+  position: fixed;
+  top: calc(var(--safe-top) + var(--hud-title-clear));
+  left: 50%;
+  transform: translateX(-50%);
+  font: 700 clamp(11px, 2.6vw, 14px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.22em;
+  color: var(--stairs);
+  text-shadow: 0 0 8px currentColor;
+  pointer-events: none;
+  user-select: none;
 }
 
 .hud-title {
