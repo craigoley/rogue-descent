@@ -186,6 +186,62 @@ body {
   transition: width 0.08s linear;
 }
 
+/* Active-powerup chips (third row in .hud-bars). The row IS the chip flex
+   container (no text label — the chips name themselves). Each chip carries its
+   verb colour via --chip-color (set from CSS_PALETTE in HUD.ts). DIM = the slot
+   exists but isn't held; .is-on = held (full colour + glow). Glyphs are CSS-
+   drawn from currentColor so they take the colour reliably on every device
+   (no font/emoji dependency). Lives in the left column; flex-wrap is a safety so
+   it can never bleed into the right-anchored minimap on a very narrow screen. */
+.hud-powers {
+  flex-wrap: wrap;
+}
+
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--chip-color);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--chip-color);
+  font: 700 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  opacity: 0.3; /* dimmed: slot visible but not held */
+  transition: opacity 0.15s linear;
+}
+
+.hud-chip.is-on {
+  opacity: 1; /* held: full colour + glow */
+  text-shadow: 0 0 6px currentColor;
+  box-shadow: 0 0 8px -3px var(--chip-color), inset 0 0 6px -3px var(--chip-color);
+}
+
+/* CSS-drawn glyphs (currentColor) — mirror the drop icons' visual sense. */
+.hud-chip::before {
+  content: '';
+  flex: 0 0 auto;
+}
+
+/* PIERCE: right-pointing arrowhead (mirrors drawArrow). */
+.hud-chip.is-pierce::before {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid currentColor;
+}
+
+/* KNOCKBACK: 4-point burst/sparkle (mirrors drawBurst's outward spokes). */
+.hud-chip.is-knockback::before {
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+}
+
 /* Touch virtual stick — purely visual feedback; the listeners capture touches,
    so these never intercept pointer events. Centred on their left/top via
    translate(-50%, -50%). Hidden until a touch is active. */

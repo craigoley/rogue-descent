@@ -61,6 +61,8 @@ export class HUD {
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
   private readonly depthEl: HTMLDivElement;
+  private readonly pierceChip: HTMLSpanElement;
+  private readonly knockbackChip: HTMLSpanElement;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -126,6 +128,26 @@ export class HUD {
     }
     dashRow.append(dashLabel, pips);
     bars.appendChild(dashRow);
+
+    // Active-powerup chips (#30) — always visible so the held build reads at a
+    // glance (powerups persist across descent). Dimmed when not held, lit when
+    // held. Colour = the verb language (pierce = projectile blue, knockback =
+    // melee orange); CSS-drawn glyphs take --chip-color reliably. The two DASH
+    // powerups are surfaced by the pips above, so the chips stay verb-only here.
+    const powersRow = document.createElement('div');
+    powersRow.className = 'hud-bar-row is-powers hud-powers';
+    const makeChip = (text: string, mod: string, color: string): HTMLSpanElement => {
+      const chip = document.createElement('span');
+      chip.className = `hud-chip ${mod}`;
+      chip.textContent = text;
+      chip.style.setProperty('--chip-color', color);
+      powersRow.appendChild(chip);
+      return chip;
+    };
+    this.pierceChip = makeChip('PIERCE', 'is-pierce', CSS_PALETTE.projectile);
+    this.knockbackChip = makeChip('KNOCKBACK', 'is-knockback', CSS_PALETTE.melee);
+    bars.appendChild(powersRow);
+
     container.appendChild(bars);
 
     // One-time dodge tutorial — revealed the first time an enemy telegraphs (the
@@ -243,6 +265,11 @@ export class HUD {
 
     // Depth (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
+
+    // Active powerups (always): lit when held, dimmed when not. Persists across
+    // descent, so this is the only on-screen reminder of the carried build.
+    this.pierceChip.classList.toggle('is-on', state.player.pierce);
+    this.knockbackChip.classList.toggle('is-on', state.player.meleeKnockback);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);
