@@ -22,6 +22,12 @@
      reaches toward both corners on a narrow portrait) never shares the top band
      with them. Measured from --safe-top (the title shares that origin). */
   --hud-title-clear: 60px;
+  /* Clearance for everything BELOW the centred top band (title + the DEPTH
+     readout under it). The corner widgets — top-left health/dash bars and
+     top-right minimap — drop below THIS line so they never share a row with the
+     centred, full-width DEPTH counter (which caused the "PTH 1" overlap when
+     DEPTH was on the old --hud-title-clear row with the left bars). */
+  --hud-band-clear: 84px;
   --touch-btn-size: 76px; /* DASH / MELEE diameter */
   --touch-btn-bottom: 28px; /* gap from the safe-area to the button row */
   --touch-btn-edge: 24px; /* MELEE inset from the right edge */
@@ -90,7 +96,7 @@ body {
    canvas paints its own translucent panel + border, so no background here. */
 .minimap {
   position: fixed;
-  top: calc(var(--safe-top) + var(--hud-title-clear));
+  top: calc(var(--safe-top) + var(--hud-band-clear));
   right: calc(var(--safe-right) + 10px);
   border-radius: 6px;
   pointer-events: none;
@@ -100,15 +106,40 @@ body {
 /* Combat HUD — health + dash bars, top-left. Always visible. */
 .hud-bars {
   position: fixed;
-  /* Below the title band (same row as the top-right minimap) so the bars never
-     paint over the centred title at any width. */
-  top: calc(var(--safe-top) + var(--hud-title-clear));
+  /* Below the centred band (title + DEPTH), same row as the top-right minimap,
+     so the bars never share a row with the full-width DEPTH counter (the cause
+     of the "PTH 1" overlap) nor paint over the title at any width. */
+  top: calc(var(--safe-top) + var(--hud-band-clear));
   left: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   pointer-events: none;
   user-select: none;
+}
+
+/* One labelled bar: a small right-aligned caption + the track, so a new player
+   can tell health (red) from dash-readiness (teal). */
+.hud-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-bar-label {
+  flex: 0 0 auto;
+  width: 50px;
+  text-align: right;
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.14em;
+}
+
+.hud-bar-row.is-health .hud-bar-label {
+  color: #ff6688;
+}
+
+.hud-bar-row.is-dash .hud-bar-label {
+  color: var(--player);
 }
 
 .hud-bar {
@@ -353,7 +384,10 @@ body {
   justify-content: center;
   gap: 18px;
   padding: 24px;
-  background: rgba(10, 10, 18, 0.82);
+  /* Near-opaque full-bleed scrim (z-index above ALL HUD + canvas) so nothing —
+     player figure, AIM ring, DASH/MELEE, minimap, top bars — shows through; the
+     run reads as a clean game-over, not a respawn. */
+  background: rgba(10, 10, 18, 0.97);
   color: #cfeee6;
   text-align: center;
   user-select: none;

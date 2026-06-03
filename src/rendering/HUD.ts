@@ -74,21 +74,26 @@ export class HUD {
     this.depthEl.textContent = 'DEPTH 1';
     container.appendChild(this.depthEl);
 
-    // Combat HUD (always on): health bar + dash-readiness pip.
+    // Combat HUD (always on): labelled health bar + dash-readiness bar.
     const bars = document.createElement('div');
     bars.className = 'hud-bars';
-    const healthTrack = document.createElement('div');
-    healthTrack.className = 'hud-bar hud-health';
-    this.healthFill = document.createElement('div');
-    this.healthFill.className = 'hud-bar-fill';
-    healthTrack.appendChild(this.healthFill);
-    const dashTrack = document.createElement('div');
-    dashTrack.className = 'hud-bar hud-dash';
-    this.dashFill = document.createElement('div');
-    this.dashFill.className = 'hud-bar-fill';
-    dashTrack.appendChild(this.dashFill);
-    bars.appendChild(healthTrack);
-    bars.appendChild(dashTrack);
+    const makeBar = (label: string, rowMod: string, trackMod: string): HTMLDivElement => {
+      const row = document.createElement('div');
+      row.className = `hud-bar-row ${rowMod}`;
+      const lab = document.createElement('span');
+      lab.className = 'hud-bar-label';
+      lab.textContent = label;
+      const track = document.createElement('div');
+      track.className = `hud-bar ${trackMod}`;
+      const fill = document.createElement('div');
+      fill.className = 'hud-bar-fill';
+      track.appendChild(fill);
+      row.append(lab, track);
+      bars.appendChild(row);
+      return fill;
+    };
+    this.healthFill = makeBar('HEALTH', 'is-health', 'hud-health');
+    this.dashFill = makeBar('DASH', 'is-dash', 'hud-dash');
     container.appendChild(bars);
 
     // One-time dodge tutorial — revealed the first time an enemy telegraphs (the
