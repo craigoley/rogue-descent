@@ -11,6 +11,7 @@
 import { ENEMY, POOL } from '../utils/constants';
 import { resolveX, resolveY } from './Collision';
 import { damagePlayer } from './Combat';
+import { damageMultForDepth, healthMultForDepth, speedMultForDepth } from './Difficulty';
 import type { GameState } from './GameState';
 
 export type EnemyPhase = 'chase' | 'telegraph' | 'strike' | 'recover';
@@ -23,6 +24,10 @@ export interface Enemy {
   prevX: number;
   prevY: number;
   health: number;
+  /** Move speed (world units/sec) — scaled by depth at spawn (Phase 7c). */
+  moveSpeed: number;
+  /** Strike damage — scaled by depth at spawn (Phase 7c). */
+  attackDamage: number;
   phase: EnemyPhase;
   /** Countdown within the current phase, seconds. */
   timer: number;
@@ -43,6 +48,8 @@ export function createEnemyPool(): Enemy[] {
     prevX: 0,
     prevY: 0,
     health: 0,
+    moveSpeed: ENEMY.moveSpeed,
+    attackDamage: ENEMY.attackDamage,
     phase: 'chase' as EnemyPhase,
     timer: 0,
     flashTimer: 0,
@@ -52,8 +59,13 @@ export function createEnemyPool(): Enemy[] {
   }));
 }
 
-/** Activate a pooled enemy at (x, y). No-op (returns false) if the pool is full. */
-export function spawnEnemy(pool: Enemy[], x: number, y: number): boolean {
+/**
+ * Activate a pooled enemy at (x, y), with stats scaled for `depth` (Phase 7c;
+ * depth defaults to 1 = baseline). ENEMY.* is const, so the scaled values are
+ * computed here and stored per-enemy (the AI reads e.moveSpeed / e.attackDamage).
+ * No-op (returns false) if the pool is full.
+ */
+export function spawnEnemy(pool: Enemy[], x: number, y: number, depth = 1): boolean {
   for (const e of pool) {
     if (e.active) continue;
     e.active = true;
@@ -61,7 +73,9 @@ export function spawnEnemy(pool: Enemy[], x: number, y: number): boolean {
     e.y = y;
     e.prevX = x;
     e.prevY = y;
-    e.health = ENEMY.maxHealth;
+    e.health = ENEMY.maxHealth * healthMultForDepth(depth);
+    e.moveSpeed = ENEMY.moveSpeed * speedMultForDepth(depth);
+    e.attackDamage = ENEMY.attackDamage * damageMultForDepth(depth);
     e.phase = 'chase';
     e.timer = 0;
     e.flashTimer = 0;
@@ -103,8 +117,8 @@ export function updateEnemies(state: GameState, dt: number): void {
           e.phase = 'telegraph';
           e.timer = ENEMY.telegraph;
         } else if (player.alive && d > 0) {
-          desiredVx = (dx / d) * ENEMY.moveSpeed;
-          desiredVy = (dy / d) * ENEMY.moveSpeed;
+          desiredVx = (dx / d) * e.moveSpeed; // depth-scaled at spawn
+          desiredVy = (dy / d) * e.moveSpeed;
         }
         break;
       case 'telegraph':
@@ -119,7 +133,7 @@ export function updateEnemies(state: GameState, dt: number): void {
         if (!e.struck) {
           e.struck = true;
           if (player.alive && d <= ENEMY.attackReach) {
-            damagePlayer(player, ENEMY.attackDamage, state);
+            damagePlayer(player, e.attackDamage, state); // depth-scaled at spawn
           }
         }
         e.timer -= dt;

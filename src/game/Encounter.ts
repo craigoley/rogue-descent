@@ -14,6 +14,7 @@
  */
 
 import { ENCOUNTER, ROOM } from '../utils/constants';
+import { enemiesPerRoomForDepth } from './Difficulty';
 import type { Rng } from '../utils/rng';
 import { activeEnemyCount, spawnEnemy } from './Enemy';
 import { rollDrop, spawnPickup } from './Pickup';
@@ -51,10 +52,10 @@ function computeDoorCells(room: RoomState, rect: Rect): { tx: number; ty: number
 
 /** Enemy spawn positions: a small ring around the room centre (deterministic,
  *  inside the room since rooms are >= minRoom tiles). */
-function computeSpawns(rect: Rect): { x: number; y: number }[] {
+function computeSpawns(rect: Rect, depth: number): { x: number; y: number }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
-  const n = ENCOUNTER.enemiesPerRoom;
+  const n = enemiesPerRoomForDepth(depth); // depth-scaled count (Phase 7c)
   const spread = ENCOUNTER.spawnSpread;
   const out: { x: number; y: number }[] = [];
   for (let k = 0; k < n; k++) {
@@ -65,11 +66,11 @@ function computeSpawns(rect: Rect): { x: number; y: number }[] {
 }
 
 /** Build the encounter table for a floor. Room 0 (spawn) starts cleared (safe). */
-export function buildEncounters(floor: Floor): RoomEncounter[] {
+export function buildEncounters(floor: Floor, depth = 1): RoomEncounter[] {
   return floor.rooms.map((rect, i) => ({
     rect,
     phase: i === 0 ? ('cleared' as RoomPhase) : ('idle' as RoomPhase),
-    spawns: computeSpawns(rect),
+    spawns: computeSpawns(rect, depth),
     doorCells: computeDoorCells(floor.room, rect),
     dropsSpawned: 0,
     dropsCollected: 0,
@@ -101,7 +102,7 @@ export function updateEncounterEntry(state: GameState): void {
   if (enc.phase !== 'idle') return;
   enc.phase = 'active';
   state.activeRoom = idx;
-  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y);
+  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth);
   setDoors(state, enc, true);
 }
 
