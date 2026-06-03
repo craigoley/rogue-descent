@@ -13,6 +13,7 @@
 
 import type { GameState } from '../game/GameState';
 import { isoRotate, type InputIntent } from '../game/Input';
+import type { Controls } from '../input/Controls';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
 import {
@@ -180,6 +181,7 @@ export class HUD {
     alpha: number,
     intent: InputIntent,
     scene: SceneManager,
+    controls: Controls,
   ): void {
     const p = state.player;
 
@@ -232,6 +234,8 @@ export class HUD {
       `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}\n` +
       `drops spawned ${spawned} / collected ${collected}` +
       `   (hp ${state.dropCounts.health} · pierce ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback})\n` +
+      `FIRE  aimEngaged ${controls.aimEngaged}  ranged ${intent.ranged}  ` +
+      `persist ${controls.firePersistRemainingMs}ms\n` +
       `\n` +
       `INPUT TRACE (press a direction)\n` +
       `1 raw input     ${f2(intent.moveX)}, ${f2(intent.moveY)}\n` +

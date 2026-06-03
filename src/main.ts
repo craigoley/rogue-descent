@@ -125,10 +125,9 @@ function frame(nowMs: number): void {
     }
   }
 
-  // Phase 6.5 mobile auto-fire (Option B): tell the input layer whether the
-  // current room is in active combat (game.activeRoom >= 0). On touch this gates
-  // auto-fire and cold-starts the retained aim per fight; desktop ignores it.
-  controls.setEncounter(game.activeRoom);
+  // Phase 6.6 touch auto-fire: tick the aim-engaged fire-persistence window with
+  // the real frame dt (touch only; desktop fire is event-driven and untouched).
+  controls.tickFire(dt);
 
   // Step the sim in fixed slices; count steps for the debug readout.
   accumulator += dt;
@@ -146,7 +145,7 @@ function frame(nowMs: number): void {
   entities.sync(game, alpha, controls.intent);
   scene.updateFollow(game, alpha, dt);
   scene.render();
-  hud.update(game, fps, steps, alpha, controls.intent, scene);
+  hud.update(game, fps, steps, alpha, controls.intent, scene, controls);
   if (debug) logEncounters();
 
   requestAnimationFrame(frame);
