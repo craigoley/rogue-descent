@@ -62,7 +62,8 @@ export interface RunState {
   timeSec: number;
 }
 
-/** Descent stairs for the CURRENT floor (per-floor; recomputed by loadFloor).
+/** Descent stairs for the CURRENT floor (per-floor; RESET unplaced by loadFloor,
+ *  POSITIONED into the last-cleared room by the encounter resolve as rooms clear).
  *  Inactive until every room is cleared, then steppable to descend. */
 export interface Stairs {
   /** World position (centre of the LAST-cleared room; (0,0) until first clear). */
