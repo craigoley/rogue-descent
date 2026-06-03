@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, update, type GameState } from '../GameState';
+import { createGameState, update, startNewRun, type GameState } from '../GameState';
 import { createIntent } from '../Input';
 import { isSolid } from '../Room';
 import { activeEnemyCount } from '../Enemy';
@@ -159,8 +159,8 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
   });
 });
 
-describe('Within-run only — drops + powerups do NOT survive a death-reset', () => {
-  it('a death-reset clears both powerup toggles, pickups, and re-arms the rooms', () => {
+describe('Within-run only — drops + powerups do NOT survive permadeath + restart', () => {
+  it('death ENDS the run (permadeath), and RESTART clears powerups/pickups + re-arms + resets run', () => {
     const s = createGameState();
     // Grant BOTH powerups and spawn a pickup, activate a room.
     applyPickup(s.player, 'pierce');
@@ -172,14 +172,20 @@ describe('Within-run only — drops + powerups do NOT survive a death-reset', ()
     update(s, idle(), DT);
     expect(s.rooms[i].phase).toBe('active');
 
-    // Kill the player and run through the death pause to trigger the reset.
+    // Kill the player and run through the death pause. Phase 7b: this ENDS the
+    // run (runOver) — it does NOT auto-respawn on the same floor any more.
     s.player.health = 0;
     s.player.iframeTimer = 0;
     s.player.hitInvulnTimer = 0;
-    update(s, idle(), DT); // sets alive=false (then frozen)
+    update(s, idle(), DT); // death trigger -> alive=false
     const steps = Math.ceil(PLAYER_COMBAT.deathPause / DT) + 3;
     for (let k = 0; k < steps; k++) update(s, idle(), DT);
 
+    expect(s.player.alive).toBe(false); // NO same-run respawn
+    expect(s.runOver).toBe(true); // the run is over, awaiting restart
+
+    // RESTART -> a FRESH run. Now the within-run no-persist guarantees apply.
+    startNewRun(s, 4242);
     expect(s.player.alive).toBe(true);
     expect(s.player.pierce).toBe(false); // powerup GONE (within-run only)
     expect(s.player.meleeKnockback).toBe(false); // powerup GONE (within-run only)
@@ -187,6 +193,12 @@ describe('Within-run only — drops + powerups do NOT survive a death-reset', ()
     expect(s.rooms.every((e, idx) => (idx === 0 ? e.phase === 'cleared' : e.phase === 'idle'))).toBe(
       true,
     ); // rooms re-armed
+    // Run-level state reset for the new run (Phase 7b new-run reset).
+    expect(s.runOver).toBe(false);
+    expect(s.run.depth).toBe(1);
+    expect(s.run.floorsCleared).toBe(0);
+    expect(s.run.kills).toBe(0);
+    expect(s.run.timeSec).toBe(0);
   });
 });
 

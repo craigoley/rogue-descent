@@ -106,8 +106,11 @@ export interface GameState {
   hitstopTimer: number;
   /** Screen-shake countdown, seconds (renderer reads it). */
   shakeTimer: number;
-  /** Dead time remaining before the room auto-resets, seconds. */
+  /** Dead time remaining before the run ends, seconds (the death-pause lead-in). */
   deathTimer: number;
+  /** PERMADEATH (Phase 7b): true once the death pause elapses — the run is over
+   *  and the sim is frozen, awaiting an explicit startNewRun (the restart). */
+  runOver: boolean;
 }
 
 /** Reused aim scratch — keeps `update` allocation-free. */
@@ -138,9 +141,10 @@ export function createGameState(): GameState {
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
+    runOver: false,
   };
   state.prevEnemyActive = state.enemies.map((e) => e.active);
-  loadFloor(state, DUNGEON.defaultSeed);
+  startNewRun(state, DUNGEON.defaultSeed);
   return state;
 }
 
@@ -178,9 +182,21 @@ function loadFloor(state: GameState, seed: number): void {
   state.time = 0;
 }
 
-/** Reset for a fresh attempt on the SAME floor (Phase 5 owns run structure). */
-export function resetRun(state: GameState): void {
-  loadFloor(state, state.seed);
+/**
+ * Start a FRESH run (Phase 7b): reset the run-level state, then load floor 1 from
+ * `seed`. The ONLY new-run entry — createGameState delegates here and the restart
+ * action calls it. loadFloor does the per-floor reset (fresh player via
+ * createPlayer => health + powerups cleared; pools + rooms re-armed); here we add
+ * the `run` reset + clear runOver that loadFloor deliberately leaves alone. The
+ * seed is caller-provided (impure layer) so the sim stays pure/deterministic.
+ */
+export function startNewRun(state: GameState, seed: number): void {
+  state.run.depth = 1;
+  state.run.floorsCleared = 0;
+  state.run.kills = 0;
+  state.run.timeSec = 0;
+  state.runOver = false;
+  loadFloor(state, seed);
 }
 
 /** Deterministic next-floor seed from the current seed + the (new) depth. Pure +
@@ -219,10 +235,14 @@ export function regenerate(state: GameState, seed: number): void {
 export function update(state: GameState, intent: InputIntent, dt: number): void {
   const p = state.player;
 
-  // Dead: freeze the sim, count down, then reset the room.
+  // Dead: the death pause plays the death particles/shake as a lead-in, then the
+  // RUN ENDS (permadeath). The sim stays frozen at runOver — no same-floor
+  // respawn — until an explicit startNewRun (the restart action) begins a fresh run.
   if (!p.alive) {
-    state.deathTimer -= dt;
-    if (state.deathTimer <= 0) resetRun(state);
+    if (state.deathTimer > 0) {
+      state.deathTimer -= dt;
+      if (state.deathTimer <= 0) state.runOver = true;
+    }
     return;
   }
 
