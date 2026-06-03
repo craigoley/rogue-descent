@@ -59,6 +59,8 @@ export class HUD {
   private readonly healthFill: HTMLDivElement;
   private readonly dashFill: HTMLDivElement;
   private readonly depthEl: HTMLDivElement;
+  private readonly pierceChip: HTMLSpanElement;
+  private readonly knockbackChip: HTMLSpanElement;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -100,6 +102,30 @@ export class HUD {
     };
     this.healthFill = makeBar('HEALTH', 'is-health', 'hud-health');
     this.dashFill = makeBar('DASH', 'is-dash', 'hud-dash');
+
+    // Active-powerup chips (third row) — always visible so BOTH slots read at a
+    // glance; dimmed when not held, lit + glowing when held. Now that powerups
+    // persist across descent you can carry a build for many floors, so this is
+    // the standing reminder of what you have. Colour is the verb language
+    // (pierce = projectile blue, knockback = melee orange). Glyphs are CSS-drawn
+    // (not font dingbats) so they reliably take --chip-color on every device.
+    // No separate text label (unlike HEALTH/DASH): the chips name themselves, so
+    // a label would be redundant AND push the row toward the right-hand minimap
+    // at narrow widths — the self-labelling chips keep it tidy in the left column.
+    const powersRow = document.createElement('div');
+    powersRow.className = 'hud-bar-row is-powers hud-powers';
+    const makeChip = (text: string, mod: string, color: string): HTMLSpanElement => {
+      const chip = document.createElement('span');
+      chip.className = `hud-chip ${mod}`;
+      chip.textContent = text;
+      chip.style.setProperty('--chip-color', color);
+      powersRow.appendChild(chip);
+      return chip;
+    };
+    this.pierceChip = makeChip('PIERCE', 'is-pierce', CSS_PALETTE.projectile);
+    this.knockbackChip = makeChip('KNOCKBACK', 'is-knockback', CSS_PALETTE.melee);
+    bars.appendChild(powersRow);
+
     container.appendChild(bars);
 
     // One-time dodge tutorial — revealed the first time an enemy telegraphs (the
@@ -206,6 +232,11 @@ export class HUD {
 
     // Depth (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
+
+    // Active powerups (always): lit when held, dimmed when not. Persists across
+    // descent, so this is the only on-screen reminder of the carried build.
+    this.pierceChip.classList.toggle('is-on', state.player.pierce);
+    this.knockbackChip.classList.toggle('is-on', state.player.meleeKnockback);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);

@@ -57,6 +57,10 @@ export const CSS_PALETTE = {
   wall: '#35356a',
   player: '#33ffcc',
   accent: '#ff3366',
+  /** Verb colours for the HTML HUD (mirror PALETTE.melee / PALETTE.projectile),
+   *  e.g. the active-powerup chips: knockback orange, pierce blue. */
+  melee: '#ff7a1a',
+  projectile: '#4488ff',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
