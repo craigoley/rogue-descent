@@ -195,7 +195,12 @@ export function nextFloorSeed(seed: number, depth: number): number {
 function descendIfReady(state: GameState): boolean {
   const stairs = state.stairs;
   // All-cleared is monotonic (cleared is terminal), so this just tracks progress.
-  stairs.active = state.rooms.every((r) => r.phase === 'cleared');
+  // For-loop (not .every()) to avoid per-frame closure allocation.
+  let allCleared = true;
+  for (let i = 0; i < state.rooms.length; i++) {
+    if (state.rooms[i].phase !== 'cleared') { allCleared = false; break; }
+  }
+  stairs.active = allCleared;
   if (!stairs.active) return false;
   const p = state.player;
   if (Math.hypot(p.x - stairs.x, p.y - stairs.y) > DESCENT.contactRadius) return false;

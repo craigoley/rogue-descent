@@ -371,6 +371,8 @@ export const STAIRS = {
   /** Scale-pulse amplitude + speed (rad/s) so the active exit throbs. */
   pulseAmp: 0.12,
   pulseRate: 4,
+  /** Translucency of the floor ring. */
+  ringOpacity: 0.9,
   /** Billboarded "DESCEND" glyph height above the floor + on-screen size. */
   glyphHeight: 1.6,
   glyphSize: 1.1,

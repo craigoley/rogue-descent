@@ -359,7 +359,7 @@ export class EntityRenderer {
     // shown only when the floor is cleared so the exit reads instantly. ---
     this.stairsRing = new Mesh(
       new TorusGeometry(STAIRS.ringRadius, STAIRS.ringTube, 8, 32),
-      new MeshBasicMaterial({ color: PALETTE.stairs, transparent: true, opacity: 0.9 }),
+      new MeshBasicMaterial({ color: PALETTE.stairs, transparent: true, opacity: STAIRS.ringOpacity }),
     );
     this.stairsRing.rotation.x = -Math.PI / 2; // lay flat on the floor
     this.stairsRing.visible = false;
