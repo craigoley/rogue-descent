@@ -243,6 +243,19 @@ export const TOUCH = {
   hintFadeMs: 7000,
 } as const;
 
+/**
+ * Touch AIM/FIRE feel (Phase 6.6). Auto-fire is gated on AIM-ENGAGED (thumb on
+ * the aim ring), not on the encounter phase — so the player fires when they
+ * CHOOSE to aim, and melee is the option when they don't. Fire CONTINUES toward
+ * the retained last-aim for a short window after the thumb lifts, so a flick-to-
+ * aim then lift-to-tap-melee/dash doesn't kill the burst (preserves the 6.5
+ * thumb-overload fix). firePersistMs is the on-device tuning knob.
+ */
+export const AIM = {
+  /** Fire persists this long (ms) after the aim thumb lifts before it stops. */
+  firePersistMs: 500,
+} as const;
+
 // ============================================================================
 // COMBAT (Phase 2). Feel values that benefit from on-device tuning live in
 // TUNING above (sliders). Structural values — ranges, durations, pool sizes —

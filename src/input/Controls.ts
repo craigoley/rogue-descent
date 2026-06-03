@@ -7,8 +7,9 @@
  *  - Desktop: WASD/arrows move; MOUSE aims (the loop computes aim from the
  *    player's screen position); LEFT mouse or K = ranged (held, auto-fires);
  *    RIGHT mouse or J = melee; SPACE = dash.
- *  - Mobile: LEFT half = move stick; RIGHT half = aim stick (auto-fires ranged
- *    while deflected); on-screen MELEE and DASH buttons.
+ *  - Mobile: LEFT half = move stick; RIGHT half = aim stick — auto-fires ranged
+ *    while AIM IS ENGAGED (thumb on the ring) and for a brief persistence window
+ *    after lift; on-screen MELEE and DASH buttons.
  *
  * Keyboard and touch are at PARITY: both feed the same intent through the same
  * pure rotation in Player. Edge actions (dash, melee) are set here and CONSUMED
@@ -16,7 +17,7 @@
  */
 
 import { createIntent, dragAxes, keyAxes, type InputIntent } from '../game/Input';
-import { TOUCH } from '../utils/constants';
+import { AIM, TOUCH } from '../utils/constants';
 
 export class Controls {
   readonly intent: InputIntent = createIntent();
@@ -31,15 +32,14 @@ export class Controls {
   private leftMouseDown = false;
   private kHeld = false;
 
-  // --- Phase 6.5 mobile auto-fire (Option B) --------------------------------
+  // --- Phase 6.6 touch auto-fire (AIM-ENGAGED gated) ------------------------
   /** True on a touch device (decided once in the constructor). The auto-fire
    *  gating and aim-persistence below apply ONLY here — desktop is unchanged. */
   private isTouch = false;
-  /** Whether the player's current room is in active combat (encounter 'active').
-   *  Driven each frame from main.ts via setEncounter(game.activeRoom). */
-  private combatActive = false;
-  /** Last room index seen via setEncounter, to detect entering a NEW fight. */
-  private activeRoomIdx = -1;
+  /** Seconds of fire remaining AFTER the aim thumb lifts (the persistence
+   *  window). While > 0, fire continues toward the retained last-aim so lifting
+   *  the thumb to tap MELEE/DASH doesn't kill the burst. Ticked in tickFire(). */
+  private firePersistTimer = 0;
 
   // Two independent touches: move (left half) and aim (right half).
   private moveTouchId: number | null = null;
@@ -73,9 +73,10 @@ export class Controls {
     this.moveThumb = Controls.makeStick('touch-stick-thumb');
     this.aimBase = Controls.makeStick('touch-stick-base touch-aim');
     this.aimThumb = Controls.makeStick('touch-stick-thumb touch-aim');
-    // The aim stick is the ranged AIM control. Since Phase 6.5 it no longer
-    // triggers fire (firing is automatic during combat — Option B), so it's
-    // labelled "AIM" only; it rests at a visible "home" (placeAimHome).
+    // The aim stick is the ranged AIM control: engaging it (thumb on the ring)
+    // auto-fires toward the aim, and fire persists briefly after lift (Phase 6.6
+    // — gated on aim, not the encounter phase). Labelled "AIM"; rests at a
+    // visible "home" (placeAimHome).
     const aimLabel = document.createElement('span');
     aimLabel.className = 'touch-aim-label';
     aimLabel.textContent = 'AIM';
@@ -187,33 +188,49 @@ export class Controls {
     this.intent.moveY = a.moveY;
   }
 
+  /** True while touch fire is on: the aim thumb is engaged, or we're still in the
+   *  post-lift persistence window. Touch only — desktop never sets these. */
+  private fireEngaged(): boolean {
+    return this.aimTouchId !== null || this.firePersistTimer > 0;
+  }
+
   private updateRanged(): void {
-    // Desktop: held L-mouse or K (UNCHANGED). Touch: auto-fire while the room is
-    // in active combat — the thumb only aims, never holds-to-fire (Option B).
-    // `aimActive` was removed: it was only ever true on touch and is replaced by
-    // the encounter gate, so this is byte-for-byte identical on desktop.
-    this.intent.ranged = this.leftMouseDown || this.kHeld || (this.isTouch && this.combatActive);
+    // Desktop: held L-mouse or K (UNCHANGED — isTouch is false, so the touch term
+    // drops and this is byte-for-byte the old behaviour). Touch (Phase 6.6):
+    // auto-fire while AIM IS ENGAGED (thumb on the ring) or within the brief
+    // persistence window after lift — NOT gated on the encounter phase, so the
+    // player fires when they choose to aim and melee is the no-aim option.
+    this.intent.ranged = this.leftMouseDown || this.kHeld || (this.isTouch && this.fireEngaged());
+  }
+
+  /** Reflect actual firing on the aim ring (blue "is-firing" pulse). Touch only. */
+  private updateFireIndicator(): void {
+    this.aimBase.classList.toggle('is-firing', this.isTouch && this.fireEngaged());
   }
 
   /**
-   * Per-frame combat gate from the loop (main.ts passes game.activeRoom). Touch
-   * ONLY: enables auto-fire while a room is active, and COLD-STARTS the retained
-   * aim each time a new fight begins so the first shots go toward facing until
-   * the player flicks the ring. Desktop is a no-op (its fire path is untouched).
+   * Per-frame tick from the loop (main.ts passes the real frame dt, seconds).
+   * Counts down the post-lift fire-persistence window and refreshes the ranged
+   * intent + indicator so fire stops cleanly when the window expires. Desktop is
+   * a no-op (its fire path is event-driven and untouched).
    */
-  setEncounter(activeRoom: number): void {
+  tickFire(dt: number): void {
     if (!this.isTouch) return;
-    if (activeRoom !== this.activeRoomIdx) {
-      this.activeRoomIdx = activeRoom;
-      if (activeRoom >= 0) {
-        // New fight: forget last room's aim -> facing-fire until a flick.
-        this.intent.aimX = 0;
-        this.intent.aimY = 0;
-      }
+    if (this.aimTouchId === null && this.firePersistTimer > 0) {
+      this.firePersistTimer = Math.max(0, this.firePersistTimer - dt);
     }
-    this.combatActive = activeRoom >= 0;
-    this.aimBase.classList.toggle('is-firing', this.combatActive);
     this.updateRanged();
+    this.updateFireIndicator();
+  }
+
+  // ?debug telemetry (read by the HUD readout). Cheap getters; no allocation.
+  /** Whether the aim thumb is currently down on the ring. */
+  get aimEngaged(): boolean {
+    return this.aimTouchId !== null;
+  }
+  /** Milliseconds of fire left after the thumb lifted (0 when not persisting). */
+  get firePersistRemainingMs(): number {
+    return Math.round(this.firePersistTimer * 1000);
   }
 
   // --- Mouse ----------------------------------------------------------------
@@ -260,6 +277,11 @@ export class Controls {
         this.aimOX = t.clientX;
         this.aimOY = t.clientY;
         this.showAim(t.clientX, t.clientY);
+        // Aim engaged -> fire starts now (toward retained aim / facing until a
+        // deflect). Clear any leftover persistence; we're holding again.
+        this.firePersistTimer = 0;
+        this.updateRanged();
+        this.updateFireIndicator();
         e.preventDefault();
       }
     }
@@ -298,9 +320,14 @@ export class Controls {
         Controls.hideStick(this.moveBase, this.moveThumb);
       } else if (t.identifier === this.aimTouchId) {
         this.aimTouchId = null;
-        // Phase 6.5: do NOT zero the aim — the retained direction persists so
-        // fire continues toward it after the thumb lifts (frees it for taps).
+        // Phase 6.6: keep firing toward the retained aim for a brief window after
+        // lift, so a flick-to-aim then lift-to-tap-melee/dash doesn't kill the
+        // burst (the 6.5 thumb-overload fix). The aim direction itself is NOT
+        // zeroed, so the persisted shots keep their heading.
+        this.firePersistTimer = AIM.firePersistMs / 1000;
         this.restAim();
+        this.updateRanged();
+        this.updateFireIndicator();
       }
     }
   };
