@@ -223,7 +223,17 @@ function descendIfReady(state: GameState): boolean {
   // Descend: run state PERSISTS (mutated, not reset) across the floor change.
   state.run.depth += 1;
   state.run.floorsCleared += 1;
+  // Descent COMPOUNDS the build: carry the within-run powerups + current health
+  // to the next floor so descending feels like GROWTH, not a wipe. Captured BY
+  // VALUE before loadFloor (which swaps in a fresh createPlayer at the new spawn)
+  // and re-applied after. Only DEATH / new-run reset these — via the untouched
+  // loadFloor→createPlayer path in startNewRun. Position is NOT carried: the
+  // player still moves to the new floor's spawn point.
+  const carried = { pierce: p.pierce, meleeKnockback: p.meleeKnockback, health: p.health };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
+  state.player.pierce = carried.pierce;
+  state.player.meleeKnockback = carried.meleeKnockback;
+  state.player.health = carried.health;
   return true;
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, update, nextFloorSeed, type GameState } from '../GameState';
+import { createGameState, update, nextFloorSeed, startNewRun, type GameState } from '../GameState';
 import { createIntent } from '../Input';
-import { DESCENT, SIM_DT } from '../../utils/constants';
+import { DESCENT, PLAYER_COMBAT, SIM_DT } from '../../utils/constants';
 
 const DT = SIM_DT;
 const idle = createIntent;
@@ -123,6 +123,57 @@ describe('Descent — stepping on active stairs descends', () => {
     update(s, idle(), DT); // -> depth 3 (new floor)
     expect(s.run.depth).toBe(3);
     expect(s.run.floorsCleared).toBe(2);
+  });
+});
+
+describe('Descent — the build COMPOUNDS across floors', () => {
+  it('descent preserves both powerups + current health (no refill, no reset)', () => {
+    const s = createGameState();
+    // Build up a within-run state on floor 1.
+    s.player.pierce = true;
+    s.player.meleeKnockback = true;
+    s.player.health = 50; // hurt, below max — must NOT be refilled by descending
+    expect(s.player.health).toBeLessThan(PLAYER_COMBAT.maxHealth);
+
+    clearFloor(s, 1);
+    standOnStairs(s);
+    update(s, idle(), DT); // DESCEND to floor 2
+
+    expect(s.run.depth).toBe(2); // confirm we actually descended
+    expect(s.player.pierce).toBe(true); // carried
+    expect(s.player.meleeKnockback).toBe(true); // carried
+    expect(s.player.health).toBe(50); // carried verbatim — NOT refilled, NOT reset
+  });
+
+  it('the build keeps compounding across multiple descents', () => {
+    const s = createGameState();
+    s.player.pierce = true;
+    s.player.health = 40;
+
+    clearFloor(s, 1);
+    standOnStairs(s);
+    update(s, idle(), DT); // -> depth 2
+    clearFloor(s, 1);
+    standOnStairs(s);
+    update(s, idle(), DT); // -> depth 3
+
+    expect(s.run.depth).toBe(3);
+    expect(s.player.pierce).toBe(true); // still carried two floors down
+    expect(s.player.health).toBe(40); // still the carried value
+  });
+
+  it('a NEW run fully resets the player (toggles off, health full)', () => {
+    const s = createGameState();
+    s.player.pierce = true;
+    s.player.meleeKnockback = true;
+    s.player.health = 50;
+
+    startNewRun(s, 4242);
+
+    expect(s.run.depth).toBe(1);
+    expect(s.player.pierce).toBe(false); // reset
+    expect(s.player.meleeKnockback).toBe(false); // reset
+    expect(s.player.health).toBe(PLAYER_COMBAT.maxHealth); // refilled
   });
 });
 
