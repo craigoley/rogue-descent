@@ -105,14 +105,31 @@ export function updateEncounterEntry(state: GameState): void {
   setDoors(state, enc, true);
 }
 
+/** Move the descent stairs into a room (its centre, world units). Called every
+ *  time a room clears, so after the FINAL clear the stairs sit in the LAST-
+ *  cleared room — where the player's momentum already is, so descent flows out
+ *  of the final fight instead of a backtrack to a far room. Intermediate moves
+ *  are invisible: GameState only flips stairs.active once every room is cleared. */
+function placeStairs(state: GameState, roomIdx: number): void {
+  const r = state.rooms[roomIdx].rect;
+  const ts = state.room.tileSize;
+  state.stairs.roomIndex = roomIdx;
+  state.stairs.x = (r.x + r.w / 2) * ts;
+  state.stairs.y = (r.y + r.h / 2) * ts;
+}
+
 /** Clear the active room once all its enemies are dead: unlock its doors. */
 export function updateEncounterResolve(state: GameState): void {
   if (state.activeRoom < 0) return;
   const enc = state.rooms[state.activeRoom];
   if (enc.phase === 'active' && activeEnemyCount(state.enemies) === 0) {
+    const clearedIdx = state.activeRoom;
     enc.phase = 'cleared';
     setDoors(state, enc, false);
     state.activeRoom = -1;
+    // Stairs follow the most-recently-cleared room; the final clear lands them
+    // in the last-cleared room (the descent-flow fix).
+    placeStairs(state, clearedIdx);
   }
 }
 
