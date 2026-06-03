@@ -161,7 +161,7 @@ function loadFloor(state: GameState, seed: number): void {
   for (const p of state.projectiles) p.active = false;
   for (const p of state.particles) p.active = false;
   for (const pk of state.pickups) pk.active = false;
-  state.rooms = buildEncounters(floor);
+  state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
   state.activeRoom = -1;
   // Stairs start UNPLACED + inactive: they're positioned by the encounter resolve
   // as rooms clear (into the LAST-cleared room) and only shown once all rooms are

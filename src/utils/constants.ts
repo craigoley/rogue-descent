@@ -355,10 +355,39 @@ export const POOL = {
 
 /** Per-room encounter shape. */
 export const ENCOUNTER = {
-  /** Enemies spawned when a room activates (must be <= POOL.enemies). */
+  /** Enemies spawned when a room activates (must be <= POOL.enemies). This is the
+   *  BASE (depth-1) count; depth scaling adds to it (see DIFFICULTY). */
   enemiesPerRoom: 3,
   /** Radius (world units) of the spawn ring around a room's centre. */
   spawnSpread: 1.5,
+} as const;
+
+/**
+ * Depth-based difficulty scaling (Phase 7c) — the ONE existing enemy type only
+ * (no new AI; that's Phase 7.5). Drives off run.depth. Depth 1 = baseline
+ * (multipliers = 1.0, count = ENCOUNTER.enemiesPerRoom), so floor 1 is unchanged.
+ *
+ * Curve (all GENTLE, linear in depth so it's smooth + monotonic, no spikes):
+ *   enemiesPerRoom(d) = min(POOL.enemies, base + floor((d-1) * perDepth))
+ *   mult(d)           = 1 + (d-1) * perDepthMult
+ *
+ * "More sometimes, harder sometimes": count rises a LITTLE (every ~2 depths) and
+ * caps at the pool, while the stat multipliers carry the ramp afterwards. Tuned
+ * for a good run to reach ~depth 5-6 (e.g. depth 5: ~5 enemies, ~1.7x HP, ~1.5x
+ * damage, ~1.16x speed). Speed scales SMALL on purpose — fast enemies get unfair
+ * quickly. Powerups CARRY across floors (7a), so the player also strengthens with
+ * depth; these values are meant to out-scale that GENTLY, not trivially — the
+ * knobs Craig tunes from playtest.
+ */
+export const DIFFICULTY = {
+  /** Extra enemies per room per depth (floored). 0.5 => +1 every 2 depths. */
+  enemiesPerRoomPerDepth: 0.5,
+  /** Enemy max-health multiplier added per depth. */
+  healthMultPerDepth: 0.18,
+  /** Enemy attack-damage multiplier added per depth. */
+  damageMultPerDepth: 0.12,
+  /** Enemy move-speed multiplier added per depth (kept small — see above). */
+  speedMultPerDepth: 0.04,
 } as const;
 
 /**

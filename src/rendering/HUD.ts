@@ -14,6 +14,12 @@
 import type { GameState } from '../game/GameState';
 import { isoRotate, type InputIntent } from '../game/Input';
 import type { Controls } from '../input/Controls';
+import {
+  damageMultForDepth,
+  enemiesPerRoomForDepth,
+  healthMultForDepth,
+  speedMultForDepth,
+} from '../game/Difficulty';
 import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
@@ -235,6 +241,10 @@ export class HUD {
       `  all-cleared ${cleared === state.rooms.length}  stairs-active ${state.stairs.active}  ` +
       `stairs-room ${state.stairs.roomIndex}\n` +
       `RUN  over ${state.runOver}  time ${state.run.timeSec.toFixed(1)}s  best DEPTH ${loadBest().depth}\n` +
+      `DIFFICULTY  enemies/room ${enemiesPerRoomForDepth(state.run.depth)}  ` +
+      `hp x${healthMultForDepth(state.run.depth).toFixed(2)}  ` +
+      `dmg x${damageMultForDepth(state.run.depth).toFixed(2)}  ` +
+      `spd x${speedMultForDepth(state.run.depth).toFixed(2)}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
