@@ -11,7 +11,7 @@
  */
 
 import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
-import { createPlayer, updatePlayer, type PlayerState } from './Player';
+import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
 import {
@@ -101,7 +101,13 @@ export interface GameState {
   /** Seeded RNG for drop rolls (separate stream from generation). */
   dropRng: Rng;
   /** Per-kind drop tally for the ?debug funnel (within-run; reset on death). */
-  dropCounts: { health: number; pierce: number; knockback: number };
+  dropCounts: {
+    health: number;
+    pierce: number;
+    knockback: number;
+    extraCharge: number;
+    fasterRecharge: number;
+  };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
   /** Screen-shake countdown, seconds (renderer reads it). */
@@ -137,7 +143,7 @@ export function createGameState(): GameState {
     activeRoom: -1,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, pierce: 0, knockback: 0 },
+    dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -175,6 +181,8 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.health = 0;
   state.dropCounts.pierce = 0;
   state.dropCounts.knockback = 0;
+  state.dropCounts.extraCharge = 0;
+  state.dropCounts.fasterRecharge = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -229,11 +237,21 @@ function descendIfReady(state: GameState): boolean {
   // and re-applied after. Only DEATH / new-run reset these — via the untouched
   // loadFloor→createPlayer path in startNewRun. Position is NOT carried: the
   // player still moves to the new floor's spawn point.
-  const carried = { pierce: p.pierce, meleeKnockback: p.meleeKnockback, health: p.health };
+  const carried = {
+    pierce: p.pierce,
+    meleeKnockback: p.meleeKnockback,
+    extraCharge: p.extraCharge,
+    fasterRecharge: p.fasterRecharge,
+    health: p.health,
+  };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
   state.player.pierce = carried.pierce;
   state.player.meleeKnockback = carried.meleeKnockback;
+  state.player.extraCharge = carried.extraCharge;
+  state.player.fasterRecharge = carried.fasterRecharge;
   state.player.health = carried.health;
+  // Arrive on the new floor with dash FULL (charges reflect the carried cap).
+  state.player.dashCharges = dashMaxCharges(state.player);
   return true;
 }
 

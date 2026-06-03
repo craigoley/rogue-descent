@@ -136,25 +136,72 @@ function drawBurst(g: CanvasRenderingContext2D, s: number, color: string): void 
   }
 }
 
-/** Per-drop-kind presentation: VERB colour + glyph + toast label. Powerups
- *  borrow the verb colour (pierce = projectile blue, knockback = melee orange)
- *  so the drop reads as the verb it upgrades; health keeps its own green. */
+/** A double right-chevron (EXTRA-CHARGE — a second dash / "more dashes"). Two
+ *  stacked chevrons read as "+1", distinct from the single pierce arrow. */
+function drawDoubleChevron(g: CanvasRenderingContext2D, s: number, color: string): void {
+  g.strokeStyle = color;
+  g.lineWidth = s * 0.14;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const ox of [s * 0.28, s * 0.52]) {
+    g.beginPath();
+    g.moveTo(ox, s * 0.24);
+    g.lineTo(ox + s * 0.2, s * 0.5);
+    g.lineTo(ox, s * 0.76);
+    g.stroke();
+  }
+}
+
+/** A circular recharge arrow (FASTER-RECHARGE — charges refill quicker). A near-
+ *  full ring with an arrowhead reads as "cycle/refill", distinct from the burst. */
+function drawRecharge(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const c = s / 2;
+  const r = s * 0.3;
+  g.strokeStyle = color;
+  g.fillStyle = color;
+  g.lineWidth = s * 0.12;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.arc(c, c, r, -Math.PI * 0.35, Math.PI * 1.35); // open ring (gap top-right)
+  g.stroke();
+  // Arrowhead at the ring's open (top) end.
+  const ax = c + Math.cos(-Math.PI * 0.35) * r;
+  const ay = c + Math.sin(-Math.PI * 0.35) * r;
+  const h = s * 0.16;
+  g.beginPath();
+  g.moveTo(ax + h, ay);
+  g.lineTo(ax - h * 0.4, ay - h);
+  g.lineTo(ax - h * 0.4, ay + h);
+  g.closePath();
+  g.fill();
+}
+
+/** Per-drop-kind presentation: VERB/system colour + glyph + toast label. The
+ *  verb powerups borrow their verb colour (pierce = ranged blue, knockback =
+ *  melee orange); the two DASH powerups share the dash magenta and differ by
+ *  glyph; health keeps its own green. */
 const DROP_COLOR: Record<PickupKind, number> = {
   health: PALETTE.pickupHealth,
   pierce: PALETTE.projectile,
   knockback: PALETTE.melee,
+  extraCharge: PALETTE.dash,
+  fasterRecharge: PALETTE.dash,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
   pierce: drawArrow,
   knockback: drawBurst,
+  extraCharge: drawDoubleChevron,
+  fasterRecharge: drawRecharge,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
   pierce: 'PIERCE',
   knockback: 'KNOCKBACK',
+  extraCharge: 'EXTRA DASH',
+  fasterRecharge: 'FAST DASH',
 };
-const DROP_KINDS: PickupKind[] = ['health', 'pierce', 'knockback'];
+const DROP_KINDS: PickupKind[] = ['health', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge'];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
 interface FigureGeos {
@@ -303,15 +350,11 @@ export class EntityRenderer {
     // --- Pickup type-icons: a billboard glyph per kind (cross = health, arrow =
     // pierce, burst = knockback) so the drop's MEANING reads at a glance, not
     // just its colour. One shared material per kind; one pooled sprite per slot. ---
-    this.iconMats = {
-      health: new SpriteMaterial({ transparent: true }),
-      pierce: new SpriteMaterial({ transparent: true }),
-      knockback: new SpriteMaterial({ transparent: true }),
-    };
+    this.iconMats = {} as Record<PickupKind, SpriteMaterial>;
     for (const kind of DROP_KINDS) {
-      this.iconMats[kind].map = iconTexture((g, s) =>
-        DROP_GLYPH[kind](g, s, cssHex(DROP_COLOR[kind])),
-      );
+      const mat = new SpriteMaterial({ transparent: true });
+      mat.map = iconTexture((g, s) => DROP_GLYPH[kind](g, s, cssHex(DROP_COLOR[kind])));
+      this.iconMats[kind] = mat;
     }
     for (let i = 0; i < POOL.pickups; i++) {
       const sp = new Sprite(this.iconMats.health);
@@ -324,13 +367,12 @@ export class EntityRenderer {
 
     // --- On-collect toasts (pooled; each its own material so they fade
     // independently). One shared texture per kind, swapped onto a toast on fire. ---
-    const th = textTexture(DROP_LABEL.health, cssHex(DROP_COLOR.health));
-    this.toastTex = {
-      health: th.tex,
-      pierce: textTexture(DROP_LABEL.pierce, cssHex(DROP_COLOR.pierce)).tex,
-      knockback: textTexture(DROP_LABEL.knockback, cssHex(DROP_COLOR.knockback)).tex,
-    };
-    this.toastAspect = th.aspect;
+    this.toastTex = {} as Record<PickupKind, CanvasTexture>;
+    for (const kind of DROP_KINDS) {
+      const t = textTexture(DROP_LABEL[kind], cssHex(DROP_COLOR[kind]));
+      this.toastTex[kind] = t.tex;
+      this.toastAspect = t.aspect; // identical for all (fixed 256x64 canvas)
+    }
     for (let i = 0; i < TOAST.count; i++) {
       const sp = new Sprite(new SpriteMaterial({ transparent: true, opacity: 0, depthTest: false }));
       sp.scale.set(TOAST.size * this.toastAspect, TOAST.size, 1);

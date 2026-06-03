@@ -13,6 +13,7 @@
 
 import type { GameState } from '../game/GameState';
 import { isoRotate, type InputIntent } from '../game/Input';
+import { dashMaxCharges } from '../game/Player';
 import type { Controls } from '../input/Controls';
 import {
   damageMultForDepth,
@@ -57,7 +58,8 @@ export class HUD {
   private readonly debug: boolean;
   private readonly readoutEl: HTMLPreElement | null = null;
   private readonly healthFill: HTMLDivElement;
-  private readonly dashFill: HTMLDivElement;
+  private readonly dashPips: HTMLDivElement[] = [];
+  private readonly dashPipFills: HTMLDivElement[] = [];
   private readonly depthEl: HTMLDivElement;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
@@ -99,7 +101,31 @@ export class HUD {
       return fill;
     };
     this.healthFill = makeBar('HEALTH', 'is-health', 'hud-health');
-    this.dashFill = makeBar('DASH', 'is-dash', 'hud-dash');
+
+    // Dash is a CHARGE economy, not a single bar: a labelled row of pip segments
+    // (one per max charge). Filled pips = available charges; the recharging pip
+    // shows partial fill. Build the max possible (DASH.baseCharges + bonus) and
+    // show/hide per the player's current cap each frame.
+    const dashRow = document.createElement('div');
+    dashRow.className = 'hud-bar-row is-dash';
+    const dashLabel = document.createElement('span');
+    dashLabel.className = 'hud-bar-label';
+    dashLabel.textContent = 'DASH';
+    const pips = document.createElement('div');
+    pips.className = 'hud-dash-pips';
+    const maxPips = DASH.baseCharges + DASH.extraChargeBonus;
+    for (let i = 0; i < maxPips; i++) {
+      const pip = document.createElement('div');
+      pip.className = 'hud-dash-pip';
+      const fill = document.createElement('div');
+      fill.className = 'hud-dash-pip-fill';
+      pip.appendChild(fill);
+      pips.appendChild(pip);
+      this.dashPips.push(pip);
+      this.dashPipFills.push(fill);
+    }
+    dashRow.append(dashLabel, pips);
+    bars.appendChild(dashRow);
     container.appendChild(bars);
 
     // One-time dodge tutorial — revealed the first time an enemy telegraphs (the
@@ -197,12 +223,23 @@ export class HUD {
   ): void {
     const p = state.player;
 
-    // Combat HUD (always): health fraction + dash readiness (0 = cooling down).
+    // Combat HUD (always): health fraction + dash charge pips.
     const hp = Math.max(0, p.health) / PLAYER_COMBAT.maxHealth;
     this.healthFill.style.width = `${(hp * 100).toFixed(1)}%`;
-    const dashTotal = DASH.duration + TUNING.dashCooldown;
-    const dashReady = 1 - Math.min(1, p.dashCdTimer / dashTotal);
-    this.dashFill.style.width = `${(dashReady * 100).toFixed(1)}%`;
+
+    // Dash pips: show `maxCharges` of them; full = available charge, the next pip
+    // shows the in-progress recharge, the rest empty.
+    const maxCharges = dashMaxCharges(p);
+    const rechargeTime = TUNING.dashRecharge * (p.fasterRecharge ? TUNING.dashFasterRechargeFactor : 1);
+    const rechargeProg =
+      p.dashRechargeTimer > 0 ? 1 - Math.min(1, p.dashRechargeTimer / rechargeTime) : 0;
+    for (let i = 0; i < this.dashPips.length; i++) {
+      const shown = i < maxCharges;
+      this.dashPips[i].style.display = shown ? '' : 'none';
+      if (!shown) continue;
+      const fill = i < p.dashCharges ? 1 : i === p.dashCharges ? rechargeProg : 0;
+      this.dashPipFills[i].style.width = `${(fill * 100).toFixed(1)}%`;
+    }
 
     // Depth (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
@@ -248,9 +285,14 @@ export class HUD {
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
-      `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}\n` +
+      `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}  ` +
+      `xcharge ${state.player.extraCharge ? 'ON' : 'off'}  ` +
+      `frecharge ${state.player.fasterRecharge ? 'ON' : 'off'}\n` +
+      `dash  charges ${state.player.dashCharges}/${dashMaxCharges(state.player)}  ` +
+      `recharge ${state.player.dashRechargeTimer.toFixed(2)}s\n` +
       `drops spawned ${spawned} / collected ${collected}` +
-      `   (hp ${state.dropCounts.health} · pierce ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback})\n` +
+      `   (hp ${state.dropCounts.health} · pi ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback}` +
+      ` · xc ${state.dropCounts.extraCharge} · fr ${state.dropCounts.fasterRecharge})\n` +
       `FIRE  aimEngaged ${controls.aimEngaged}  ranged ${intent.ranged}  ` +
       `persist ${controls.firePersistRemainingMs}ms\n` +
       `\n` +

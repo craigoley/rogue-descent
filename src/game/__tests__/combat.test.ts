@@ -73,13 +73,13 @@ describe('Dash', () => {
     expect(p.x).toBeGreaterThan(9);
   });
 
-  it('respects cooldown — a second dash during cooldown does nothing', () => {
+  it('respects charges — a second dash before recharge does nothing', () => {
     const p = createPlayer(7, 7);
     updatePlayer(p, dashIntent(), DT, room);
     while (p.dashTimer > 0) updatePlayer(p, createIntent(), DT, room);
     const xAfterFirst = p.x;
-    expect(p.dashCdTimer).toBeGreaterThan(0);
-    updatePlayer(p, dashIntent(), DT, room); // requested while on cooldown
+    expect(p.dashCharges).toBe(0); // the one charge was spent (still recharging)
+    updatePlayer(p, dashIntent(), DT, room); // requested with no charge
     expect(p.dashTimer).toBe(0); // no new dash
     expect(p.x - xAfterFirst).toBeLessThan(0.5); // didn't burst again
   });

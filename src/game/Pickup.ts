@@ -1,20 +1,26 @@
 /**
- * Within-run drops: EXACTLY three kinds — health (restore HP) and two
- * VERB-COUPLED powerups: PIERCE (ranged shots pass through enemies) and
- * KNOCKBACK (melee hits launch enemies). Powerups are binary toggles that change
- * what a verb DOES; they last the rest of the run and vanish on death. Pure:
- * ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning never grows it.
+ * Within-run drops: health (restore HP) + FOUR powerups. Two are verb-coupled —
+ * PIERCE (ranged shots pass through enemies) and KNOCKBACK (melee launches) — and
+ * two upgrade the dash ECONOMY: EXTRA-CHARGE (a second dash before recharge) and
+ * FASTER-RECHARGE (charges refill quicker). Powerups are binary toggles that
+ * change what a verb/resource DOES; they last the rest of the run (carried across
+ * descent) and vanish on death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool
+ * (POOL.pickups); spawning never grows it.
  *
- * NOT an item system: no inventory, no rarity, no stacking — three kinds, rolled
- * by a seeded RNG, applied immediately on touch.
+ * NOT an item system: no inventory, no rarity, no stacking — rolled by a seeded
+ * RNG, applied immediately on touch.
  */
 
-import { DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL } from '../utils/constants';
+import { DASH, DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL } from '../utils/constants';
 import type { Rng } from '../utils/rng';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 
-export type PickupKind = 'health' | 'pierce' | 'knockback';
+export type PickupKind = 'health' | 'pierce' | 'knockback' | 'extraCharge' | 'fasterRecharge';
+
+/** The powerup kinds (everything except health), picked uniformly when a drop is
+ *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll). */
+const POWERUP_KINDS: readonly PickupKind[] = ['pierce', 'knockback', 'extraCharge', 'fasterRecharge'];
 
 export interface Pickup {
   active: boolean;
@@ -60,13 +66,14 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, pierce, or knockback. Deterministic per
- *  RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the second
- *  (only consumed for a powerup) splits pierce vs knockback. */
+/** Seeded drop roll: nothing, health, or one of the four powerups. Deterministic
+ *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
+ *  second (only consumed for a powerup) picks uniformly among POWERUP_KINDS. */
 export function rollDrop(rng: Rng): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
   if (rng.next() < DROP.healthShare) return 'health';
-  return rng.next() < DROP.pierceShare ? 'pierce' : 'knockback';
+  const i = Math.min(POWERUP_KINDS.length - 1, Math.floor(rng.next() * POWERUP_KINDS.length));
+  return POWERUP_KINDS[i];
 }
 
 /** Apply a pickup's effect immediately. Health is capped at max; the powerups
@@ -76,8 +83,14 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     player.health = Math.min(PLAYER_COMBAT.maxHealth, player.health + DROP.healAmount);
   } else if (kind === 'pierce') {
     player.pierce = true;
-  } else {
+  } else if (kind === 'knockback') {
     player.meleeKnockback = true;
+  } else if (kind === 'extraCharge') {
+    // Raise the dash cap and grant the new charge immediately (felt on pickup).
+    player.extraCharge = true;
+    player.dashCharges = DASH.baseCharges + DASH.extraChargeBonus;
+  } else {
+    player.fasterRecharge = true;
   }
 }
 
