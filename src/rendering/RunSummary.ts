@@ -81,10 +81,11 @@ export class RunSummary {
     window.addEventListener('keydown', this.onKey);
   }
 
-  /** Desktop: Enter / Space restart while the summary is up. */
+  /** Desktop: Enter restarts while the summary is up. (Space is intentionally
+   *  NOT bound — it's the dash key, and would queue a stray dash on the new run.) */
   private onKey = (e: KeyboardEvent): void => {
     if (!this.shown) return;
-    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    if (e.key === 'Enter') {
       e.preventDefault();
       this.onRestart();
     }
