@@ -2,6 +2,9 @@
   --bg: #0a0a12;
   --player: #33ffcc;
   --accent: #ff3366;
+  /* = PALETTE.projectile (0x4488ff): the ranged/firing colour, so the aim
+     ring's auto-fire state reads as "ranged active". */
+  --ranged: #4488ff;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Bottom-HUD layout tokens — single source of truth so the action buttons and
@@ -188,6 +191,31 @@ body {
 /* While the stick is being dragged the thumb shows position, so drop the label. */
 .touch-stick-base.touch-aim.is-active .touch-aim-label {
   opacity: 0;
+}
+
+/* AUTO-FIRE indicator (Phase 6.5): while a room is in active combat the ring is
+   firing on its own, so it tints to the ranged blue and pulses — the player can
+   see shots are going out without holding. Overrides the dashed/dim home look. */
+.touch-stick-base.touch-aim.is-firing {
+  opacity: 1;
+  border-style: solid;
+  border-color: var(--ranged);
+  background: rgba(68, 136, 255, 0.14);
+  animation: aim-firing-pulse 0.7s ease-in-out infinite;
+}
+
+.touch-stick-base.touch-aim.is-firing .touch-aim-label {
+  color: var(--ranged);
+}
+
+@keyframes aim-firing-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(68, 136, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px 2px rgba(68, 136, 255, 0.55);
+  }
 }
 
 /* On-screen action buttons (mobile): melee + dash. */

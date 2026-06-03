@@ -30,7 +30,16 @@ export class Controls {
   private readonly pressed = new Set<string>();
   private leftMouseDown = false;
   private kHeld = false;
-  private aimActive = false;
+
+  // --- Phase 6.5 mobile auto-fire (Option B) --------------------------------
+  /** True on a touch device (decided once in the constructor). The auto-fire
+   *  gating and aim-persistence below apply ONLY here — desktop is unchanged. */
+  private isTouch = false;
+  /** Whether the player's current room is in active combat (encounter 'active').
+   *  Driven each frame from main.ts via setEncounter(game.activeRoom). */
+  private combatActive = false;
+  /** Last room index seen via setEncounter, to detect entering a NEW fight. */
+  private activeRoomIdx = -1;
 
   // Two independent touches: move (left half) and aim (right half).
   private moveTouchId: number | null = null;
@@ -64,17 +73,17 @@ export class Controls {
     this.moveThumb = Controls.makeStick('touch-stick-thumb');
     this.aimBase = Controls.makeStick('touch-stick-base touch-aim');
     this.aimThumb = Controls.makeStick('touch-stick-thumb touch-aim');
-    // The aim stick IS the ranged control, so it carries a persistent label and
-    // rests at a visible "home" (placeAimHome) — ranged is now an obvious,
-    // always-on affordance at parity with the DASH/MELEE buttons (was an
-    // invisible right-half drag zone with only a text hint).
+    // The aim stick is the ranged AIM control. Since Phase 6.5 it no longer
+    // triggers fire (firing is automatic during combat — Option B), so it's
+    // labelled "AIM" only; it rests at a visible "home" (placeAimHome).
     const aimLabel = document.createElement('span');
     aimLabel.className = 'touch-aim-label';
-    aimLabel.textContent = 'AIM·FIRE';
+    aimLabel.textContent = 'AIM';
     this.aimBase.appendChild(aimLabel);
     target.append(this.moveBase, this.moveThumb, this.aimBase, this.aimThumb);
 
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    this.isTouch = isTouch;
 
     // Controls only — the dodge lesson lives solely in the transient centre
     // banner (HUD .combat-tutorial), so we don't teach "dash = dodge" twice.
@@ -83,7 +92,7 @@ export class Controls {
     this.hint = document.createElement('div');
     this.hint.className = 'touch-hint';
     this.hint.textContent = isTouch
-      ? 'Left: MOVE   ·   Right: AIM + FIRE'
+      ? 'Left: MOVE   ·   Right: AIM'
       : 'WASD move · Mouse aim · L-click FIRE · R-click MELEE · Space DASH';
     target.appendChild(this.hint);
 
@@ -179,7 +188,32 @@ export class Controls {
   }
 
   private updateRanged(): void {
-    this.intent.ranged = this.leftMouseDown || this.kHeld || this.aimActive;
+    // Desktop: held L-mouse or K (UNCHANGED). Touch: auto-fire while the room is
+    // in active combat — the thumb only aims, never holds-to-fire (Option B).
+    // `aimActive` was removed: it was only ever true on touch and is replaced by
+    // the encounter gate, so this is byte-for-byte identical on desktop.
+    this.intent.ranged = this.leftMouseDown || this.kHeld || (this.isTouch && this.combatActive);
+  }
+
+  /**
+   * Per-frame combat gate from the loop (main.ts passes game.activeRoom). Touch
+   * ONLY: enables auto-fire while a room is active, and COLD-STARTS the retained
+   * aim each time a new fight begins so the first shots go toward facing until
+   * the player flicks the ring. Desktop is a no-op (its fire path is untouched).
+   */
+  setEncounter(activeRoom: number): void {
+    if (!this.isTouch) return;
+    if (activeRoom !== this.activeRoomIdx) {
+      this.activeRoomIdx = activeRoom;
+      if (activeRoom >= 0) {
+        // New fight: forget last room's aim -> facing-fire until a flick.
+        this.intent.aimX = 0;
+        this.intent.aimY = 0;
+      }
+    }
+    this.combatActive = activeRoom >= 0;
+    this.aimBase.classList.toggle('is-firing', this.combatActive);
+    this.updateRanged();
   }
 
   // --- Mouse ----------------------------------------------------------------
@@ -241,10 +275,14 @@ export class Controls {
         e.preventDefault();
       } else if (t.identifier === this.aimTouchId) {
         const a = dragAxes(t.clientX - this.aimOX, t.clientY - this.aimOY, TOUCH.range);
-        this.intent.aimX = a.moveX;
-        this.intent.aimY = a.moveY;
-        this.aimActive = a.moveX !== 0 || a.moveY !== 0;
-        this.updateRanged();
+        // Only a DEFLECTED ring changes aim; resting at the origin keeps the last
+        // direction. intent.aim is the RETAINED aim — it is not zeroed on release
+        // (see onTouchEnd), so the thumb is free to tap MELEE/DASH without
+        // stopping fire or losing the aimed direction.
+        if (a.moveX !== 0 || a.moveY !== 0) {
+          this.intent.aimX = a.moveX;
+          this.intent.aimY = a.moveY;
+        }
         Controls.moveThumbTo(this.aimThumb, this.aimOX, this.aimOY, a.moveX, a.moveY);
         e.preventDefault();
       }
@@ -260,10 +298,8 @@ export class Controls {
         Controls.hideStick(this.moveBase, this.moveThumb);
       } else if (t.identifier === this.aimTouchId) {
         this.aimTouchId = null;
-        this.intent.aimX = 0;
-        this.intent.aimY = 0;
-        this.aimActive = false;
-        this.updateRanged();
+        // Phase 6.5: do NOT zero the aim — the retained direction persists so
+        // fire continues toward it after the thumb lifts (frees it for taps).
         this.restAim();
       }
     }
