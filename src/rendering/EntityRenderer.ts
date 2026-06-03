@@ -200,7 +200,7 @@ function drawBladeDash(g: CanvasRenderingContext2D, s: number, color: string): v
 
 /** Per-drop-kind presentation: VERB/system colour + glyph + toast label. The
  *  verb powerups borrow their verb colour (pierce = ranged blue, knockback =
- *  melee orange); the two DASH powerups share the dash magenta and differ by
+ *  melee orange); the three DASH powerups share the dash magenta and differ by
  *  glyph; health keeps its own green. */
 const DROP_COLOR: Record<PickupKind, number> = {
   health: PALETTE.pickupHealth,
