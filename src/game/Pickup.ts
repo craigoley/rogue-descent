@@ -16,11 +16,23 @@ import type { Rng } from '../utils/rng';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 
-export type PickupKind = 'health' | 'pierce' | 'knockback' | 'extraCharge' | 'fasterRecharge';
+export type PickupKind =
+  | 'health'
+  | 'pierce'
+  | 'knockback'
+  | 'extraCharge'
+  | 'fasterRecharge'
+  | 'dashStrike';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll). */
-const POWERUP_KINDS: readonly PickupKind[] = ['pierce', 'knockback', 'extraCharge', 'fasterRecharge'];
+const POWERUP_KINDS: readonly PickupKind[] = [
+  'pierce',
+  'knockback',
+  'extraCharge',
+  'fasterRecharge',
+  'dashStrike',
+];
 
 export interface Pickup {
   active: boolean;
@@ -89,8 +101,10 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     // Raise the dash cap and grant the new charge immediately (felt on pickup).
     player.extraCharge = true;
     player.dashCharges = DASH.baseCharges + DASH.extraChargeBonus;
-  } else {
+  } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
+  } else {
+    player.dashStrike = true;
   }
 }
 

@@ -113,6 +113,9 @@ export const TUNING = {
   /** Invulnerability window from the start of a dash, seconds (the skill
    *  expression — dodge THROUGH an attack). */
   dashIframes: 0.18,
+  /** REDUCED i-frame window for a DASH-STRIKE dash, seconds (< dashIframes): you
+   *  can damage enemies but they can hit you back — the risk side of the offence. */
+  dashStrikeIframes: 0.06,
   /** Base recharge time for ONE dash charge, seconds. Slower than the old 0.5
    *  cooldown so dash is a managed resource (charges refill one at a time). The
    *  FASTER-RECHARGE powerup multiplies this by dashFasterRechargeFactor. */
@@ -139,6 +142,7 @@ export const TUNING_RANGES = {
   deadZone: { min: 0, max: 5, step: 0.25 },
   dashDist: { min: 1, max: 10, step: 0.5 },
   dashIframes: { min: 0, max: 0.5, step: 0.02 },
+  dashStrikeIframes: { min: 0, max: 0.5, step: 0.02 },
   dashRecharge: { min: 0.3, max: 4, step: 0.1 },
   dashFasterRechargeFactor: { min: 0.2, max: 1, step: 0.05 },
   hitstop: { min: 0, max: 0.2, step: 0.01 },
@@ -303,6 +307,19 @@ export const DASH = {
   baseCharges: 1,
   /** Extra charges granted by the EXTRA-CHARGE powerup (-> 2 total). */
   extraChargeBonus: 1,
+} as const;
+
+/** DASH-STRIKE powerup: a damaging dash hits enemies it sweeps through (once each,
+ *  at the cost of reduced i-frames — see TUNING.dashStrikeIframes). Damage is its
+ *  OWN value (not melee's) so the risk/reward is tuned independently — a touch
+ *  below melee since one dash can multi-hit while moving. */
+export const DASH_STRIKE = {
+  /** Damage per enemy hit by a damaging dash. */
+  damage: 26,
+  /** Hit radius around the player centre, world units (added to ENEMY.radius). */
+  radius: 0.7,
+  /** Knockback impulse along the dash direction, world units/sec. */
+  knockback: 8,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */

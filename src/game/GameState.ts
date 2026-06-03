@@ -39,7 +39,7 @@ import {
   updateEncounterResolve,
   type RoomEncounter,
 } from './Encounter';
-import { aimDirection, meleeAttack } from './Combat';
+import { aimDirection, dashStrike, meleeAttack } from './Combat';
 import { createRng, type Rng } from '../utils/rng';
 import type { InputIntent } from './Input';
 import type { Vec2 } from '../utils/math';
@@ -107,6 +107,7 @@ export interface GameState {
     knockback: number;
     extraCharge: number;
     fasterRecharge: number;
+    dashStrike: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -143,7 +144,7 @@ export function createGameState(): GameState {
     activeRoom: -1,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0 },
+    dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -183,6 +184,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.knockback = 0;
   state.dropCounts.extraCharge = 0;
   state.dropCounts.fasterRecharge = 0;
+  state.dropCounts.dashStrike = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -242,6 +244,7 @@ function descendIfReady(state: GameState): boolean {
     meleeKnockback: p.meleeKnockback,
     extraCharge: p.extraCharge,
     fasterRecharge: p.fasterRecharge,
+    dashStrike: p.dashStrike,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -249,6 +252,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.meleeKnockback = carried.meleeKnockback;
   state.player.extraCharge = carried.extraCharge;
   state.player.fasterRecharge = carried.fasterRecharge;
+  state.player.dashStrike = carried.dashStrike;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);
@@ -287,6 +291,11 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = state.enemies[i].active;
 
   updatePlayer(p, intent, dt, state.room);
+
+  // Dash-strike: a damaging dash hits enemies it sweeps through (once each). Runs
+  // on the freshly-moved player, BEFORE the death-diff below, so its kills count +
+  // roll drops like any other.
+  if (p.dashTimer > 0 && p.dashStrike) dashStrike(state);
 
   // Encounter: entering an idle room activates it (spawns enemies + locks doors).
   updateEncounterEntry(state);
