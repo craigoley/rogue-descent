@@ -125,6 +125,11 @@ function frame(nowMs: number): void {
     }
   }
 
+  // Phase 6.5 mobile auto-fire (Option B): tell the input layer whether the
+  // current room is in active combat (game.activeRoom >= 0). On touch this gates
+  // auto-fire and cold-starts the retained aim per fight; desktop ignores it.
+  controls.setEncounter(game.activeRoom);
+
   // Step the sim in fixed slices; count steps for the debug readout.
   accumulator += dt;
   let steps = 0;
