@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { DROP, ENEMY, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { DASH_STRIKE, DROP, ENEMY, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -80,6 +80,27 @@ export function damagePlayer(player: PlayerState, amount: number, state: GameSta
   player.hitFlashTimer = PLAYER_COMBAT.hitFlash;
   player.hitInvulnTimer = PLAYER_COMBAT.hitInvuln;
   state.shakeTimer = SHAKE.duration;
+}
+
+/**
+ * DASH-STRIKE (Phase: dash-strike powerup): while the player is mid-dash AND holds
+ * the dashStrike powerup, damage every active enemy the player sweeps over — once
+ * each per dash (player.dashHits dedups across the burst's ~10 sim steps). Reuses
+ * the radial overlap (NO arc, unlike melee) + the shared damageEnemy path; the
+ * dash direction is the knockback dir. Caller gates on `dashTimer > 0 && dashStrike`.
+ */
+export function dashStrike(state: GameState): void {
+  const { player, enemies } = state;
+  const reach = DASH_STRIKE.radius + ENEMY.radius;
+  for (let ei = 0; ei < enemies.length; ei++) {
+    const e = enemies[ei];
+    if (!e.active || player.dashHits.has(ei)) continue;
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    player.dashHits.add(ei);
+    damageEnemy(e, DASH_STRIKE.damage, player.dashDirX, player.dashDirY, DASH_STRIKE.knockback, state);
+  }
 }
 
 /**

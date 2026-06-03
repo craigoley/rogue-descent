@@ -176,9 +176,31 @@ function drawRecharge(g: CanvasRenderingContext2D, s: number, color: string): vo
   g.fill();
 }
 
+/** A diagonal blade with trailing speed-lines (DASH-STRIKE — a dash that cuts
+ *  through enemies). The slash + motion lines read as "attack on the move",
+ *  distinct from the extra-charge chevrons and the faster-recharge ring. */
+function drawBladeDash(g: CanvasRenderingContext2D, s: number, color: string): void {
+  g.strokeStyle = color;
+  g.lineCap = 'round';
+  // The blade: a thick slash from lower-left to upper-right.
+  g.lineWidth = s * 0.16;
+  g.beginPath();
+  g.moveTo(s * 0.26, s * 0.74);
+  g.lineTo(s * 0.74, s * 0.26);
+  g.stroke();
+  // Two trailing speed-lines behind it (lower-left), thinner.
+  g.lineWidth = s * 0.08;
+  for (const o of [s * 0.12, s * 0.24]) {
+    g.beginPath();
+    g.moveTo(s * 0.14, s * 0.62 + o * 0.0);
+    g.lineTo(s * 0.14 + o, s * 0.62 - o);
+    g.stroke();
+  }
+}
+
 /** Per-drop-kind presentation: VERB/system colour + glyph + toast label. The
  *  verb powerups borrow their verb colour (pierce = ranged blue, knockback =
- *  melee orange); the two DASH powerups share the dash magenta and differ by
+ *  melee orange); the three DASH powerups share the dash magenta and differ by
  *  glyph; health keeps its own green. */
 const DROP_COLOR: Record<PickupKind, number> = {
   health: PALETTE.pickupHealth,
@@ -186,6 +208,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   knockback: PALETTE.melee,
   extraCharge: PALETTE.dash,
   fasterRecharge: PALETTE.dash,
+  dashStrike: PALETTE.dash,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -193,6 +216,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   knockback: drawBurst,
   extraCharge: drawDoubleChevron,
   fasterRecharge: drawRecharge,
+  dashStrike: drawBladeDash,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -200,8 +224,16 @@ const DROP_LABEL: Record<PickupKind, string> = {
   knockback: 'KNOCKBACK',
   extraCharge: 'EXTRA DASH',
   fasterRecharge: 'FAST DASH',
+  dashStrike: 'DASH STRIKE',
 };
-const DROP_KINDS: PickupKind[] = ['health', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge'];
+const DROP_KINDS: PickupKind[] = [
+  'health',
+  'pierce',
+  'knockback',
+  'extraCharge',
+  'fasterRecharge',
+  'dashStrike',
+];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
 interface FigureGeos {

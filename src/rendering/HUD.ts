@@ -314,12 +314,14 @@ export class HUD {
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
       `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}  ` +
       `xcharge ${state.player.extraCharge ? 'ON' : 'off'}  ` +
-      `frecharge ${state.player.fasterRecharge ? 'ON' : 'off'}\n` +
+      `frecharge ${state.player.fasterRecharge ? 'ON' : 'off'}  ` +
+      `dstrike ${state.player.dashStrike ? 'ON' : 'off'}\n` +
       `dash  charges ${state.player.dashCharges}/${dashMaxCharges(state.player)}  ` +
       `recharge ${state.player.dashRechargeTimer.toFixed(2)}s\n` +
       `drops spawned ${spawned} / collected ${collected}` +
       `   (hp ${state.dropCounts.health} · pi ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback}` +
-      ` · xc ${state.dropCounts.extraCharge} · fr ${state.dropCounts.fasterRecharge})\n` +
+      ` · xc ${state.dropCounts.extraCharge} · fr ${state.dropCounts.fasterRecharge}` +
+      ` · ds ${state.dropCounts.dashStrike})\n` +
       `FIRE  aimEngaged ${controls.aimEngaged}  ranged ${intent.ranged}  ` +
       `persist ${controls.firePersistRemainingMs}ms\n` +
       `\n` +

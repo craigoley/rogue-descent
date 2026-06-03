@@ -1,8 +1,9 @@
 /**
- * Within-run drops: health (restore HP) + FOUR powerups. Two are verb-coupled —
+ * Within-run drops: health (restore HP) + FIVE powerups. Two are verb-coupled —
  * PIERCE (ranged shots pass through enemies) and KNOCKBACK (melee launches) — and
- * two upgrade the dash ECONOMY: EXTRA-CHARGE (a second dash before recharge) and
- * FASTER-RECHARGE (charges refill quicker). Powerups are binary toggles that
+ * three upgrade the DASH: EXTRA-CHARGE (a second dash before recharge),
+ * FASTER-RECHARGE (charges refill quicker) and DASH-STRIKE (a damaging dash with
+ * reduced i-frames). Powerups are binary toggles that
  * change what a verb/resource DOES; they last the rest of the run (carried across
  * descent) and vanish on death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool
  * (POOL.pickups); spawning never grows it.
@@ -16,11 +17,23 @@ import type { Rng } from '../utils/rng';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 
-export type PickupKind = 'health' | 'pierce' | 'knockback' | 'extraCharge' | 'fasterRecharge';
+export type PickupKind =
+  | 'health'
+  | 'pierce'
+  | 'knockback'
+  | 'extraCharge'
+  | 'fasterRecharge'
+  | 'dashStrike';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll). */
-const POWERUP_KINDS: readonly PickupKind[] = ['pierce', 'knockback', 'extraCharge', 'fasterRecharge'];
+const POWERUP_KINDS: readonly PickupKind[] = [
+  'pierce',
+  'knockback',
+  'extraCharge',
+  'fasterRecharge',
+  'dashStrike',
+];
 
 export interface Pickup {
   active: boolean;
@@ -66,7 +79,7 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, or one of the four powerups. Deterministic
+/** Seeded drop roll: nothing, health, or one of the five powerups. Deterministic
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
  *  second (only consumed for a powerup) picks uniformly among POWERUP_KINDS. */
 export function rollDrop(rng: Rng): PickupKind | null {
@@ -89,8 +102,10 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     // Raise the dash cap and grant the new charge immediately (felt on pickup).
     player.extraCharge = true;
     player.dashCharges = DASH.baseCharges + DASH.extraChargeBonus;
-  } else {
+  } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
+  } else {
+    player.dashStrike = true;
   }
 }
 

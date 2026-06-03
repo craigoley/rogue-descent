@@ -73,6 +73,13 @@ export interface PlayerState {
   /** FASTER-RECHARGE powerup (within-run): dash charges refill quicker
    *  (×TUNING.dashFasterRechargeFactor). Binary toggle; reset via createPlayer. */
   fasterRecharge: boolean;
+  /** DASH-STRIKE powerup (within-run): a dash DAMAGES enemies it sweeps through,
+   *  for REDUCED i-frames (TUNING.dashStrikeIframes). Binary toggle; reset via
+   *  createPlayer. */
+  dashStrike: boolean;
+  /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
+   *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
+  dashHits: Set<number>;
   /** Dodge confirmation render-tell window, seconds (> 0 right after a dash
    *  i-frame negated a hit). Drives the dodge flash; pure feedback, not logic. */
   dodgeFxTimer: number;
@@ -107,6 +114,8 @@ export function createPlayer(x: number, y: number): PlayerState {
     meleeKnockback: false,
     extraCharge: false,
     fasterRecharge: false,
+    dashStrike: false,
+    dashHits: new Set<number>(),
   };
 }
 
@@ -199,7 +208,10 @@ export function updatePlayer(
     if (player.dashCharges >= 1 && player.dashTimer <= 0) {
       player.dashCharges -= 1;
       player.dashTimer = DASH.duration;
-      player.iframeTimer = TUNING.dashIframes;
+      // DASH-STRIKE trades invulnerability for offence: a damaging dash gets the
+      // REDUCED i-frame duration; a normal dodge-dash keeps the full one.
+      player.iframeTimer = player.dashStrike ? TUNING.dashStrikeIframes : TUNING.dashIframes;
+      player.dashHits.clear(); // fresh per-dash hit-set
       player.dashDirX = hasInput ? mdx : player.facingX;
       player.dashDirY = hasInput ? mdy : player.facingY;
     }
