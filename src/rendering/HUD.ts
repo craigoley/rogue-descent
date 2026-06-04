@@ -58,6 +58,10 @@ type TuningKey = keyof typeof TUNING_RANGES;
 export class HUD {
   private readonly debug: boolean;
   private readonly readoutEl: HTMLPreElement | null = null;
+  // Softlock instrumentation (?debug only): previous-frame snapshots so the HUD
+  // can log kill (active true->false) + room-cleared transitions. READ-ONLY.
+  private readonly prevActive: boolean[] = [];
+  private readonly prevPhase: string[] = [];
   private readonly healthFill: HTMLDivElement;
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
@@ -278,6 +282,54 @@ export class HUD {
     this.updateTutorial(state);
 
     if (!this.readoutEl) return;
+
+    // --- Softlock event log (?debug only, console) — trace the kill->clear seq.
+    // Pure observation of state; no logic change.
+    for (let i = 0; i < state.enemies.length; i++) {
+      const e = state.enemies[i];
+      if (this.prevActive[i] === true && !e.active) {
+        console.info(
+          `[softlock] enemy #${i} ${e.type} -> dead  hp ${e.health.toFixed(0)} @(${e.x.toFixed(1)},${e.y.toFixed(1)})`,
+        );
+      }
+      this.prevActive[i] = e.active;
+    }
+    for (let i = 0; i < state.rooms.length; i++) {
+      const ph = state.rooms[i].phase;
+      if (this.prevPhase[i] !== undefined && this.prevPhase[i] !== ph && ph === 'cleared') {
+        console.info(`[softlock] room ${i} -> CLEARED  (activeRoom now ${state.activeRoom})`);
+      }
+      this.prevPhase[i] = ph;
+    }
+
+    // --- Softlock readout: live enemies + the active room, so a stuck room is
+    // legible on-device (which enemy survives, where, what type/health). The
+    // active room is the locked one (state.activeRoom); rect/spawns read from it.
+    const ts = state.room.tileSize;
+    const ar = state.activeRoom;
+    const arEnc = ar >= 0 ? state.rooms[ar] : null;
+    const arRect = arEnc ? arEnc.rect : null;
+    const arPhase = arEnc ? arEnc.phase : 'none';
+    const planned = arEnc ? arEnc.spawns.length : 0;
+    let activeEnemyCount = 0;
+    const enemyLines: string[] = [];
+    for (let i = 0; i < state.enemies.length; i++) {
+      const e = state.enemies[i];
+      if (!e.active) continue;
+      activeEnemyCount++;
+      const tx = Math.floor(e.x / ts);
+      const ty = Math.floor(e.y / ts);
+      const inside = arRect
+        ? tx >= arRect.x && tx < arRect.x + arRect.w && ty >= arRect.y && ty < arRect.y + arRect.h
+        : false;
+      enemyLines.push(
+        `  #${i} ${e.type} hp ${e.health.toFixed(0)} @(${e.x.toFixed(1)},${e.y.toFixed(1)}) ${inside ? 'IN' : 'OUT'}`,
+      );
+    }
+    const softlockBlock =
+      `SOFTLOCK  activeEnemyCount ${activeEnemyCount}  activeRoom ${ar} phase ${arPhase}  ` +
+      `planned ${planned}${planned !== activeEnemyCount && ar >= 0 ? ' (MISMATCH)' : ''}\n` +
+      (activeEnemyCount > 0 ? enemyLines.join('\n') + '\n' : '  (no live enemies)\n');
     const rot = isoRotate(intent.moveX, intent.moveY);
     const dpx = p.x - p.prevX;
     const dpy = p.y - p.prevY;
@@ -324,6 +376,7 @@ export class HUD {
       `ENEMIES  live chaser ${liveChasers}  ranged ${liveRanged}  bolts ${bolts}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
+      softlockBlock +
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
       `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}  ` +
       `xcharge ${state.player.extraCharge ? 'ON' : 'off'}  ` +
