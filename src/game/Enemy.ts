@@ -55,6 +55,10 @@ export interface Enemy {
   kbVy: number;
   /** Whether this strike has already resolved its single damage check / shot. */
   struck: boolean;
+  /** Which encounter room this enemy belongs to (set at spawn). Lets a room clear
+   *  on ITS OWN enemies rather than the whole pool (so two rooms' enemies can't
+   *  block each other's clear). -1 = unowned (e.g. an idle pooled slot). */
+  roomIndex: number;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -74,14 +78,17 @@ export function createEnemyPool(): Enemy[] {
     kbVx: 0,
     kbVy: 0,
     struck: false,
+    roomIndex: -1,
   }));
 }
 
 /**
  * Activate a pooled enemy of `type` at (x, y), with stats scaled for `depth`
  * (Phase 7c; depth defaults to 1 = baseline, type defaults to chaser so existing
- * callers/tests are unchanged). The scaled values are stored per-enemy (the AI
- * reads e.moveSpeed / e.attackDamage). No-op (returns false) if the pool is full.
+ * callers/tests are unchanged). `roomIndex` tags which encounter room owns this
+ * enemy (default -1 = unowned, for tests / non-encounter spawns). The scaled
+ * values are stored per-enemy (the AI reads e.moveSpeed / e.attackDamage). No-op
+ * (returns false) if the pool is full.
  */
 export function spawnEnemy(
   pool: Enemy[],
@@ -89,6 +96,7 @@ export function spawnEnemy(
   y: number,
   depth = 1,
   type: EnemyType = 'chaser',
+  roomIndex = -1,
 ): boolean {
   const stats = ENEMY_TYPES[type];
   for (const e of pool) {
@@ -108,6 +116,7 @@ export function spawnEnemy(
     e.kbVx = 0;
     e.kbVy = 0;
     e.struck = false;
+    e.roomIndex = roomIndex;
     return true;
   }
   return false;
@@ -116,6 +125,14 @@ export function spawnEnemy(
 export function activeEnemyCount(pool: Enemy[]): number {
   let n = 0;
   for (const e of pool) if (e.active) n++;
+  return n;
+}
+
+/** Living enemies that belong to `roomIndex` — so a room clears on ITS OWN
+ *  enemies, not the whole pool (two rooms' enemies can't block each other). */
+export function roomEnemyCount(pool: Enemy[], roomIndex: number): number {
+  let n = 0;
+  for (const e of pool) if (e.active && e.roomIndex === roomIndex) n++;
   return n;
 }
 
