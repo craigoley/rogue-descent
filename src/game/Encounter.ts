@@ -16,7 +16,7 @@
 import { ENCOUNTER, ROOM, type EnemyType } from '../utils/constants';
 import { enemiesPerRoomForDepth, rangedCountForDepth, swarmerCountForDepth } from './Difficulty';
 import type { Rng } from '../utils/rng';
-import { activeEnemyCount, spawnEnemy } from './Enemy';
+import { roomEnemyCount, spawnEnemy } from './Enemy';
 import { rollDrop, spawnPickup } from './Pickup';
 import type { Floor, Rect } from './Dungeon';
 import type { RoomState } from './Room';
@@ -108,13 +108,22 @@ export function playerRoomIndex(state: GameState): number {
 
 /** Activate the idle room the player just entered: spawn its enemies + lock. */
 export function updateEncounterEntry(state: GameState): void {
+  // ONE encounter at a time. activeRoom >= 0 iff a room is currently active (it's
+  // freed to -1 only on clear / loadFloor), so this prevents a SECOND room from
+  // activating while one is live — the double-activation softlock (6 enemies +
+  // an orphaned, permanently-sealed room). Trigger-agnostic: even if the player's
+  // centre crosses a foreign room rect (e.g. a corridor carved through a room),
+  // no second encounter spawns. Can't deadlock — a room can always activate when
+  // none is active.
+  if (state.activeRoom >= 0) return;
   const idx = playerRoomIndex(state);
   if (idx < 0) return;
   const enc = state.rooms[idx];
-  if (enc.phase !== 'idle') return;
+  if (enc.phase !== 'idle') return; // still needed: don't re-activate a CLEARED room
   enc.phase = 'active';
   state.activeRoom = idx;
-  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type);
+  // Tag each enemy with its owning room so the room clears on ITS OWN enemies.
+  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type, idx);
   setDoors(state, enc, true);
 }
 
@@ -131,11 +140,13 @@ function placeStairs(state: GameState, roomIdx: number): void {
   state.stairs.y = (r.y + r.h / 2) * ts;
 }
 
-/** Clear the active room once all its enemies are dead: unlock its doors. */
+/** Clear the active room once ITS OWN enemies are dead: unlock its doors. Counts
+ *  only enemies tagged with the active room (roomEnemyCount), not the whole pool,
+ *  so a foreign room's enemies can never keep the active room from clearing. */
 export function updateEncounterResolve(state: GameState): void {
   if (state.activeRoom < 0) return;
   const enc = state.rooms[state.activeRoom];
-  if (enc.phase === 'active' && activeEnemyCount(state.enemies) === 0) {
+  if (enc.phase === 'active' && roomEnemyCount(state.enemies, state.activeRoom) === 0) {
     const clearedIdx = state.activeRoom;
     enc.phase = 'cleared';
     setDoors(state, enc, false);
