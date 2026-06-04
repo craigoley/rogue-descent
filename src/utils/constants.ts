@@ -162,6 +162,29 @@ export const TUNING_RANGES = {
   rangedDamage: { min: 1, max: 50, step: 1 },
 } as const;
 
+/**
+ * Softlock auto-detector (render/debug-layer instrumentation ONLY — never read
+ * by the sim, never mutates state). A room is flagged "stalled" when it is
+ * `active` with live enemies but the fight makes NO progress for `stallSeconds`:
+ * total enemy health is not dropping, the nearest enemy is neither within
+ * `engageRadius` (world units) of the player nor closing the gap by at least
+ * `approachEpsilon` per check, AND no enemy is mid-attack / no bolt is in
+ * flight. Tuned loose so a normal drawn-out fight (enemies pursuing, telegraph/
+ * strike cycling, trading hits, kiting ranged) keeps resetting the timer — only
+ * a genuinely un-killed / unreachable enemy lets it run out. tileSize is 1, so
+ * world units == tile units here.
+ */
+export const SOFTLOCK_DETECT = {
+  /** Seconds of no-progress (sim time) before the detector fires. */
+  stallSeconds: 9,
+  /** Nearest enemy within this many world units counts as "engaged" (reachable
+   *  — the fight can still resolve), so the timer resets. */
+  engageRadius: 4,
+  /** Minimum nearest-distance decrease (world units) between checks that counts
+   *  as "closing" — below this the enemy isn't meaningfully approaching. */
+  approachEpsilon: 0.05,
+} as const;
+
 /** Player body tuning. */
 export const PLAYER = {
   /** Collision half-extent AND visual half-size, world units. The player is

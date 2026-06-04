@@ -12,7 +12,9 @@
  */
 
 import type { GameState } from '../game/GameState';
+import type { RoomEncounter } from '../game/Encounter';
 import { isoRotate, type InputIntent } from '../game/Input';
+import { isSolid } from '../game/Room';
 import { dashMaxCharges } from '../game/Player';
 import type { Controls } from '../input/Controls';
 import {
@@ -29,6 +31,7 @@ import {
   CSS_PALETTE,
   DASH,
   PLAYER_COMBAT,
+  SOFTLOCK_DETECT,
   TUNING,
   TUNING_RANGES,
 } from '../utils/constants';
@@ -58,10 +61,23 @@ type TuningKey = keyof typeof TUNING_RANGES;
 export class HUD {
   private readonly debug: boolean;
   private readonly readoutEl: HTMLPreElement | null = null;
-  // Softlock instrumentation (?debug only): previous-frame snapshots so the HUD
-  // can log kill (active true->false) + room-cleared transitions. READ-ONLY.
+  // Softlock instrumentation (ALWAYS ON, render-layer only): previous-frame
+  // snapshots so the HUD can log kill (active true->false) + room-cleared
+  // transitions to the console for BOTH players (no ?debug needed). READ-ONLY.
   private readonly prevActive: boolean[] = [];
   private readonly prevPhase: string[] = [];
+  // Softlock AUTO-DETECTOR (always on; banner only appears when pathological, so
+  // normal play is unaffected). Detection ONLY — reads state, never mutates it.
+  private readonly softlockBannerEl: HTMLDivElement;
+  /** Accumulated no-progress time (sim seconds) in the active room. */
+  private stallTimer = 0;
+  /** Last sim time seen — frame delta drives accumulation (resets on floor). */
+  private prevTime = 0;
+  /** Baselines for the progress heuristic (Infinity => first check resets). */
+  private prevHealthSum = Infinity;
+  private prevNearest = Infinity;
+  /** Rising-edge latch: fire/banner once per stall, clear on recovery. */
+  private softlockFired = false;
   private readonly healthFill: HTMLDivElement;
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
@@ -162,6 +178,13 @@ export class HUD {
     this.tutorialEl.textContent = 'DASH through attacks to DODGE';
     container.appendChild(this.tutorialEl);
 
+    // Softlock banner (always created, hidden until the detector fires). It's an
+    // on-screen capture surface: when a stall is detected it shows the diagnostic
+    // so a plain screenshot carries the data even without devtools open.
+    this.softlockBannerEl = document.createElement('div');
+    this.softlockBannerEl.className = 'hud-softlock-banner';
+    container.appendChild(this.softlockBannerEl);
+
     if (!this.debug) return;
 
     const panel = document.createElement('div');
@@ -225,6 +248,157 @@ export class HUD {
     }
   }
 
+  /** Console trace of the kill->clear sequence (ALWAYS on). Logs each enemy
+   *  death (active true->false) and each room flipping to `cleared`, so the lead-
+   *  up to a stuck room is reconstructable from the console alone. READ-ONLY. */
+  private logTransitions(state: GameState): void {
+    for (let i = 0; i < state.enemies.length; i++) {
+      const e = state.enemies[i];
+      if (this.prevActive[i] === true && !e.active) {
+        console.info(
+          `[softlock] enemy #${i} ${e.type} -> dead  hp ${e.health.toFixed(0)} @(${e.x.toFixed(1)},${e.y.toFixed(1)})`,
+        );
+      }
+      this.prevActive[i] = e.active;
+    }
+    for (let i = 0; i < state.rooms.length; i++) {
+      const ph = state.rooms[i].phase;
+      if (this.prevPhase[i] !== undefined && this.prevPhase[i] !== ph && ph === 'cleared') {
+        console.info(`[softlock] room ${i} -> CLEARED  (activeRoom now ${state.activeRoom})`);
+      }
+      this.prevPhase[i] = ph;
+    }
+  }
+
+  /** Reset the stall heuristic + hide the banner (room not a softlock candidate,
+   *  or the fight recovered). */
+  private resetStall(): void {
+    this.stallTimer = 0;
+    this.prevHealthSum = Infinity;
+    this.prevNearest = Infinity;
+    if (this.softlockFired) {
+      this.softlockBannerEl.classList.remove('is-visible');
+      this.softlockFired = false;
+    }
+  }
+
+  /**
+   * Softlock AUTO-DETECTOR (always on; detection ONLY — never mutates state).
+   * Fires when the active room makes no progress for `stallSeconds`: enemy health
+   * not dropping, nearest enemy neither engaged nor closing, no enemy attacking,
+   * no bolt live. On fire it dumps a console.warn snapshot AND shows the on-screen
+   * banner so the failure is captured even without devtools. Heuristic is loose so
+   * a normal fight (pursuit / telegraph-strike / kiting) keeps resetting it.
+   */
+  private detectSoftlock(state: GameState): void {
+    const now = state.time;
+    const dt = now - this.prevTime;
+    this.prevTime = now;
+
+    const ar = state.activeRoom;
+    const arEnc = ar >= 0 ? state.rooms[ar] : null;
+    // Only an ACTIVE room with live enemies is a softlock candidate.
+    if (!arEnc || arEnc.phase !== 'active') {
+      this.resetStall();
+      return;
+    }
+
+    const p = state.player;
+    let live = 0;
+    let healthSum = 0;
+    let nearest = Infinity;
+    let anyAttacking = false;
+    for (const e of state.enemies) {
+      if (!e.active) continue;
+      live++;
+      healthSum += e.health;
+      const d = Math.hypot(e.x - p.x, e.y - p.y);
+      if (d < nearest) nearest = d;
+      if (e.phase === 'telegraph' || e.phase === 'strike') anyAttacking = true;
+    }
+    if (live === 0) {
+      this.resetStall();
+      return;
+    }
+    let boltLive = false;
+    for (const b of state.enemyProjectiles) if (b.active) boltLive = true;
+
+    // Progress signals (any one resets the stall): the fight is alive.
+    const tookDamage = healthSum < this.prevHealthSum - 1e-6;
+    const closing = nearest < this.prevNearest - SOFTLOCK_DETECT.approachEpsilon;
+    this.prevHealthSum = healthSum;
+    this.prevNearest = nearest;
+    const engaged = nearest <= SOFTLOCK_DETECT.engageRadius;
+
+    // Skip discontinuities (floor reset / pause / multiple renders per sim step):
+    // only real, forward sim-time deltas accumulate.
+    if (dt <= 0 || dt > 1) return;
+
+    if (tookDamage || engaged || closing || anyAttacking || boltLive) {
+      this.stallTimer = 0;
+      if (this.softlockFired) {
+        this.softlockBannerEl.classList.remove('is-visible');
+        this.softlockFired = false;
+      }
+      return;
+    }
+
+    this.stallTimer += dt;
+    if (this.stallTimer >= SOFTLOCK_DETECT.stallSeconds && !this.softlockFired) {
+      this.softlockFired = true;
+      this.dumpSoftlock(state, ar, arEnc);
+    }
+  }
+
+  /** Build the diagnostic snapshot, console.warn it, and show the on-screen
+   *  banner. The snapshot alone should say WHICH enemy is stuck and WHY (0 hp
+   *  but active? out of bounds? frozen velocity? behind a locked door?). */
+  private dumpSoftlock(state: GameState, ar: number, arEnc: RoomEncounter): void {
+    const p = state.player;
+    const ts = state.room.tileSize;
+    const r = arEnc.rect;
+
+    const enemyLines: string[] = [];
+    let count = 0;
+    for (let i = 0; i < state.enemies.length; i++) {
+      const e = state.enemies[i];
+      if (!e.active) continue;
+      count++;
+      const tx = Math.floor(e.x / ts);
+      const ty = Math.floor(e.y / ts);
+      const inside = tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
+      // Enemy has no vx/vy field — derive per-step velocity from prev position.
+      const vx = e.x - e.prevX;
+      const vy = e.y - e.prevY;
+      const dist = Math.hypot(e.x - p.x, e.y - p.y);
+      enemyLines.push(
+        `  #${i} ${e.type} active hp ${e.health.toFixed(1)} ` +
+          `@(${e.x.toFixed(2)},${e.y.toFixed(2)}) vel(${vx.toFixed(3)},${vy.toFixed(3)}) ` +
+          `kb(${e.kbVx.toFixed(2)},${e.kbVy.toFixed(2)}) phase ${e.phase} ` +
+          `${inside ? 'IN-ROOM' : 'OUT-OF-ROOM'} dist ${dist.toFixed(2)}`,
+      );
+    }
+    const doors = arEnc.doorCells
+      .map((d) => `(${d.tx},${d.ty})${isSolid(state.room, d.tx, d.ty) ? 'SOLID' : 'open'}`)
+      .join(' ');
+
+    const snapshot =
+      `⚠ SOFTLOCK DETECTED — room ${ar} 'active' with no progress for ` +
+      `${SOFTLOCK_DETECT.stallSeconds}s (depth ${state.run.depth}, seed ${state.seed})\n` +
+      `player @(${p.x.toFixed(2)},${p.y.toFixed(2)}) health ${p.health.toFixed(0)}\n` +
+      `room ${ar} phase ${arEnc.phase} rect x${r.x} y${r.y} w${r.w} h${r.h} ` +
+      `planned ${arEnc.spawns.length}\n` +
+      `doorCells: ${doors || '(none)'}\n` +
+      `activeEnemyCount ${count}\n` +
+      (count > 0 ? enemyLines.join('\n') : '  (no live enemies)');
+
+    console.warn(snapshot);
+
+    // On-screen banner: the same data so a screenshot is self-sufficient.
+    this.softlockBannerEl.textContent = `${snapshot}\n\n(screenshot this — debug capture)`;
+    this.softlockBannerEl.classList.add('is-visible');
+  }
+
   /**
    * Refresh the live readout + the full input→screen TRACE. No-op when debug
    * off. The trace shows every stage of the transform for the CURRENT input so
@@ -281,26 +455,13 @@ export class HUD {
 
     this.updateTutorial(state);
 
-    if (!this.readoutEl) return;
+    // Softlock instrumentation runs ALWAYS (no ?debug gate) so the intermittent
+    // bug is captured live for BOTH players: console kill/clear trace + the
+    // auto-detector + on-screen banner. All read-only; no sim effect.
+    this.logTransitions(state);
+    this.detectSoftlock(state);
 
-    // --- Softlock event log (?debug only, console) — trace the kill->clear seq.
-    // Pure observation of state; no logic change.
-    for (let i = 0; i < state.enemies.length; i++) {
-      const e = state.enemies[i];
-      if (this.prevActive[i] === true && !e.active) {
-        console.info(
-          `[softlock] enemy #${i} ${e.type} -> dead  hp ${e.health.toFixed(0)} @(${e.x.toFixed(1)},${e.y.toFixed(1)})`,
-        );
-      }
-      this.prevActive[i] = e.active;
-    }
-    for (let i = 0; i < state.rooms.length; i++) {
-      const ph = state.rooms[i].phase;
-      if (this.prevPhase[i] !== undefined && this.prevPhase[i] !== ph && ph === 'cleared') {
-        console.info(`[softlock] room ${i} -> CLEARED  (activeRoom now ${state.activeRoom})`);
-      }
-      this.prevPhase[i] = ph;
-    }
+    if (!this.readoutEl) return;
 
     // --- Softlock readout: live enemies + the active room, so a stuck room is
     // legible on-device (which enemy survives, where, what type/health). The
