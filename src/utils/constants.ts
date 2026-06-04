@@ -409,6 +409,11 @@ export const ENEMY_COMMON = {
   flash: 0.08,
   /** Per-second decay factor applied to knockback velocity (exp). */
   knockbackDecay: 0.0001,
+  /** Max per-step MOVE as a fraction of a tile (caps the integrated move, NOT the
+   *  stored knockback — the impulse still decays naturally over frames). Strictly
+   *  < 1 so the single-resolve-per-axis collision (Collision.ts) can never tunnel
+   *  a 1-tile wall, even at boss-scale knockback. */
+  maxStepTiles: 0.9,
 } as const;
 
 export const ENEMY_TYPES = {

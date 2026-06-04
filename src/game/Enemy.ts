@@ -17,11 +17,15 @@
  */
 
 import { ENEMY_COMMON, ENEMY_TYPES, POOL, type EnemyType } from '../utils/constants';
+import { clamp } from '../utils/math';
 import { resolveX, resolveY } from './Collision';
 import { damagePlayer } from './Combat';
 import { fireEnemyProjectile } from './EnemyProjectile';
 import { damageMultForDepth, healthMultForDepth, speedMultForDepth } from './Difficulty';
 import type { GameState } from './GameState';
+
+/** Clamp `v` to the symmetric range [-limit, limit]. */
+const clampAbs = (v: number, limit: number): number => (v > limit ? limit : v < -limit ? -limit : v);
 
 /** Shared phase machine. For the chaser, `strike` is the melee hit; for the
  *  ranged type, `strike` is the shot-release window (it fires once within it). */
@@ -329,9 +333,26 @@ export function updateEnemies(state: GameState, dt: number): void {
     const radius = ENEMY_TYPES[e.type].radius;
     e.kbVx *= kbDecay;
     e.kbVy *= kbDecay;
-    const moveX = (_vel.x + e.kbVx) * dt;
+    // CAP the per-step MOVE below one tile (not the stored kbVx/kbVy — those still
+    // decay over frames, so the shove keeps its strength; it just can't cross a
+    // tile in a single step). This preserves resolveX/resolveY's single-resolve
+    // no-tunnel guarantee for ANY knockback velocity (incl. boss-scale).
+    const maxStep = ENEMY_COMMON.maxStepTiles * room.tileSize;
+    const moveX = clampAbs((_vel.x + e.kbVx) * dt, maxStep);
     e.x = resolveX(e.x, e.y, moveX, radius, room);
-    const moveY = (_vel.y + e.kbVy) * dt;
+    const moveY = clampAbs((_vel.y + e.kbVy) * dt, maxStep);
     e.y = resolveY(e.x, e.y, moveY, radius, room);
+
+    // Belt-and-suspenders: keep every active enemy INSIDE its room's rect (the
+    // carved floor; walls are outside it), so an enemy can never end a step in the
+    // sealed-off corridor and become permanently unreachable -> a room that never
+    // clears. Enemies only ever belong to the active room; guard if there isn't
+    // one (defensive — shouldn't happen while an enemy is alive).
+    if (state.activeRoom >= 0) {
+      const r = state.rooms[state.activeRoom].rect;
+      const ts = room.tileSize;
+      e.x = clamp(e.x, r.x * ts + radius, (r.x + r.w) * ts - radius);
+      e.y = clamp(e.y, r.y * ts + radius, (r.y + r.h) * ts - radius);
+    }
   }
 }
