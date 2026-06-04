@@ -14,6 +14,7 @@
 import './style.css';
 import { createGameState, regenerate, startNewRun, update } from './game/GameState';
 import { generateDungeon, isConnected } from './game/Dungeon';
+import { playerRoomIndex } from './game/Encounter';
 import { Controls } from './input/Controls';
 import { SceneManager } from './rendering/SceneManager';
 import { DungeonRenderer } from './rendering/DungeonRenderer';
@@ -23,7 +24,7 @@ import { RunSummary } from './rendering/RunSummary';
 import { AudioEngine } from './audio/AudioEngine';
 import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
-import { MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
+import { DASH, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
@@ -140,6 +141,42 @@ function logEncounters(): void {
   }
 }
 
+// Per-sim-step PLAYER POSITION TRACE (?debug only) — diagnoses the "teleport".
+// It distinguishes a CONTINUOUS shove (mechanism (c): a corridor carved through a
+// room rect flips playerRoomIndex mid-corridor → wrong-room activation → door-lock
+// pushes the player out via the normal resolveX/Y, so Δ stays bounded) from a
+// single-step JUMP (Δ ≫ the max legit per-tick move = a position write we missed).
+// SMOKING GUN for (c): playerRoomIndex CHANGES while Δ stays continuous (no ⚠JUMP).
+// Read-only on game state; logged ON the sim step so Δ is per-tick. Zero effect
+// when ?debug is off.
+const DASH_SPEED = TUNING.dashDist / DASH.duration;
+// Max legit per-tick move includes DASH (faster than maxSpeed), so a dash doesn't
+// false-flag; a real room-jump (rooms are >= 6 tiles apart) is far beyond 2x this.
+const TRACE_STEP_MAX = Math.max(TUNING.maxSpeed, DASH_SPEED) * SIM_DT;
+const TRACE_JUMP = TRACE_STEP_MAX * 2;
+let traceX = game.player.x;
+let traceY = game.player.y;
+let tracePrevRoom = -2; // sentinel: forces the first line
+function tracePlayer(): void {
+  const p = game.player;
+  const dx = p.x - traceX;
+  const dy = p.y - traceY;
+  const d = Math.hypot(dx, dy);
+  traceX = p.x;
+  traceY = p.y;
+  const room = playerRoomIndex(game);
+  const roomChanged = room !== tracePrevRoom;
+  // Log only on movement or a room-identity change (skip idle to avoid spam).
+  if (d < 1e-4 && !roomChanged) return;
+  tracePrevRoom = room;
+  const flag = d > TRACE_JUMP ? '⚠JUMP ' : '';
+  console.info(
+    `${flag}[pos] (${p.x.toFixed(3)},${p.y.toFixed(3)}) Δ${d.toFixed(3)}` +
+      `${roomChanged ? ' ROOM→' : ' room '}${room} active ${game.activeRoom}` +
+      ` seed ${game.seed} depth ${game.run.depth}  (maxΔ≈${TRACE_STEP_MAX.toFixed(3)})`,
+  );
+}
+
 // --- Loop -----------------------------------------------------------------
 let lastMs = performance.now();
 let accumulator = 0;
@@ -174,6 +211,7 @@ function frame(nowMs: number): void {
   let steps = 0;
   while (accumulator >= SIM_DT) {
     update(game, controls.intent, SIM_DT);
+    if (debug) tracePlayer(); // per-tick position trace (teleport diagnosis)
     accumulator -= SIM_DT;
     steps++;
   }
