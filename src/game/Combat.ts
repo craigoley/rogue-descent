@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { DASH_STRIKE, DROP, ENEMY, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { DASH_STRIKE, DROP, ENEMY_COMMON, ENEMY_TYPES, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -48,7 +48,7 @@ export function damageEnemy(
   state: GameState,
 ): void {
   enemy.health -= amount;
-  enemy.flashTimer = ENEMY.flash;
+  enemy.flashTimer = ENEMY_COMMON.flash;
   enemy.kbVx += kbDirX * kbForce;
   enemy.kbVy += kbDirY * kbForce;
   spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
@@ -91,10 +91,10 @@ export function damagePlayer(player: PlayerState, amount: number, state: GameSta
  */
 export function dashStrike(state: GameState): void {
   const { player, enemies } = state;
-  const reach = DASH_STRIKE.radius + ENEMY.radius;
   for (let ei = 0; ei < enemies.length; ei++) {
     const e = enemies[ei];
     if (!e.active || player.dashHits.has(ei)) continue;
+    const reach = DASH_STRIKE.radius + ENEMY_TYPES[e.type].radius; // per-type hitbox
     const dx = e.x - player.x;
     const dy = e.y - player.y;
     if (dx * dx + dy * dy > reach * reach) continue;
@@ -111,13 +111,13 @@ export function dashStrike(state: GameState): void {
  */
 export function meleeAttack(state: GameState, aimX: number, aimY: number): void {
   const { player, enemies } = state;
-  const reach = MELEE.range + ENEMY.radius;
   const arcCos = Math.cos(MELEE.halfArc);
   // KNOCKBACK powerup turns the swing into a launcher: same hit, far stronger
   // shove. Damage is unchanged — this is a behaviour toggle, not a damage buff.
   const kbForce = player.meleeKnockback ? DROP.meleeKnockback : MELEE.knockback;
   for (const e of enemies) {
     if (!e.active) continue;
+    const reach = MELEE.range + ENEMY_TYPES[e.type].radius; // per-type hitbox
     const dx = e.x - player.x;
     const dy = e.y - player.y;
     const d = Math.hypot(dx, dy);

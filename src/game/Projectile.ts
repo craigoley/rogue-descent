@@ -7,7 +7,7 @@
  * first enemy it overlaps (then despawns) via the shared Combat machinery.
  */
 
-import { ENEMY, POOL, RANGED, TUNING } from '../utils/constants';
+import { ENEMY_TYPES, POOL, RANGED, TUNING } from '../utils/constants';
 import { isSolid } from './Room';
 import { damageEnemy } from './Combat';
 import type { GameState } from './GameState';
@@ -77,7 +77,6 @@ export function activeProjectileCount(pool: Projectile[]): number {
 export function updateProjectiles(state: GameState, dt: number): void {
   const { projectiles, enemies, room } = state;
   const pierce = state.player.pierce;
-  const reach = RANGED.radius + ENEMY.radius;
   for (const p of projectiles) {
     if (!p.active) continue;
     p.prevX = p.x;
@@ -101,6 +100,7 @@ export function updateProjectiles(state: GameState, dt: number): void {
     for (let ei = 0; ei < enemies.length; ei++) {
       const e = enemies[ei];
       if (!e.active) continue;
+      const reach = RANGED.radius + ENEMY_TYPES[e.type].radius; // per-type hitbox
       const dx = e.x - p.x;
       const dy = e.y - p.y;
       if (dx * dx + dy * dy > reach * reach) continue;

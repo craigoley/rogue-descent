@@ -19,6 +19,7 @@ import {
   damageMultForDepth,
   enemiesPerRoomForDepth,
   healthMultForDepth,
+  rangedCountForDepth,
   speedMultForDepth,
 } from '../game/Difficulty';
 import { loadBest } from '../state/Best';
@@ -297,6 +298,16 @@ export class HUD {
       spawned += enc.dropsSpawned;
       collected += enc.dropsCollected;
     }
+    // Phase 7.5 funnel: live enemy mix + ranged bolts in flight.
+    let liveChasers = 0;
+    let liveRanged = 0;
+    for (const e of state.enemies) {
+      if (!e.active) continue;
+      if (e.type === 'ranged') liveRanged++;
+      else liveChasers++;
+    }
+    let bolts = 0;
+    for (const b of state.enemyProjectiles) if (b.active) bolts++;
 
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
@@ -306,9 +317,11 @@ export class HUD {
       `stairs-room ${state.stairs.roomIndex}\n` +
       `RUN  over ${state.runOver}  time ${state.run.timeSec.toFixed(1)}s  best DEPTH ${loadBest().depth}\n` +
       `DIFFICULTY  enemies/room ${enemiesPerRoomForDepth(state.run.depth)}  ` +
+      `ranged/room ${rangedCountForDepth(state.run.depth)}  ` +
       `hp x${healthMultForDepth(state.run.depth).toFixed(2)}  ` +
       `dmg x${damageMultForDepth(state.run.depth).toFixed(2)}  ` +
       `spd x${speedMultForDepth(state.run.depth).toFixed(2)}\n` +
+      `ENEMIES  live chaser ${liveChasers}  ranged ${liveRanged}  bolts ${bolts}\n` +
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
       `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +

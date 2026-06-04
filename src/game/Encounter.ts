@@ -13,8 +13,8 @@
  * at a time — so "cleared = active room with zero live enemies".
  */
 
-import { ENCOUNTER, ROOM } from '../utils/constants';
-import { enemiesPerRoomForDepth } from './Difficulty';
+import { ENCOUNTER, ROOM, type EnemyType } from '../utils/constants';
+import { enemiesPerRoomForDepth, rangedCountForDepth } from './Difficulty';
 import type { Rng } from '../utils/rng';
 import { activeEnemyCount, spawnEnemy } from './Enemy';
 import { rollDrop, spawnPickup } from './Pickup';
@@ -27,8 +27,8 @@ export type RoomPhase = 'idle' | 'active' | 'cleared';
 export interface RoomEncounter {
   rect: Rect;
   phase: RoomPhase;
-  /** Enemy spawn positions (world units) used when the room activates. */
-  spawns: { x: number; y: number }[];
+  /** Enemy spawns (world-unit position + type) used when the room activates. */
+  spawns: { x: number; y: number; type: EnemyType }[];
   /** Corridor-mouth cells (tile coords) that lock/unlock with the room. */
   doorCells: { tx: number; ty: number }[];
   dropsSpawned: number;
@@ -50,17 +50,22 @@ function computeDoorCells(room: RoomState, rect: Rect): { tx: number; ty: number
   return cells;
 }
 
-/** Enemy spawn positions: a small ring around the room centre (deterministic,
- *  inside the room since rooms are >= minRoom tiles). */
-function computeSpawns(rect: Rect, depth: number): { x: number; y: number }[] {
+/** Enemy spawns: a small ring around the room centre (deterministic, inside the
+ *  room since rooms are >= minRoom tiles). Phase 7.5: the last `rangedCount`
+ *  positions are RANGED, the rest CHASER — i.e. CHASERS FIRST, so the pool's
+ *  leading slots are always chasers (keeps difficulty assertions on live[0]
+ *  valid). Deterministic by index — no RNG, so same seed+depth => same mix. */
+function computeSpawns(rect: Rect, depth: number): { x: number; y: number; type: EnemyType }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
   const n = enemiesPerRoomForDepth(depth); // depth-scaled count (Phase 7c)
+  const ranged = rangedCountForDepth(depth); // ranged SUBSTITUTE for chasers (7.5)
   const spread = ENCOUNTER.spawnSpread;
-  const out: { x: number; y: number }[] = [];
+  const out: { x: number; y: number; type: EnemyType }[] = [];
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2;
-    out.push({ x: cx + Math.cos(ang) * spread, y: cy + Math.sin(ang) * spread });
+    const type: EnemyType = k >= n - ranged ? 'ranged' : 'chaser';
+    out.push({ x: cx + Math.cos(ang) * spread, y: cy + Math.sin(ang) * spread, type });
   }
   return out;
 }
@@ -102,7 +107,7 @@ export function updateEncounterEntry(state: GameState): void {
   if (enc.phase !== 'idle') return;
   enc.phase = 'active';
   state.activeRoom = idx;
-  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth);
+  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type);
   setDoors(state, enc, true);
 }
 

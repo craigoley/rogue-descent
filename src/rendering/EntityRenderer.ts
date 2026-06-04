@@ -40,7 +40,8 @@ import type { InputIntent } from '../game/Input';
 import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
-  ENEMY,
+  ENEMY_PROJ,
+  ENEMY_TYPES,
   FIGURE,
   MELEE,
   PALETTE,
@@ -51,8 +52,21 @@ import {
   STAIRS,
   TOAST,
   VFX,
+  type EnemyType,
 } from '../utils/constants';
 import { lerp, type Vec2 } from '../utils/math';
+
+/** Per-enemy-type render presentation: silhouette dims + body colour. Adding a
+ *  type = one entry here (mirrors the ENEMY_TYPES sim table). */
+const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
+  chaser: FIGURE.chaser,
+  ranged: FIGURE.ranged,
+};
+const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
+  chaser: PALETTE.enemy,
+  ranged: PALETTE.enemyRanged,
+};
+const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged'];
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -270,8 +284,12 @@ export class EntityRenderer {
   private playerLean = 0;
   private lastNow = 0;
 
-  private readonly enemies: Figure[] = [];
+  /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
+   *  matching-type figure is shown, the other-type figure at i is hidden. */
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [] };
   private readonly projectiles: Mesh[] = [];
+  /** Ranged-enemy bolts (scarlet spheres) — own pool, distinct from player shots. */
+  private readonly enemyProjectiles: Mesh[] = [];
   private readonly particles: Mesh[] = [];
   private readonly trail: Mesh[] = [];
   private readonly trailX: number[] = [];
@@ -321,13 +339,17 @@ export class EntityRenderer {
       scene.add(m);
     }
 
-    // --- Enemy figures (pooled; shared geometry, per-enemy materials) ---
-    const enemyGeos = this.makeGeos(FIGURE.enemy);
-    for (let i = 0; i < POOL.enemies; i++) {
-      const fig = this.makeFigure(enemyGeos, PALETTE.enemy, VFX.enemyEmissive, PALETTE.enemyTelegraph);
-      fig.group.visible = false;
-      this.enemies.push(fig);
-      scene.add(fig.group);
+    // --- Enemy figures: one pool PER type (shared geometry per type, per-enemy
+    // materials). A pool slot has both a chaser-shaped and a ranged-shaped figure;
+    // syncEnemies shows whichever matches the enemy in that slot. ---
+    for (const kind of ENEMY_KINDS) {
+      const geos = this.makeGeos(ENEMY_FIGURE[kind]);
+      for (let i = 0; i < POOL.enemies; i++) {
+        const fig = this.makeFigure(geos, ENEMY_BODY_COLOR[kind], VFX.enemyEmissive, PALETTE.enemyTelegraph);
+        fig.group.visible = false;
+        this.enemyFigs[kind].push(fig);
+        scene.add(fig.group);
+      }
     }
 
     // --- Projectiles (pooled, shared material) ---
@@ -337,6 +359,18 @@ export class EntityRenderer {
       const m = new Mesh(projGeo, projMat);
       m.visible = false;
       this.projectiles.push(m);
+      scene.add(m);
+    }
+
+    // --- Enemy bolts (pooled, shared material): scarlet SPHERES — a distinct
+    // shape from the player's blue cube, so "incoming red ball" never reads as
+    // "my shot". ---
+    const eProjGeo = new SphereGeometry(ENEMY_PROJ.radius, 10, 10);
+    const eProjMat = new MeshBasicMaterial({ color: PALETTE.enemyProjectile });
+    for (let i = 0; i < POOL.enemyProjectiles; i++) {
+      const m = new Mesh(eProjGeo, eProjMat);
+      m.visible = false;
+      this.enemyProjectiles.push(m);
       scene.add(m);
     }
 
@@ -548,6 +582,7 @@ export class EntityRenderer {
     this.syncTrail(p, px, py);
     this.syncEnemies(state, alpha, px, py);
     this.syncProjectiles(state, alpha);
+    this.syncEnemyProjectiles(state, alpha);
     this.syncParticles(state);
     this.syncMelee(p, px, py, aim.x, aim.y);
     this.syncPickups(state, now);
@@ -676,9 +711,12 @@ export class EntityRenderer {
 
   private syncEnemies(state: GameState, alpha: number, px: number, py: number): void {
     const list = state.enemies;
-    for (let i = 0; i < this.enemies.length; i++) {
+    for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      const fig = this.enemies[i];
+      // Show the figure that matches this slot's enemy type; hide the other.
+      const fig = this.enemyFigs[e.type][i];
+      const other = this.enemyFigs[e.type === 'chaser' ? 'ranged' : 'chaser'][i];
+      other.group.visible = false;
       if (!e.active) {
         fig.group.visible = false;
         continue;
@@ -700,16 +738,31 @@ export class EntityRenderer {
         mat.emissiveIntensity = VFX.invulnEmissive;
         fig.group.scale.setScalar(1);
       } else if (e.phase === 'telegraph') {
-        // Wind-up tell: warning colour + grow as the strike approaches.
+        // Wind-up tell (shared across types): warning colour + grow toward the
+        // strike. Scale uses the type's own telegraph duration.
         mat.color.setHex(PALETTE.enemyTelegraph);
         mat.emissiveIntensity = VFX.enemyEmissive;
-        const t = 1 - e.timer / ENEMY.telegraph; // 0 -> 1 across the wind-up
+        const t = 1 - e.timer / ENEMY_TYPES[e.type].telegraph; // 0 -> 1 across wind-up
         fig.group.scale.setScalar(1 + VFX.telegraphScale * t);
       } else {
-        mat.color.setHex(PALETTE.enemy);
+        mat.color.setHex(ENEMY_BODY_COLOR[e.type]); // chaser red / ranged crimson
         mat.emissiveIntensity = VFX.enemyEmissive;
         fig.group.scale.setScalar(1);
       }
+    }
+  }
+
+  private syncEnemyProjectiles(state: GameState, alpha: number): void {
+    const list = state.enemyProjectiles;
+    for (let i = 0; i < this.enemyProjectiles.length; i++) {
+      const pr = list[i];
+      const m = this.enemyProjectiles[i];
+      if (!pr.active) {
+        m.visible = false;
+        continue;
+      }
+      m.visible = true;
+      m.position.set(lerp(pr.prevX, pr.x, alpha), VFX.projectileHeight, lerp(pr.prevY, pr.y, alpha));
     }
   }
 
