@@ -23,8 +23,6 @@ import { isSolid, type RoomState } from './Room';
  */
 const EDGE_EPS = 1e-6;
 
-/** Any solid tile in column `col` overlapping the box's Y-extent [y-r, y+r]?
- *  Half-open: an edge flush on a tile boundary does not count as the next tile. */
 /**
  * Does the axis-aligned box centred at (x, y) with half-extent `r` overlap tile
  * (tx, ty)? Uses the SAME half-open EDGE_EPS span as the resolver, so "the box
@@ -41,6 +39,8 @@ export function boxOverlapsTile(x: number, y: number, r: number, tx: number, ty:
   return tx >= txMin && tx <= txMax && ty >= tyMin && ty <= tyMax;
 }
 
+/** Any solid tile in column `col` overlapping the box's Y-extent [y-r, y+r]?
+ *  Half-open: an edge flush on a tile boundary does not count as the next tile. */
 function columnBlocks(room: RoomState, col: number, y: number, r: number): boolean {
   const ts = room.tileSize;
   const tyMin = Math.floor((y - r + EDGE_EPS) / ts);
