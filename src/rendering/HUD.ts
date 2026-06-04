@@ -27,6 +27,7 @@ import {
 import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
+import { nearestLiveEnemyInRoom } from './softlock';
 import {
   CSS_PALETTE,
   DASH,
@@ -329,12 +330,17 @@ export class HUD {
     this.prevHealthSum = healthSum;
     this.prevNearest = nearest;
     const engaged = nearest <= SOFTLOCK_DETECT.engageRadius;
+    // RESOLVABLE: the nearest live enemy is inside the room rect, so the player
+    // can simply walk over and kill it — a kiting/avoidant fight, NOT a softlock.
+    // This is the false-positive fix. The detector still FIRES when the nearest
+    // live enemy is OUT of the rect (escaped / unreachable) — the real tripwire.
+    const resolvable = nearestLiveEnemyInRoom(state.enemies, p.x, p.y, arEnc.rect, state.room.tileSize);
 
     // Skip discontinuities (floor reset / pause / multiple renders per sim step):
     // only real, forward sim-time deltas accumulate.
     if (dt <= 0 || dt > 1) return;
 
-    if (tookDamage || engaged || closing || anyAttacking || boltLive) {
+    if (tookDamage || engaged || closing || anyAttacking || boltLive || resolvable) {
       this.stallTimer = 0;
       if (this.softlockFired) {
         this.softlockBannerEl.classList.remove('is-visible');
