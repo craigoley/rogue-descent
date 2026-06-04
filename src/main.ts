@@ -87,13 +87,27 @@ const unlockAudio = (): void => {
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
 
-// M toggles master mute; persisted (Safari-Private-safe via saveSettings).
-window.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() !== 'm') return;
+// Mute toggle: M key (desktop) + touch button (mobile). Both use the same path.
+const muteBtn = document.createElement('button');
+muteBtn.className = `hud-mute${settings.muted ? ' is-muted' : ''}`;
+muteBtn.textContent = settings.muted ? 'MUTED' : 'SOUND';
+app.appendChild(muteBtn);
+
+const toggleMute = (): void => {
   settings.muted = !settings.muted;
   audio.setMuted(settings.muted);
   audioMgr.setMuted(settings.muted);
+  muteBtn.textContent = settings.muted ? 'MUTED' : 'SOUND';
+  muteBtn.classList.toggle('is-muted', settings.muted);
   saveSettings(settings);
+};
+muteBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  toggleMute();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() !== 'm') return;
+  toggleMute();
 });
 
 // Phase 5 funnel telemetry (?debug only): log room lifecycle + drop transitions.

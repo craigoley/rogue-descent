@@ -556,6 +556,30 @@ body {
   touch-action: none;
 }
 
+/* Mute toggle — top-right, below the minimap. Touch-accessible counterpart of
+   the M key. Sized for comfortable thumb taps (48px min touch target). */
+.hud-mute {
+  position: fixed;
+  top: calc(var(--safe-top) + var(--hud-band-clear) + 136px);
+  right: calc(var(--safe-right) + 10px);
+  min-width: 48px;
+  padding: 0 10px;
+  height: 28px;
+  font: 700 11px/28px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+  color: var(--player);
+  background: rgba(10, 10, 18, 0.55);
+  border: 1px solid rgba(51, 255, 204, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.hud-mute.is-muted {
+  color: rgba(51, 255, 204, 0.35);
+}
+
 /* ?debug=1 tuning panel — interactive (sliders), so pointer-events on. */
 .hud-panel {
   position: fixed;
