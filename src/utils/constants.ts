@@ -860,6 +860,9 @@ export const AUDIO = {
   /** Same-type coalesce window, seconds: a 2nd same-type trigger within this is
    *  dropped (a multi-kill frame becomes one fatter sound, not N stacked). */
   coalesceSec: 0.04,
+  /** Extra time (seconds) past the end of a gain envelope before stopping the
+   *  voice node — lets exponentialRamp reach its target so there's no click. */
+  voiceStopPad: 0.02,
 
   /** Player ACTION blips — bright square/triangle, short envelope. */
   blip: {

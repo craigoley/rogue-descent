@@ -131,7 +131,7 @@ export class AudioEngine implements SfxSink {
     g.gain.exponentialRampToValueAtTime(0.0001, now + AUDIO.blip.attack + AUDIO.blip.decay);
     osc.connect(g).connect(this.master!);
     osc.start(now);
-    this.spend(osc, now + AUDIO.blip.attack + AUDIO.blip.decay + 0.02);
+    this.spend(osc, now + AUDIO.blip.attack + AUDIO.blip.decay + AUDIO.voiceStopPad);
   }
 
   /** A contact thud: white-noise burst + low sine body, fast decay. */
@@ -153,7 +153,7 @@ export class AudioEngine implements SfxSink {
     ng.gain.exponentialRampToValueAtTime(0.0001, end);
     noise.connect(ng).connect(this.master!);
     noise.start(now);
-    this.spend(noise, end + 0.02);
+    this.spend(noise, end + AUDIO.voiceStopPad);
 
     // Low sine body.
     const osc = ctx.createOscillator();
@@ -165,7 +165,7 @@ export class AudioEngine implements SfxSink {
     sg.gain.exponentialRampToValueAtTime(0.0001, end);
     osc.connect(sg).connect(this.master!);
     osc.start(now);
-    this.spend(osc, end + 0.02);
+    this.spend(osc, end + AUDIO.voiceStopPad);
   }
 
   /** Dodge-negate: an airy low-passed down-chirp (you AVOIDED the hit). */
@@ -185,6 +185,6 @@ export class AudioEngine implements SfxSink {
     g.gain.exponentialRampToValueAtTime(0.0001, end);
     osc.connect(lp).connect(g).connect(this.master!);
     osc.start(now);
-    this.spend(osc, end + 0.02);
+    this.spend(osc, end + AUDIO.voiceStopPad);
   }
 }
