@@ -30,6 +30,20 @@ export function rangedCountForDepth(depth: number): number {
   return Math.max(0, Math.min(raw, enemiesPerRoomForDepth(d) - 1));
 }
 
+/** How many of a room's enemies are SWARMERS at `depth` (Phase 7.6). Like ranged,
+ *  they SUBSTITUTE for chasers within the count (no added density) — filling slots
+ *  LEFT after chasers and ranged, so chasers + ranged + swarmers always leave
+ *  >= 1 chaser. Deterministic (no RNG). */
+export function swarmerCountForDepth(depth: number): number {
+  const d = Math.max(1, depth);
+  if (d < DIFFICULTY.swarmerMinDepth) return 0;
+  const raw =
+    DIFFICULTY.swarmerBase + Math.floor((d - DIFFICULTY.swarmerMinDepth) * DIFFICULTY.swarmerPerDepth);
+  // Leave room for >= 1 chaser AND all the ranged.
+  const free = enemiesPerRoomForDepth(d) - 1 - rangedCountForDepth(d);
+  return Math.max(0, Math.min(raw, free));
+}
+
 /** Enemy max-health multiplier at `depth` (1.0 at depth 1). */
 export function healthMultForDepth(depth: number): number {
   return 1 + (Math.max(1, depth) - 1) * DIFFICULTY.healthMultPerDepth;

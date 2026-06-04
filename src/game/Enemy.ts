@@ -218,6 +218,87 @@ function updateRanged(e: Enemy, state: GameState, dt: number, dx: number, dy: nu
   }
 }
 
+/** Swarmer AI: FLOCK-surround (steer toward player + separate from nearby
+ *  swarmers, so a few of them encircle instead of stacking) -> at close range
+ *  LUNGE (a short MOVING wind-up, then a committed dart) -> recover. Distinct
+ *  from the chaser's planted telegraph + stationary strike. Pure: reads other
+ *  swarmers' positions from state.enemies in-loop (deterministic by pool order).
+ *  Writes _vel. */
+function updateSwarmer(e: Enemy, state: GameState, dt: number, dx: number, dy: number, d: number): void {
+  const S = ENEMY_TYPES.swarmer;
+  const { player, enemies } = state;
+  _vel.x = 0;
+  _vel.y = 0;
+  switch (e.phase) {
+    case 'chase': {
+      if (!player.alive || d === 0) break;
+      // Commit the lunge once close enough.
+      if (d <= S.lungeRange) {
+        e.phase = 'telegraph';
+        e.timer = S.telegraph;
+        break;
+      }
+      // FLOCK steer = pull toward the player + push off nearby swarmers.
+      let sx = (dx / d) * S.attractWeight;
+      let sy = (dy / d) * S.attractWeight;
+      for (const o of enemies) {
+        if (o === e || !o.active || o.type !== 'swarmer') continue;
+        const ox = e.x - o.x;
+        const oy = e.y - o.y;
+        const od = Math.hypot(ox, oy);
+        if (od > 0 && od < S.sepRadius) {
+          // Closer neighbours push harder (falls off to 0 at sepRadius).
+          const push = (S.sepRadius - od) / S.sepRadius / od;
+          sx += ox * push * S.sepWeight;
+          sy += oy * push * S.sepWeight;
+        }
+      }
+      const sl = Math.hypot(sx, sy);
+      if (sl > 0) {
+        _vel.x = (sx / sl) * e.moveSpeed;
+        _vel.y = (sy / sl) * e.moveSpeed;
+      }
+      break;
+    }
+    case 'telegraph':
+      // MOVING wind-up (the frantic tell): keep drifting toward the player at the
+      // flock speed while winding up — unlike the chaser, which stands still.
+      if (player.alive && d > 0) {
+        _vel.x = (dx / d) * e.moveSpeed;
+        _vel.y = (dy / d) * e.moveSpeed;
+      }
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'strike';
+        e.timer = S.strike;
+        e.struck = false;
+      }
+      break;
+    case 'strike':
+      // The DART: a fast committed drive at the player, with one damage check.
+      if (player.alive && d > 0) {
+        _vel.x = (dx / d) * S.lungeSpeed;
+        _vel.y = (dy / d) * S.lungeSpeed;
+      }
+      if (!e.struck) {
+        e.struck = true;
+        if (player.alive && d <= S.attackReach) {
+          damagePlayer(player, e.attackDamage, state); // depth-scaled at spawn
+        }
+      }
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'recover';
+        e.timer = S.recover;
+      }
+      break;
+    case 'recover':
+      e.timer -= dt;
+      if (e.timer <= 0) e.phase = 'chase';
+      break;
+  }
+}
+
 /** Advance every active enemy one fixed step against the shared game state. */
 export function updateEnemies(state: GameState, dt: number): void {
   const { player, room, enemies } = state;
@@ -234,8 +315,16 @@ export function updateEnemies(state: GameState, dt: number): void {
     const d = Math.hypot(dx, dy);
 
     // Per-type behaviour writes the desired velocity into _vel.
-    if (e.type === 'ranged') updateRanged(e, state, dt, dx, dy, d);
-    else updateChaser(e, state, dt, dx, dy, d);
+    switch (e.type) {
+      case 'ranged':
+        updateRanged(e, state, dt, dx, dy, d);
+        break;
+      case 'swarmer':
+        updateSwarmer(e, state, dt, dx, dy, d);
+        break;
+      default:
+        updateChaser(e, state, dt, dx, dy, d);
+    }
 
     // Shared tail: integrate desired movement + decaying knockback, one axis at a
     // time so enemies stop/slide on walls exactly like the player. Per-type radius.

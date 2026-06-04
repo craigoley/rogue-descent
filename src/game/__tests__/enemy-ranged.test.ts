@@ -187,15 +187,18 @@ describe('Ranged spawn mix — deterministic count rule (no RNG)', () => {
     return s.enemies.filter((e) => e.active);
   }
 
-  it('spawned mix matches the curve: total + ranged counts, and the rest chasers', () => {
+  it('spawned mix matches the curve: total + ranged counts, and >= 1 chaser', () => {
     const depth = 5;
     const live = activateRoomEnemies(createGameState(), depth);
     const ranged = live.filter((e) => e.type === 'ranged').length;
+    const swarmers = live.filter((e) => e.type === 'swarmer').length;
     const chasers = live.filter((e) => e.type === 'chaser').length;
     expect(live.length).toBe(enemiesPerRoomForDepth(depth));
     expect(ranged).toBe(rangedCountForDepth(depth));
-    expect(chasers).toBe(live.length - ranged);
-    expect(chasers).toBeGreaterThanOrEqual(1); // mixed fight always has a chaser
+    // Generalised past the two-type assumption: chasers fill whatever the
+    // specials (ranged + swarmers) leave — and there's always >= 1 chaser.
+    expect(chasers).toBe(live.length - ranged - swarmers);
+    expect(chasers).toBeGreaterThanOrEqual(1);
   });
 
   it('depth below K spawns pure chaser', () => {

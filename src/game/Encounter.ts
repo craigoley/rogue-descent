@@ -14,7 +14,7 @@
  */
 
 import { ENCOUNTER, ROOM, type EnemyType } from '../utils/constants';
-import { enemiesPerRoomForDepth, rangedCountForDepth } from './Difficulty';
+import { enemiesPerRoomForDepth, rangedCountForDepth, swarmerCountForDepth } from './Difficulty';
 import type { Rng } from '../utils/rng';
 import { activeEnemyCount, spawnEnemy } from './Enemy';
 import { rollDrop, spawnPickup } from './Pickup';
@@ -51,20 +51,27 @@ function computeDoorCells(room: RoomState, rect: Rect): { tx: number; ty: number
 }
 
 /** Enemy spawns: a small ring around the room centre (deterministic, inside the
- *  room since rooms are >= minRoom tiles). Phase 7.5: the last `rangedCount`
- *  positions are RANGED, the rest CHASER — i.e. CHASERS FIRST, so the pool's
- *  leading slots are always chasers (keeps difficulty assertions on live[0]
- *  valid). Deterministic by index — no RNG, so same seed+depth => same mix. */
+ *  room since rooms are >= minRoom tiles). The mix SUBSTITUTES specials for
+ *  chasers within the per-depth count (no added density): slots fill CHASERS
+ *  first [0, c), then RANGED, then SWARMERS — so the pool's leading slots are
+ *  always chasers (keeps difficulty assertions on live[0] valid) and there's
+ *  always >= 1 chaser. Deterministic by index — no RNG, same seed+depth => same
+ *  mix. */
 function computeSpawns(rect: Rect, depth: number): { x: number; y: number; type: EnemyType }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
   const n = enemiesPerRoomForDepth(depth); // depth-scaled count (Phase 7c)
-  const ranged = rangedCountForDepth(depth); // ranged SUBSTITUTE for chasers (7.5)
+  const ranged = rangedCountForDepth(depth); // SUBSTITUTE for chasers (7.5)
+  const swarmer = swarmerCountForDepth(depth); // SUBSTITUTE for chasers (7.6)
+  const chasers = n - ranged - swarmer; // >= 1 by the count clamps
   const spread = ENCOUNTER.spawnSpread;
   const out: { x: number; y: number; type: EnemyType }[] = [];
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2;
-    const type: EnemyType = k >= n - ranged ? 'ranged' : 'chaser';
+    let type: EnemyType;
+    if (k < chasers) type = 'chaser';
+    else if (k < chasers + ranged) type = 'ranged';
+    else type = 'swarmer';
     out.push({ x: cx + Math.cos(ang) * spread, y: cy + Math.sin(ang) * spread, type });
   }
   return out;
