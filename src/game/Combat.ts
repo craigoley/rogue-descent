@@ -49,8 +49,11 @@ export function damageEnemy(
 ): void {
   enemy.health -= amount;
   enemy.flashTimer = ENEMY_COMMON.flash;
-  enemy.kbVx += kbDirX * kbForce;
-  enemy.kbVy += kbDirY * kbForce;
+  // Per-type mass: light enemies (swarmers) get launched farther by the same
+  // impulse (chaser/ranged mult = 1, so this is identity for them).
+  const kb = kbForce * ENEMY_TYPES[enemy.type].knockbackMult;
+  enemy.kbVx += kbDirX * kb;
+  enemy.kbVy += kbDirY * kb;
   spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
   // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
   if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;

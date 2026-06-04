@@ -61,12 +61,14 @@ import { lerp, type Vec2 } from '../utils/math';
 const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
   chaser: FIGURE.chaser,
   ranged: FIGURE.ranged,
+  swarmer: FIGURE.swarmer,
 };
 const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
   chaser: PALETTE.enemy,
   ranged: PALETTE.enemyRanged,
+  swarmer: PALETTE.enemySwarmer,
 };
-const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged'];
+const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged', 'swarmer'];
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -286,7 +288,7 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [] };
   private readonly projectiles: Mesh[] = [];
   /** Ranged-enemy bolts (scarlet spheres) — own pool, distinct from player shots. */
   private readonly enemyProjectiles: Mesh[] = [];
@@ -713,10 +715,12 @@ export class EntityRenderer {
     const list = state.enemies;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      // Show the figure that matches this slot's enemy type; hide the other.
+      // Show the figure matching this slot's enemy type; hide every other kind's
+      // figure at this slot (slots are reused across types as the pool recycles).
       const fig = this.enemyFigs[e.type][i];
-      const other = this.enemyFigs[e.type === 'chaser' ? 'ranged' : 'chaser'][i];
-      other.group.visible = false;
+      for (const kind of ENEMY_KINDS) {
+        if (kind !== e.type) this.enemyFigs[kind][i].group.visible = false;
+      }
       if (!e.active) {
         fig.group.visible = false;
         continue;

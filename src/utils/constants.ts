@@ -27,6 +27,10 @@ export const PALETTE = {
   /** RANGED-ENEMY bolt — hot scarlet. Reads HOSTILE and is clearly NOT the
    *  player's blue shot (PALETTE.projectile). */
   enemyProjectile: 0xff2a4d,
+  /** SWARMER body (Phase 7.6) — vermilion (red-orange), a third enemy-warm tone
+   *  distinct from the chaser's pink-red and the ranged crimson. The SMALL
+   *  scuttling silhouette is the primary tell; hue is secondary (crowded wheel). */
+  enemySwarmer: 0xff4422,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -374,7 +378,7 @@ export const ENEMY_PROJ = {
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
-export type EnemyType = 'chaser' | 'ranged';
+export type EnemyType = 'chaser' | 'ranged' | 'swarmer';
 
 /** Shared across ALL enemy types (not per-type tuning). */
 export const ENEMY_COMMON = {
@@ -404,6 +408,8 @@ export const ENEMY_TYPES = {
     attackReach: 1.7,
     /** Collision/visual radius, world units. */
     radius: 0.4,
+    /** Knockback impulse multiplier (1 = normal mass). */
+    knockbackMult: 1,
   },
   /** Phase 7.5 ranged sniper: kite to range -> telegraph -> fire a slow bolt ->
    *  cooldown. FRAGILE (low HP) so closing in / sniping kills it fast — the
@@ -431,6 +437,46 @@ export const ENEMY_TYPES = {
     attackDamage: 12,
     /** Collision/visual radius, world units (slighter than the chaser). */
     radius: 0.33,
+    /** Knockback impulse multiplier (1 = normal mass). */
+    knockbackMult: 1,
+  },
+  /** Phase 7.6 swarmer: a FAST, FRAGILE pack that FLOCKS to surround the player
+   *  (steer toward player + separate from other swarmers) and LUNGES (a short
+   *  MOVING wind-up dart, not the chaser's planted telegraph). The threat is the
+   *  surround + numbers, not durability — fragility is intentional; the lever for
+   *  threat is flock pressure, NOT health. All first-guess, playtest-tunable. */
+  swarmer: {
+    /** VERY LOW — dies to a single ranged or melee hit. Deliberately fragile;
+     *  the danger is being encircled, not any one swarmer. */
+    maxHealth: 10,
+    /** FAST (> chaser/ranged) but still below the player's TUNING.maxSpeed (7),
+     *  so the player can always create space. Used as the flock steer magnitude. */
+    moveSpeed: 4.6,
+    /** Low per-hit damage — pressure comes from the pack, not the individual. */
+    attackDamage: 8,
+    /** The lunge connects if the player is within this at the dart's strike. */
+    attackReach: 1,
+    /** Distance at which it commits the lunge (enters the moving wind-up). */
+    lungeRange: 2.2,
+    /** Moving wind-up before the dart, seconds (short — frantic but a real tell). */
+    telegraph: 0.18,
+    /** Dart (strike) window, seconds — drives toward the player at lungeSpeed. */
+    strike: 0.12,
+    /** Brief pause after a lunge before flocking again, seconds. */
+    recover: 0.35,
+    /** Speed of the committed lunge dart, world units/sec (fast burst). */
+    lungeSpeed: 9,
+    /** FLOCK separation: push off other swarmers within this radius, world units. */
+    sepRadius: 1.2,
+    /** Weight of the separation push relative to the pull toward the player. */
+    sepWeight: 1.5,
+    /** Weight of the pull toward the player. */
+    attractWeight: 1,
+    /** Collision/visual radius, world units (small — the scuttling silhouette). */
+    radius: 0.28,
+    /** Knockback impulse multiplier — LIGHT, so KNOCKBACK launches them far (sells
+     *  melee crowd-control against a surrounding pack). */
+    knockbackMult: 2.2,
   },
 } as const;
 
@@ -499,6 +545,16 @@ export const DIFFICULTY = {
   /** Additional ranged enemies per depth beyond rangedMinDepth (floored). 0.34 =>
    *  +1 every ~3 floors. Always clamped to leave >= 1 chaser in the room. */
   rangedPerDepth: 0.34,
+  // --- Swarmer mix (Phase 7.6): SUBSTITUTE for chasers too, filling slots LEFT
+  // after chasers (>=1) and ranged. Deterministic, no RNG. POOL.enemies stays 8.
+  /** First depth a swarmer can appear (4 => the player meets types one at a time:
+   *  chaser @1, ranged @3, swarmer @4). All three can share a room from depth 4. */
+  swarmerMinDepth: 4,
+  /** Swarmer count at swarmerMinDepth. */
+  swarmerBase: 2,
+  /** Additional swarmers per depth beyond swarmerMinDepth (floored). 0.5 => +1
+   *  every 2 floors. Clamped so chasers + ranged + swarmers leave >= 1 chaser. */
+  swarmerPerDepth: 0.5,
 } as const;
 
 /**
@@ -680,6 +736,16 @@ export const FIGURE = {
     bodyHeight: 1.18,
     headRadius: 0.26,
     visorSize: 0.24,
+  },
+  /** Swarmer silhouette — SMALL + low (a scuttling drone). Reads as "the fast
+   *  little one" at a glance; the size is the tell, distinct from the squat
+   *  chaser and the tall ranged. */
+  swarmer: {
+    bodyRadiusTop: 0.24,
+    bodyRadiusBottom: 0.3,
+    bodyHeight: 0.5,
+    headRadius: 0.2,
+    visorSize: 0.14,
   },
   /** Forward lean (radians) while dashing — the figure tips into the burst. */
   dashLean: 0.4,
