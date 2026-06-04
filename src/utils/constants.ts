@@ -869,8 +869,15 @@ export const AUDIO = {
     /** Attack + decay envelope, seconds. */
     attack: 0.005,
     decay: 0.09,
-    /** Per-event base frequency (Hz) + waveform. */
-    shoot: { freq: 660, type: 'square' as OscillatorType, gain: 0.22 },
+    /** Per-event base frequency (Hz) + waveform. An optional `cutoff` adds a
+     *  low-pass to that voice, shaving harsh upper harmonics. */
+    // SHOOT: dropped from 660 (shrill ice-pick) to a punchy mid-low laser that
+    // sits BELOW the melee swing (420) so it doesn't pierce. Stays SQUARE for an
+    // electronic "ranged" character (distinct from the triangle melee), with a
+    // low-pass to tame the square's shrill 5th+ harmonics, and a touch quieter —
+    // ranged fires fast, so less prominent = less repetition fatigue. Pitch
+    // jitter still applies, so rapid fire doesn't machine-gun identically.
+    shoot: { freq: 360, type: 'square' as OscillatorType, gain: 0.18, cutoff: 1600 },
     swing: { freq: 420, type: 'triangle' as OscillatorType, gain: 0.26 },
     dash: { freq: 300, type: 'triangle' as OscillatorType, gain: 0.24 },
   },

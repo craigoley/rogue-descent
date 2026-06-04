@@ -118,8 +118,13 @@ export class AudioEngine implements SfxSink {
     node.stop(stopAt);
   }
 
-  /** A bright square/triangle action blip with a short AD envelope + jitter. */
-  private blip(cfg: { freq: number; type: OscillatorType; gain: number }, now: number): void {
+  /** A bright square/triangle action blip with a short AD envelope + jitter. An
+   *  optional `cutoff` inserts a low-pass (used by SHOOT to tame its harsh upper
+   *  harmonics); voices without it route straight to master, unchanged. */
+  private blip(
+    cfg: { freq: number; type: OscillatorType; gain: number; cutoff?: number },
+    now: number,
+  ): void {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
     osc.type = cfg.type;
@@ -129,7 +134,14 @@ export class AudioEngine implements SfxSink {
     g.gain.setValueAtTime(0.0001, now);
     g.gain.linearRampToValueAtTime(peak, now + AUDIO.blip.attack);
     g.gain.exponentialRampToValueAtTime(0.0001, now + AUDIO.blip.attack + AUDIO.blip.decay);
-    osc.connect(g).connect(this.master!);
+    if (cfg.cutoff !== undefined) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = cfg.cutoff;
+      osc.connect(lp).connect(g).connect(this.master!);
+    } else {
+      osc.connect(g).connect(this.master!);
+    }
     osc.start(now);
     this.spend(osc, now + AUDIO.blip.attack + AUDIO.blip.decay + AUDIO.voiceStopPad);
   }
