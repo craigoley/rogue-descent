@@ -280,11 +280,9 @@ function updateSwarmer(e: Enemy, state: GameState, dt: number, dx: number, dy: n
         _vel.x = (dx / d) * S.lungeSpeed;
         _vel.y = (dy / d) * S.lungeSpeed;
       }
-      if (!e.struck) {
+      if (!e.struck && player.alive && d <= S.attackReach) {
         e.struck = true;
-        if (player.alive && d <= S.attackReach) {
-          damagePlayer(player, e.attackDamage, state); // depth-scaled at spawn
-        }
+        damagePlayer(player, e.attackDamage, state); // depth-scaled at spawn
       }
       e.timer -= dt;
       if (e.timer <= 0) {

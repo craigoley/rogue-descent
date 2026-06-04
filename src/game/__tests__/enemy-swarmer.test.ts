@@ -85,6 +85,20 @@ describe('Swarmer — LUNGE (moving wind-up), distinct from the chaser telegraph
   });
 });
 
+describe('Swarmer — lunge deals damage (dart closes the gap)', () => {
+  it('damages a stationary player during the dart (not just the first frame)', () => {
+    const s = arena();
+    const startHp = s.player.health;
+    // Place the swarmer just inside lungeRange so it enters telegraph immediately.
+    spawnEnemy(s.enemies, 20 + ENEMY_TYPES.swarmer.lungeRange - 0.1, 20, 1, 'swarmer');
+    const sw = s.enemies.find((e) => e.active)!;
+    // Run through telegraph + full strike window.
+    for (let k = 0; k < 60; k++) updateEnemies(s, DT);
+    expect(sw.struck).toBe(true);
+    expect(s.player.health).toBeLessThan(startHp);
+  });
+});
+
 describe('Swarmer — fragile up close', () => {
   it('has less HP than the chaser and dies in fewer hits', () => {
     expect(ENEMY_TYPES.swarmer.maxHealth).toBeLessThan(ENEMY_TYPES.chaser.maxHealth);
