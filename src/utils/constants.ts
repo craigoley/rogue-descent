@@ -20,6 +20,13 @@ export const PALETTE = {
   // Combat (Phase 2).
   enemy: 0xff4466,
   enemyTelegraph: 0xffcc33,
+  /** RANGED ENEMY body (Phase 7.5) — deep crimson, a distinct shade from the
+   *  chaser's pinkish-red so "all red = threat" holds while shape + tone tell the
+   *  two apart at a glance. */
+  enemyRanged: 0xcc1133,
+  /** RANGED-ENEMY bolt — hot scarlet. Reads HOSTILE and is clearly NOT the
+   *  player's blue shot (PALETTE.projectile). */
+  enemyProjectile: 0xff2a4d,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -350,35 +357,94 @@ export const RANGED = {
   knockback: 3,
 } as const;
 
-/** The one enemy type: chase -> telegraph -> strike -> recover. */
-export const ENEMY = {
-  maxHealth: 40,
-  /** Chase speed, world units/sec (slower than the player so kiting works). */
-  moveSpeed: 3.3,
-  /** Distance at which it stops and begins the telegraph, world units. */
-  attackRange: 1.3,
-  /** Wind-up before the strike, seconds (the dodge window). */
-  telegraph: 0.55,
-  /** Strike active window, seconds. */
-  strike: 0.12,
-  /** Post-strike pause before chasing again, seconds. */
-  recover: 0.45,
-  /** Damage dealt by a connecting strike. */
-  attackDamage: 18,
-  /** A strike connects if the player is within this distance at strike time. */
-  attackReach: 1.7,
+/** Ranged-ENEMY projectile (Phase 7.5) — the slow hostile bolt the ranged enemy
+ *  fires. Distinct from the player's RANGED shot: slower (dodgeable), its own
+ *  pool, its own scarlet sphere visual. Damage is per-enemy (depth-scaled), so
+ *  it isn't here. */
+export const ENEMY_PROJ = {
+  /** Travel speed, world units/sec — well below the player's RANGED.speed (14) so
+   *  it reads as "incoming, dodge it". */
+  speed: 6.5,
+  /** Collision radius, world units. */
+  radius: 0.22,
+  /** Time before it despawns, seconds (covers fireRange at this speed). */
+  lifetime: 2.2,
+} as const;
+
+/** The original chaser: chase -> telegraph -> strike -> recover. */
+/** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
+ *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
+ *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
+export type EnemyType = 'chaser' | 'ranged';
+
+/** Shared across ALL enemy types (not per-type tuning). */
+export const ENEMY_COMMON = {
   /** Hit-flash duration, seconds. */
   flash: 0.08,
-  /** Collision/visual radius, world units. */
-  radius: 0.4,
   /** Per-second decay factor applied to knockback velocity (exp). */
   knockbackDecay: 0.0001,
 } as const;
+
+export const ENEMY_TYPES = {
+  /** The original Phase-2 melee chaser: chase -> telegraph -> strike -> recover. */
+  chaser: {
+    maxHealth: 40,
+    /** Chase speed, world units/sec (slower than the player so kiting works). */
+    moveSpeed: 3.3,
+    /** Distance at which it stops and begins the telegraph, world units. */
+    attackRange: 1.3,
+    /** Wind-up before the strike, seconds (the dodge window). */
+    telegraph: 0.55,
+    /** Strike active window, seconds. */
+    strike: 0.12,
+    /** Post-strike pause before chasing again, seconds. */
+    recover: 0.45,
+    /** Damage dealt by a connecting strike. */
+    attackDamage: 18,
+    /** A strike connects if the player is within this distance at strike time. */
+    attackReach: 1.7,
+    /** Collision/visual radius, world units. */
+    radius: 0.4,
+  },
+  /** Phase 7.5 ranged sniper: kite to range -> telegraph -> fire a slow bolt ->
+   *  cooldown. FRAGILE (low HP) so closing in / sniping kills it fast — the
+   *  priority target that justifies the whole player toolkit. All first-guess,
+   *  playtest-tunable. */
+  ranged: {
+    /** LOW — dies in ~1 melee or ~2 ranged hits (chaser is 40). */
+    maxHealth: 16,
+    /** Kite speed (can't outrun the player, so closing always works). */
+    moveSpeed: 3.4,
+    /** Standoff distance it holds: kites to this, and FIRES only when at it
+     *  (within rangeBand). Closing inside the band makes it back off — that's the
+     *  kiting that forces the player to commit (dash/melee) to catch it. */
+    preferredRange: 6,
+    /** Hysteresis band around preferredRange: the fire window + anti-jitter, world
+     *  units. Inside [pref-band, pref+band] it stands and fires; outside it kites. */
+    rangeBand: 0.8,
+    /** Wind-up before each shot, seconds (the clear, dodgeable tell). */
+    telegraph: 0.7,
+    /** Release window, seconds (the single shot fires once within it). */
+    strike: 0.12,
+    /** Cooldown after firing before it kites/fires again, seconds. */
+    recover: 1.1,
+    /** Projectile damage dealt to the player on hit. */
+    attackDamage: 12,
+    /** Collision/visual radius, world units (slighter than the chaser). */
+    radius: 0.33,
+  },
+} as const;
+
+/** Back-compat alias + the chaser baseline: existing ENEMY.* references (the
+ *  chaser AI and tests) read here; per-type tuning lives in ENEMY_TYPES. */
+export const ENEMY = { ...ENEMY_TYPES.chaser, ...ENEMY_COMMON } as const;
 
 /** Fixed pool sizes — the hard ceiling on simultaneous entities. */
 export const POOL = {
   projectiles: 32,
   enemies: 8,
+  /** Ranged-enemy bolts in flight (separate from the player's `projectiles`). */
+  enemyProjectiles: 24,
   particles: 96,
   pickups: 16,
 } as const;
@@ -423,6 +489,17 @@ export const DIFFICULTY = {
   damageMultPerDepth: 0.12,
   /** Enemy move-speed multiplier added per depth (kept small — see above). */
   speedMultPerDepth: 0.04,
+  // --- Spawn MIX (Phase 7.5): ranged enemies SUBSTITUTE for chasers within the
+  // per-room count (they don't add density — keeps the count curve meaningful).
+  // Deterministic count rule (no RNG), so same seed+depth => identical spawns.
+  /** First depth a ranged enemy can appear (>= 2 so floor 1 is pure chaser, and
+   *  the player learns the chaser + builds a toolkit before the first sniper). */
+  rangedMinDepth: 3,
+  /** Ranged count at rangedMinDepth. */
+  rangedBase: 1,
+  /** Additional ranged enemies per depth beyond rangedMinDepth (floored). 0.34 =>
+   *  +1 every ~3 floors. Always clamped to leave >= 1 chaser in the room. */
+  rangedPerDepth: 0.34,
 } as const;
 
 /**
@@ -588,12 +665,22 @@ export const FIGURE = {
     headRadius: 0.24,
     visorSize: 0.16,
   },
-  enemy: {
+  /** Chaser silhouette — SQUAT + wide (a charging brute). */
+  chaser: {
     bodyRadiusTop: 0.42,
     bodyRadiusBottom: 0.4,
     bodyHeight: 0.72,
     headRadius: 0.3,
     visorSize: 0.18,
+  },
+  /** Ranged silhouette — TALL + thin with a big head/eye (a sniper). Instantly
+   *  distinct from the squat chaser at a glance, NOT a recolour. */
+  ranged: {
+    bodyRadiusTop: 0.18,
+    bodyRadiusBottom: 0.26,
+    bodyHeight: 1.18,
+    headRadius: 0.26,
+    visorSize: 0.24,
   },
   /** Forward lean (radians) while dashing — the figure tips into the burst. */
   dashLean: 0.4,

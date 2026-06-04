@@ -18,6 +18,18 @@ export function enemiesPerRoomForDepth(depth: number): number {
   return Math.min(POOL.enemies, n);
 }
 
+/** How many of a room's enemies are RANGED at `depth` (Phase 7.5). They
+ *  SUBSTITUTE for chasers within enemiesPerRoomForDepth (no added density), so
+ *  the count curve stays meaningful. Deterministic (no RNG): 0 below
+ *  rangedMinDepth, then rises, always clamped to leave >= 1 chaser. */
+export function rangedCountForDepth(depth: number): number {
+  const d = Math.max(1, depth);
+  if (d < DIFFICULTY.rangedMinDepth) return 0;
+  const raw =
+    DIFFICULTY.rangedBase + Math.floor((d - DIFFICULTY.rangedMinDepth) * DIFFICULTY.rangedPerDepth);
+  return Math.max(0, Math.min(raw, enemiesPerRoomForDepth(d) - 1));
+}
+
 /** Enemy max-health multiplier at `depth` (1.0 at depth 1). */
 export function healthMultForDepth(depth: number): number {
   return 1 + (Math.max(1, depth) - 1) * DIFFICULTY.healthMultPerDepth;

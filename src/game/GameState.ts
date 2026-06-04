@@ -26,6 +26,11 @@ import {
   type Projectile,
 } from './Projectile';
 import {
+  createEnemyProjectilePool,
+  updateEnemyProjectiles,
+  type EnemyProjectile,
+} from './EnemyProjectile';
+import {
   createParticlePool,
   spawnParticles,
   updateParticles,
@@ -90,6 +95,8 @@ export interface GameState {
   time: number;
   projectiles: Projectile[];
   enemies: Enemy[];
+  /** Ranged-enemy bolts in flight (separate pool from the player's projectiles). */
+  enemyProjectiles: EnemyProjectile[];
   particles: Particle[];
   pickups: Pickup[];
   /** Per-room encounter table (DFS order; index 0 = spawn room). */
@@ -138,6 +145,7 @@ export function createGameState(): GameState {
     time: 0,
     projectiles: createProjectilePool(),
     enemies: createEnemyPool(),
+    enemyProjectiles: createEnemyProjectilePool(),
     particles: createParticlePool(),
     pickups: createPickupPool(),
     rooms: [],
@@ -166,6 +174,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.player = createPlayer(floor.spawn.x, floor.spawn.y);
   for (const e of state.enemies) e.active = false;
   for (const p of state.projectiles) p.active = false;
+  for (const p of state.enemyProjectiles) p.active = false;
   for (const p of state.particles) p.active = false;
   for (const pk of state.pickups) pk.active = false;
   state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
@@ -320,7 +329,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   }
 
   updateProjectiles(state, dt);
-  updateEnemies(state, dt);
+  updateEnemies(state, dt); // ranged enemies fire bolts here
+  updateEnemyProjectiles(state, dt); // ...which travel + hit the player here
 
   // Deaths this frame -> run kill tally + seeded drop rolls at the death positions.
   for (let i = 0; i < state.enemies.length; i++) {
