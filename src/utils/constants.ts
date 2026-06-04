@@ -841,3 +841,57 @@ export const MINIMAP = {
     stairsRoom: 'rgba(180, 100, 255, 0.55)',
   },
 } as const;
+
+// ============================================================================
+// AUDIO (Phase: combat-core SFX) — synthesized Web Audio voices, render-layer
+// only (src/audio/). No audio files, ever. Frequencies in Hz, times in seconds,
+// levels are linear gain 0..1. All hand-tuned; the ?debug panel can reach these
+// later. The voice cap + coalesce keep a multi-kill frame from clipping.
+// ============================================================================
+export const AUDIO = {
+  /** Master output level (the mute GainNode rides on top of this). */
+  master: 0.5,
+  /** Per-trigger pitch jitter, in semitones (± this), so repeats don't grate. */
+  pitchJitterSemis: 1.5,
+  /** Per-trigger linear-gain variance (± this fraction) for the same reason. */
+  gainJitter: 0.12,
+  /** Max simultaneous voices; triggers beyond this are dropped (burst safety). */
+  voiceCap: 12,
+  /** Same-type coalesce window, seconds: a 2nd same-type trigger within this is
+   *  dropped (a multi-kill frame becomes one fatter sound, not N stacked). */
+  coalesceSec: 0.04,
+
+  /** Player ACTION blips — bright square/triangle, short envelope. */
+  blip: {
+    /** Attack + decay envelope, seconds. */
+    attack: 0.005,
+    decay: 0.09,
+    /** Per-event base frequency (Hz) + waveform. */
+    shoot: { freq: 660, type: 'square' as OscillatorType, gain: 0.22 },
+    swing: { freq: 420, type: 'triangle' as OscillatorType, gain: 0.26 },
+    dash: { freq: 300, type: 'triangle' as OscillatorType, gain: 0.24 },
+  },
+
+  /** CONTACT impacts — white-noise burst + low sine thump, fast decay. */
+  impact: {
+    /** Noise burst + sine envelope, seconds. */
+    attack: 0.002,
+    decay: 0.14,
+    /** Low-end body frequency (Hz) per event + blend gains. */
+    hit: { sineFreq: 180, noiseGain: 0.22, sineGain: 0.18 },
+    death: { sineFreq: 110, noiseGain: 0.3, sineGain: 0.28, decay: 0.22 },
+    hurt: { sineFreq: 90, noiseGain: 0.28, sineGain: 0.32, decay: 0.18 },
+  },
+
+  /** Dodge-NEGATE "whiff" — a soft filtered down-chirp (you AVOIDED the hit, so
+   *  it's airy, not an impact). */
+  whiff: {
+    freqStart: 900,
+    freqEnd: 360,
+    decay: 0.16,
+    gain: 0.16,
+    type: 'sine' as OscillatorType,
+    /** Low-pass cutoff (Hz) to keep it soft. */
+    cutoff: 1200,
+  },
+} as const;

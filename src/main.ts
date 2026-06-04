@@ -21,7 +21,8 @@ import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD, isDebugEnabled } from './rendering/HUD';
 import { RunSummary } from './rendering/RunSummary';
 import { AudioEngine } from './audio/AudioEngine';
-import { loadSettings } from './state/Settings';
+import { AudioManager } from './audio/AudioManager';
+import { loadSettings, saveSettings, type Settings } from './state/Settings';
 import { MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -29,7 +30,7 @@ if (!app) throw new Error('#app container not found');
 
 // --- State (pure) ---------------------------------------------------------
 const game = createGameState();
-loadSettings();
+const settings: Settings = loadSettings();
 
 // --- Adapters & rendering (impure; read state) ----------------------------
 const controls = new Controls(app);
@@ -71,6 +72,13 @@ if (isDebugEnabled()) {
 // Audio context is created now but only resumed after a user gesture.
 const audio = new AudioEngine();
 audio.init();
+// Combat-core SFX: a sibling to EntityRenderer — diffs game state each frame and
+// plays a sound on an observable state change (hit/death/shoot/etc.). Reads
+// state, writes only sound; never mutates the sim.
+const audioMgr = new AudioManager(audio, game);
+// Apply the persisted mute setting at startup (was previously discarded).
+audio.setMuted(settings.muted);
+audioMgr.setMuted(settings.muted);
 const unlockAudio = (): void => {
   void audio.resume();
   window.removeEventListener('pointerdown', unlockAudio);
@@ -78,6 +86,15 @@ const unlockAudio = (): void => {
 };
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
+
+// M toggles master mute; persisted (Safari-Private-safe via saveSettings).
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() !== 'm') return;
+  settings.muted = !settings.muted;
+  audio.setMuted(settings.muted);
+  audioMgr.setMuted(settings.muted);
+  saveSettings(settings);
+});
 
 // Phase 5 funnel telemetry (?debug only): log room lifecycle + drop transitions.
 const debug = isDebugEnabled();
@@ -162,6 +179,7 @@ function frame(nowMs: number): void {
   const shake = game.shakeTimer > 0 ? (game.shakeTimer / SHAKE.duration) * TUNING.shake : 0;
   scene.setShake(shake);
   entities.sync(game, alpha, controls.intent);
+  audioMgr.sync(game); // diff state -> play combat SFX (side-effect only)
   scene.updateFollow(game, alpha, dt);
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene, controls);
