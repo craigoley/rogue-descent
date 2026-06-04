@@ -25,6 +25,22 @@ const EDGE_EPS = 1e-6;
 
 /** Any solid tile in column `col` overlapping the box's Y-extent [y-r, y+r]?
  *  Half-open: an edge flush on a tile boundary does not count as the next tile. */
+/**
+ * Does the axis-aligned box centred at (x, y) with half-extent `r` overlap tile
+ * (tx, ty)? Uses the SAME half-open EDGE_EPS span as the resolver, so "the box
+ * overlaps this tile" matches exactly what columnBlocks/rowBlocks treat as
+ * blocking — i.e. the cells where making the tile solid would EMBED the box.
+ * (Used by door-locking to skip cells the player occupies; see Encounter.) `ts`
+ * is the tile size.
+ */
+export function boxOverlapsTile(x: number, y: number, r: number, tx: number, ty: number, ts: number): boolean {
+  const txMin = Math.floor((x - r + EDGE_EPS) / ts);
+  const txMax = Math.floor((x + r - EDGE_EPS) / ts);
+  const tyMin = Math.floor((y - r + EDGE_EPS) / ts);
+  const tyMax = Math.floor((y + r - EDGE_EPS) / ts);
+  return tx >= txMin && tx <= txMax && ty >= tyMin && ty <= tyMax;
+}
+
 function columnBlocks(room: RoomState, col: number, y: number, r: number): boolean {
   const ts = room.tileSize;
   const tyMin = Math.floor((y - r + EDGE_EPS) / ts);

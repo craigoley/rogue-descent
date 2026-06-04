@@ -12,7 +12,8 @@
  * alongside the current one; the renderer lerps between them by the frame alpha.
  */
 
-import { DASH, ISO_YAW, PLAYER, PLAYER_COMBAT, TUNING } from '../utils/constants';
+import { DASH, ENEMY_COMMON, ISO_YAW, PLAYER, PLAYER_COMBAT, TUNING } from '../utils/constants';
+import { clamp } from '../utils/math';
 import { resolveX, resolveY } from './Collision';
 import type { RoomState } from './Room';
 import type { InputIntent } from './Input';
@@ -230,15 +231,22 @@ export function updatePlayer(
   }
 
   // Integrate one axis at a time (stop + slide on walls). A dash stops dead at a
-  // wall rather than tunnelling.
+  // wall rather than tunnelling. Each resolved step is capped to < 1 tile
+  // (ENEMY_COMMON.maxStepTiles — shared with the enemy cap from the softlock
+  // hardening): legit moves (maxSpeed/dash) are well under it, but if the
+  // single-resolve collision ever EJECTS the player from a cell that turned
+  // solid under them, this bounds it so a resolver ejection can't fling the
+  // player across the map a full tile per tick.
   const r = PLAYER.radius;
+  const maxStep = ENEMY_COMMON.maxStepTiles * room.tileSize;
+
   const dx = player.vx * dt;
-  const nx = resolveX(player.x, player.y, dx, r, room);
+  const nx = clamp(resolveX(player.x, player.y, dx, r, room), player.x - maxStep, player.x + maxStep);
   if (nx !== player.x + dx) player.vx = 0;
   player.x = nx;
 
   const dy = player.vy * dt;
-  const ny = resolveY(player.x, player.y, dy, r, room);
+  const ny = clamp(resolveY(player.x, player.y, dy, r, room), player.y - maxStep, player.y + maxStep);
   if (ny !== player.y + dy) player.vy = 0;
   player.y = ny;
 }

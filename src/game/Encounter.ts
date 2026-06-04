@@ -13,8 +13,9 @@
  * at a time — so "cleared = active room with zero live enemies".
  */
 
-import { ENCOUNTER, ROOM, type EnemyType } from '../utils/constants';
+import { ENCOUNTER, PLAYER, ROOM, type EnemyType } from '../utils/constants';
 import { enemiesPerRoomForDepth, rangedCountForDepth, swarmerCountForDepth } from './Difficulty';
+import { boxOverlapsTile } from './Collision';
 import type { Rng } from '../utils/rng';
 import { roomEnemyCount, spawnEnemy } from './Enemy';
 import { rollDrop, spawnPickup } from './Pickup';
@@ -89,9 +90,37 @@ export function buildEncounters(floor: Floor, depth = 1): RoomEncounter[] {
   }));
 }
 
+/**
+ * Lock (solid=true) or unlock (false) a room's doorway cells. LOCKING SKIPS any
+ * cell the player's box currently overlaps — solidifying a cell under the player
+ * would embed them and the single-resolve collision would eject them a full tile
+ * per tick across the map (the door-lock runaway softlock). The skipped cells are
+ * re-locked once the player steps off (see updateEncounterDoors), so the room
+ * still seals. Unlocking never embeds, so it always applies to every cell.
+ */
 function setDoors(state: GameState, enc: RoomEncounter, solid: boolean): void {
   const room = state.room;
-  for (const c of enc.doorCells) room.solid[c.ty * room.tilesX + c.tx] = solid;
+  const p = state.player;
+  const r = PLAYER.radius;
+  const ts = room.tileSize;
+  for (const c of enc.doorCells) {
+    if (solid && boxOverlapsTile(p.x, p.y, r, c.tx, c.ty, ts)) continue; // don't slam on the player
+    room.solid[c.ty * room.tilesX + c.tx] = solid;
+  }
+}
+
+/**
+ * Per-frame seal maintenance: re-apply the (occupancy-aware) lock to the active
+ * room's doorways. Idempotent — re-locking an already-solid cell is a no-op; a
+ * cell deferred because the player stood on it gets locked the frame they vacate
+ * it. So the seal completes ~1 tick after the player leaves the doorway, with no
+ * new state to track (an unlocked door cell of the active room IS the pending
+ * state). No-op when no room is active.
+ */
+export function updateEncounterDoors(state: GameState): void {
+  if (state.activeRoom < 0) return;
+  const enc = state.rooms[state.activeRoom];
+  if (enc.phase === 'active') setDoors(state, enc, true);
 }
 
 /** Index of the encounter room containing the player, or -1 (corridor). */
