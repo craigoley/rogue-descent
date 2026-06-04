@@ -445,6 +445,38 @@ body {
   opacity: 0.95;
 }
 
+/* Softlock auto-detector banner (debug capture). Hidden until the detector
+   fires; when shown it's a prominent, monospace, pre-formatted dump pinned
+   top-centre so a plain screenshot carries the full diagnostic. Detection-only
+   tooling — never appears during normal play. */
+.hud-softlock-banner {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: 96vw;
+  max-height: 88vh;
+  overflow: auto;
+  padding: 10px 14px;
+  font: 700 clamp(9px, 2.2vw, 12px) / 1.35 ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  white-space: pre;
+  color: #ffd166;
+  background: rgba(20, 0, 0, 0.92);
+  border: 2px solid #ff5544;
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(255, 85, 68, 0.6);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  user-select: none;
+  display: none;
+}
+
+.hud-softlock-banner.is-visible {
+  display: block;
+}
+
 /* Run-over / game-over overlay (permadeath). Full-screen scrim so it reads as a
    hard stop, not a same-run respawn; hidden until .is-visible. */
 .run-summary {
