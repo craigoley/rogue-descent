@@ -41,6 +41,7 @@ import {
   buildEncounters,
   rollAndSpawnDrop,
   updateEncounterEntry,
+  updateEncounterDoors,
   updateEncounterResolve,
   type RoomEncounter,
 } from './Encounter';
@@ -308,6 +309,9 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
 
   // Encounter: entering an idle room activates it (spawns enemies + locks doors).
   updateEncounterEntry(state);
+  // Maintain the active room's seal: re-lock any doorway the player has vacated
+  // (cells under the player are skipped on lock so they can't be embedded).
+  updateEncounterDoors(state);
 
   // Melee — edge-triggered, consumed here.
   if (intent.melee) {
