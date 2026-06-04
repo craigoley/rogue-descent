@@ -371,7 +371,6 @@ export const ENEMY_PROJ = {
   lifetime: 2.2,
 } as const;
 
-/** The original chaser: chase -> telegraph -> strike -> recover. */
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
