@@ -19,6 +19,7 @@ function clearFloor(s: GameState, lastIdx = 1): void {
     s.rooms[i].phase = i === lastIdx ? 'active' : 'cleared';
   }
   s.activeRoom = lastIdx;
+  s.bossDefeated = true; // Phase 8: the boss is the descent gate (simulate the kill)
   s.player.x = s.spawn.x;
   s.player.y = s.spawn.y;
   update(s, idle(), DT);
@@ -64,19 +65,90 @@ describe('Descent — stairs are PINNED to the boss room (Phase 8)', () => {
   });
 });
 
-describe('Descent — all-cleared trigger', () => {
-  it('stairs stay inactive while any room is not cleared', () => {
+describe('Descent — BOSS-DEATH gate (Phase 8)', () => {
+  it('stairs stay inactive while the boss is alive (bossDefeated false at floor start)', () => {
     const s = createGameState();
     update(s, idle(), DT);
-    expect(s.rooms.some((r) => r.phase !== 'cleared')).toBe(true);
+    expect(s.bossDefeated).toBe(false);
     expect(s.stairs.active).toBe(false);
   });
 
-  it('stairs activate once every room is cleared (player away from them)', () => {
+  it('stairs activate once the boss is dead (player away from them)', () => {
     const s = createGameState();
-    clearFloor(s, 1);
+    clearFloor(s, 1); // marks rooms cleared AND sets bossDefeated (the kill)
     expect(s.stairs.active).toBe(true);
     expect(s.run.depth).toBe(1); // activating is not descending
+  });
+
+  it('clearing every NON-boss room does NOT unlock stairs while the boss lives', () => {
+    const s = createGameState();
+    // All non-boss rooms cleared, but the boss was never spawned/killed.
+    for (let i = 0; i < s.rooms.length; i++) if (i !== s.bossRoom) s.rooms[i].phase = 'cleared';
+    s.activeRoom = -1;
+    update(s, idle(), DT);
+    expect(s.bossDefeated).toBe(false);
+    expect(s.stairs.active).toBe(false); // the boss is the gate, not all-cleared
+  });
+});
+
+/** Place the player on a guaranteed ROOM-BODY (non-corridor) cell of room `i`. */
+function placeInRoom(s: GameState, i: number): void {
+  const r = s.rooms[i].rect;
+  const room = s.room;
+  for (let ty = r.y; ty < r.y + r.h; ty++) {
+    for (let tx = r.x; tx < r.x + r.w; tx++) {
+      if (room.corridor?.[ty * room.tilesX + tx]) continue;
+      s.player.x = (tx + 0.5) * room.tileSize;
+      s.player.y = (ty + 0.5) * room.tileSize;
+      return;
+    }
+  }
+  s.player.x = (r.x + r.w / 2) * room.tileSize;
+  s.player.y = (r.y + r.h / 2) * room.tileSize;
+}
+
+describe('Descent — boss death unlocks stairs with side rooms UNCLEARED (the fix)', () => {
+  it('killing the boss activates the stairs even though a side room was never entered', () => {
+    const s = createGameState();
+    const bossRoom = s.bossRoom;
+
+    // Activate the boss room (spawns the boss) via the real encounter path. Every
+    // OTHER non-spawn room is left IDLE (un-entered) — the spanning-tree scenario.
+    placeInRoom(s, bossRoom);
+    update(s, idle(), DT);
+    expect(s.boss).not.toBeNull();
+    const idleSide = s.rooms.findIndex((r, i) => i !== bossRoom && r.phase === 'idle');
+    expect(idleSide).toBeGreaterThan(0); // a non-boss room is still un-entered
+
+    // Kill the boss; park the player at spawn so the clear frame doesn't descend.
+    s.enemies[s.boss!.slot].active = false;
+    s.player.x = s.spawn.x;
+    s.player.y = s.spawn.y;
+    update(s, idle(), DT);
+
+    expect(s.bossDefeated).toBe(true);
+    expect(s.stairs.active).toBe(true); // UNLOCKED despite the idle side room (was the bug)
+    expect(s.rooms[idleSide].phase).toBe('idle'); // the side room is still un-cleared
+    expect(s.stairs.roomIndex).toBe(bossRoom); // stairs pinned to the boss room
+    expect(s.rooms.some((r) => r.phase !== 'cleared')).toBe(true); // NOT all-cleared
+
+    // And stepping on the (boss-room) stairs descends.
+    s.player.x = s.stairs.x;
+    s.player.y = s.stairs.y;
+    update(s, idle(), DT);
+    expect(s.run.depth).toBe(2);
+  });
+
+  it('bossDefeated resets on the next floor (each floor needs its own boss killed)', () => {
+    const s = createGameState();
+    clearFloor(s, 1); // boss killed on floor 1
+    expect(s.stairs.active).toBe(true);
+    s.player.x = s.stairs.x;
+    s.player.y = s.stairs.y;
+    update(s, idle(), DT); // descend -> loadFloor
+    expect(s.run.depth).toBe(2);
+    expect(s.bossDefeated).toBe(false); // fresh floor: its boss is alive again
+    expect(s.stairs.active).toBe(false); // descent locked until the new boss dies
   });
 });
 

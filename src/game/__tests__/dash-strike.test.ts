@@ -46,6 +46,7 @@ function runDash(s: GameState): void {
 function descendOnce(s: GameState): void {
   for (let i = 0; i < s.rooms.length; i++) s.rooms[i].phase = i === 1 ? 'active' : 'cleared';
   s.activeRoom = 1;
+  s.bossDefeated = true; // Phase 8: descent gates on the boss being dead
   s.player.x = s.spawn.x;
   s.player.y = s.spawn.y;
   update(s, idle(), DT);
