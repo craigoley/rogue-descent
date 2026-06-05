@@ -44,5 +44,8 @@ No server routes, no API endpoints — this is a static client app.
 ## PR workflow
 Branch from latest main, PR, never commit to main directly.
 Copilot + Claude Code review on PRs; the pipeline auto-merges iterative PRs
-after review passes. PRs that change visuals or game feel open as DRAFT — they
-need a real device playtest before merge, so drafts are gated out of auto-merge.
+after review passes — including visual / game-feel PRs. Feel and visual changes
+are NO LONGER held as DRAFT: they auto-merge like any other PR and get tuned
+POST-merge against the live Vercel deploy (a follow-up tuning PR, or a revert if
+a device playtest flags a regression). Reserve DRAFT for genuinely incomplete
+work, not for feel review.
