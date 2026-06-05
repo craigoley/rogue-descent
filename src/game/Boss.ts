@@ -17,7 +17,7 @@
  */
 
 import { BOSS, ENEMY_TYPES } from '../utils/constants';
-import { bossGimmickForDepth, bossPhasesForDepth, healthMultForDepth } from './Difficulty';
+import { bossGimmickForDepth, bossHpForDepth, bossPhasesForDepth } from './Difficulty';
 import { damagePlayer } from './Combat';
 import type { Enemy } from './Enemy';
 import type { GameState } from './GameState';
@@ -143,8 +143,10 @@ function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
   return TABLE_SLAM;
 }
 
-/** Build the companion state for a freshly-spawned boss at `slot` (its Enemy
- *  health was set to ENEMY_TYPES.boss.maxHealth * depth mult by spawnEnemy). */
+/** Build the companion state for a freshly-spawned boss at `slot`. maxHealth uses
+ *  bossHpForDepth (depth-1 gentle carve-out, depth >= 2 the 7c curve) — the SAME
+ *  value Encounter overrides onto the Enemy's health, so the HP bar + 50% gate
+ *  match the actual HP. */
 export function createBossState(slot: number, depth: number): BossState {
   return {
     slot,
@@ -153,7 +155,7 @@ export function createBossState(slot: number, depth: number): BossState {
     gimmick: bossGimmickForDepth(depth),
     attackCursor: 0,
     vulnerableAngle: 0,
-    maxHealth: ENEMY_TYPES.boss.maxHealth * healthMultForDepth(depth),
+    maxHealth: bossHpForDepth(depth),
     blockedFlash: 0,
     pendingSummon: null,
   };

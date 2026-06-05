@@ -9,7 +9,7 @@
  * block in constants.ts for the curve + tuning rationale.
  */
 
-import { DIFFICULTY, ENCOUNTER, POOL } from '../utils/constants';
+import { BOSS, DIFFICULTY, ENEMY_TYPES, ENCOUNTER, POOL } from '../utils/constants';
 
 /** Enemies spawned per room at `depth`: a little more early, capped at the pool. */
 export function enemiesPerRoomForDepth(depth: number): number {
@@ -57,6 +57,23 @@ export function damageMultForDepth(depth: number): number {
 /** Enemy move-speed multiplier at `depth` (1.0 at depth 1). */
 export function speedMultForDepth(depth: number): number {
   return 1 + (Math.max(1, depth) - 1) * DIFFICULTY.speedMultPerDepth;
+}
+
+/** Boss HP at `depth` (Phase 8). DEPTH 1 uses the flat gentle override (BOSS
+ *  .depth1Health — the single-phase intro); depth >= 2 keeps the EXACT 7c curve
+ *  (base × healthMultForDepth), so the carve-out can't flatten the curve. */
+export function bossHpForDepth(depth: number): number {
+  return Math.max(1, depth) === 1
+    ? BOSS.depth1Health
+    : ENEMY_TYPES.boss.maxHealth * healthMultForDepth(depth);
+}
+
+/** Boss slam damage at `depth` (Phase 8). DEPTH 1 uses the flat gentle override
+ *  (BOSS.depth1Damage); depth >= 2 keeps the EXACT 7c curve (base × damageMult). */
+export function bossDamageForDepth(depth: number): number {
+  return Math.max(1, depth) === 1
+    ? BOSS.depth1Damage
+    : ENEMY_TYPES.boss.attackDamage * damageMultForDepth(depth);
 }
 
 /** How many PHASES the boss runs at `depth` (Phase 8): 1 (single-phase, lighter

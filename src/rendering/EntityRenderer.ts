@@ -497,7 +497,10 @@ export class EntityRenderer {
     // WEAK-POINT marker that orbits to the vulnerable side (gimmick #1 tell), and
     // a floor ring. One per floor (the boss room); shown only while it lives. ---
     {
-      const r = ENEMY_TYPES.boss.radius;
+      // VISUAL radius only — scaled DOWN from the 1.4 gameplay radius (the hitbox /
+      // #37 clamp / slam reach stay at ENEMY_TYPES.boss.radius). The weak-point
+      // orbit below uses the same vr so the marker stays on the slimmed body.
+      const vr = ENEMY_TYPES.boss.radius * BOSS_VFX.bodyRadiusScale;
       this.bossBodyMat = new MeshStandardMaterial({
         color: PALETTE.enemyBoss,
         emissive: PALETTE.enemyBoss,
@@ -505,7 +508,7 @@ export class EntityRenderer {
         roughness: 0.6,
       });
       const body = new Mesh(
-        new CylinderGeometry(r * 0.85, r, BOSS_VFX.bodyHeight, FIGURE.segments),
+        new CylinderGeometry(vr * 0.85, vr, BOSS_VFX.bodyHeight, FIGURE.segments),
         this.bossBodyMat,
       );
       body.position.y = BOSS_VFX.bodyHeight / 2;
@@ -527,7 +530,7 @@ export class EntityRenderer {
         new BoxGeometry(BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize),
         this.bossWeakMat,
       );
-      this.bossWeakOrbit = r;
+      this.bossWeakOrbit = vr;
       const ring = new Mesh(
         new TorusGeometry(BOSS_VFX.ringRadius, BOSS_VFX.ringTube, 8, 32),
         new MeshBasicMaterial({ color: PALETTE.enemyBoss, transparent: true, opacity: 0.5 }),

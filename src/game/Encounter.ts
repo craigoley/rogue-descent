@@ -14,7 +14,13 @@
  */
 
 import { ENCOUNTER, PLAYER, ROOM, type EnemyType } from '../utils/constants';
-import { enemiesPerRoomForDepth, rangedCountForDepth, swarmerCountForDepth } from './Difficulty';
+import {
+  bossDamageForDepth,
+  bossHpForDepth,
+  enemiesPerRoomForDepth,
+  rangedCountForDepth,
+  swarmerCountForDepth,
+} from './Difficulty';
 import { boxOverlapsTile } from './Collision';
 import type { Rng } from '../utils/rng';
 import { roomEnemyCount, spawnEnemy } from './Enemy';
@@ -175,6 +181,13 @@ export function updateEncounterEntry(state: GameState): void {
     const by = (r.y + r.h / 2) * ts;
     if (spawnEnemy(state.enemies, bx, by, state.run.depth, 'boss', idx)) {
       const slot = state.enemies.findIndex((e) => e.active && e.type === 'boss');
+      // Override the generic base×mult HP/damage spawnEnemy just set with the boss
+      // curve — DEPTH 1 is a gentle flat carve-out, depth >= 2 is the unchanged 7c
+      // curve (see bossHpForDepth / bossDamageForDepth). createBossState.maxHealth
+      // reads the same bossHpForDepth, so the HP bar + 50% gate match.
+      const e = state.enemies[slot];
+      e.health = bossHpForDepth(state.run.depth);
+      e.attackDamage = bossDamageForDepth(state.run.depth);
       state.boss = createBossState(slot, state.run.depth);
     }
   } else {

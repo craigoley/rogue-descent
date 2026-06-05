@@ -1006,6 +1006,13 @@ export const AUDIO = {
 // as future attack-table entries — only #1 (positioning) exists now.
 // ============================================================================
 export const BOSS = {
+  /** DEPTH-1 carve-out (gentle INTRO fight). The depth-1 boss is the single-phase
+   *  gimmick-1 teach, so it uses these flat overrides instead of the depth curve
+   *  (base × mult). Depth >= 2 is untouched: it keeps ENEMY_TYPES.boss.maxHealth /
+   *  attackDamage × the 7c mults (see bossHpForDepth / bossDamageForDepth). Both
+   *  by-feel — tuned on replay. */
+  depth1Health: 140, // vs the would-be 220 at depth 1 — less of a slog
+  depth1Damage: 12, // vs the would-be 20 at depth 1 — less lethal
   /** GIMMICK #1 — directional shield. Damage only counts when the hit comes from
    *  within this arc (radians, full width) centred on the VULNERABLE angle; hits
    *  from outside are blocked. ~120° vulnerable wedge — generous but you must get
@@ -1060,15 +1067,20 @@ export const BOSS = {
  *  the collision/clamp footprint. */
 export const BOSS_VFX = {
   /** Body cylinder height (tall, looming). */
-  bodyHeight: 2.4,
+  bodyHeight: 1.8,
+  /** RENDER-ONLY scale on the body cylinder radius (visual width only) — decouples
+   *  the silhouette from the 1.4 gameplay radius (the hitbox / #37 clamp / slam
+   *  reach), which is deliberately left untouched. The weak-point orbit uses the
+   *  same scale so the marker stays on the slimmed body surface. */
+  bodyRadiusScale: 0.85,
   /** Head sphere radius. */
-  headRadius: 0.5,
+  headRadius: 0.4,
   /** Bright weak-point marker size (the box that orbits to the vulnerable side). */
   weakPointSize: 0.55,
   /** Height (y) of the orbiting weak-point marker. */
   weakPointHeight: 1.2,
   /** Floor ring radius around the base (reads "arena boss"). */
-  ringRadius: 1.7,
+  ringRadius: 1.3,
   /** Floor ring tube thickness. */
   ringTube: 0.12,
   /** Body emissive intensity. */
