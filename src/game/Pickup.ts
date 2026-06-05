@@ -12,13 +12,15 @@
  * RNG, applied immediately on touch.
  */
 
-import { DASH, DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL } from '../utils/constants';
+import { DASH, DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL, POWERUP_MAX_LEVEL } from '../utils/constants';
 import type { Rng } from '../utils/rng';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 
 export type PickupKind =
   | 'health'
+  | 'melee'
+  | 'ranged'
   | 'pierce'
   | 'knockback'
   | 'extraCharge'
@@ -26,8 +28,12 @@ export type PickupKind =
   | 'dashStrike';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
- *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll). */
+ *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
+ *  Phase 9: melee/ranged/pierce/knockback are LEVELED (stack to tier III); the
+ *  three dash kinds remain binary toggles. */
 const POWERUP_KINDS: readonly PickupKind[] = [
+  'melee',
+  'ranged',
   'pierce',
   'knockback',
   'extraCharge',
@@ -91,13 +97,23 @@ export function rollDrop(rng: Rng): PickupKind | null {
 
 /** Apply a pickup's effect immediately. Health is capped at max; the powerups
  *  flip a within-run behaviour toggle (reset on death via createPlayer). Pure. */
+/** Increment a leveled powerup, capped at POWERUP_MAX_LEVEL (Phase 9): picking up
+ *  a kind you already have raises its tier I→II→III; a 4th is a no-op. */
+function levelUp(level: number): number {
+  return Math.min(level + 1, POWERUP_MAX_LEVEL);
+}
+
 export function applyPickup(player: PlayerState, kind: PickupKind): void {
   if (kind === 'health') {
     player.health = Math.min(PLAYER_COMBAT.maxHealth, player.health + DROP.healAmount);
+  } else if (kind === 'melee') {
+    player.meleeLevel = levelUp(player.meleeLevel);
+  } else if (kind === 'ranged') {
+    player.rangedLevel = levelUp(player.rangedLevel);
   } else if (kind === 'pierce') {
-    player.pierce = true;
+    player.pierceLevel = levelUp(player.pierceLevel);
   } else if (kind === 'knockback') {
-    player.meleeKnockback = true;
+    player.knockbackLevel = levelUp(player.knockbackLevel);
   } else if (kind === 'extraCharge') {
     // Raise the dash cap and grant the new charge immediately (felt on pickup).
     player.extraCharge = true;

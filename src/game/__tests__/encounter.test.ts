@@ -78,8 +78,8 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     for (let k = 0; k < 30; k++) expect(rollDrop(a)).toBe(rollDrop(b));
   });
 
-  it('rollDrop yields only null | health | the five powerups', () => {
-    const kinds = ['null', 'health', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike'];
+  it('rollDrop yields only null | health | the seven powerups', () => {
+    const kinds = ['null', 'health', 'melee', 'ranged', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike'];
     const allowed = new Set(kinds);
     const rng = createRng(99);
     const seen = new Set<string>();
@@ -110,14 +110,14 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     applyPickup(s.player, 'health');
     expect(s.player.health).toBe(Math.min(PLAYER_COMBAT.maxHealth, 10 + DROP.healAmount));
 
-    // Powerups are binary toggles; health does not flip them.
-    expect(s.player.pierce).toBe(false);
-    expect(s.player.meleeKnockback).toBe(false);
+    // Weapon powerups are LEVELS (Phase 9); health does not change them.
+    expect(s.player.pierceLevel).toBe(0);
+    expect(s.player.knockbackLevel).toBe(0);
     applyPickup(s.player, 'pierce');
-    expect(s.player.pierce).toBe(true);
-    expect(s.player.meleeKnockback).toBe(false);
+    expect(s.player.pierceLevel).toBe(1);
+    expect(s.player.knockbackLevel).toBe(0);
     applyPickup(s.player, 'knockback');
-    expect(s.player.meleeKnockback).toBe(true);
+    expect(s.player.knockbackLevel).toBe(1);
   });
 
   it('rollAndSpawnDrop spawns a pickup attributed to the active room', () => {
@@ -166,8 +166,8 @@ describe('Within-run only — drops + powerups do NOT survive permadeath + resta
     // Grant BOTH powerups and spawn a pickup, activate a room.
     applyPickup(s.player, 'pierce');
     applyPickup(s.player, 'knockback');
-    expect(s.player.pierce).toBe(true);
-    expect(s.player.meleeKnockback).toBe(true);
+    expect(s.player.pierceLevel).toBe(1);
+    expect(s.player.knockbackLevel).toBe(1);
     const i = firstIdleRoom(s);
     placeInRoom(s, i);
     update(s, idle(), DT);
@@ -188,8 +188,8 @@ describe('Within-run only — drops + powerups do NOT survive permadeath + resta
     // RESTART -> a FRESH run. Now the within-run no-persist guarantees apply.
     startNewRun(s, 4242);
     expect(s.player.alive).toBe(true);
-    expect(s.player.pierce).toBe(false); // powerup GONE (within-run only)
-    expect(s.player.meleeKnockback).toBe(false); // powerup GONE (within-run only)
+    expect(s.player.pierceLevel).toBe(0); // powerup GONE (within-run only)
+    expect(s.player.knockbackLevel).toBe(0); // powerup GONE (within-run only)
     expect(activePickupCount(s.pickups)).toBe(0); // drops GONE
     expect(s.rooms.every((e, idx) => (idx === 0 ? e.phase === 'cleared' : e.phase === 'idle'))).toBe(
       true,

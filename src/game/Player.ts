@@ -60,14 +60,21 @@ export interface PlayerState {
   rangedCdTimer: number;
   /** Hit-flash window, seconds. */
   hitFlashTimer: number;
-  /** PIERCE powerup (within-run): ranged shots pass THROUGH enemies instead of
-   *  despawning on the first hit. Binary toggle; reset to false on death via
-   *  createPlayer. */
-  pierce: boolean;
-  /** KNOCKBACK powerup (within-run): melee hits apply a much stronger shove
-   *  (DROP.meleeKnockback vs the base MELEE.knockback). Binary toggle; reset to
-   *  false on death via createPlayer. */
-  meleeKnockback: boolean;
+  /** MELEE powerup LEVEL (0..3, within-run; Phase 9 escalating powerups). 0 = base
+   *  swing (TUNING.meleeDamage). Each level raises damage (MELEE_LEVELS), and the
+   *  cap (3) also widens reach/arc. Reset to 0 on death via createPlayer. */
+  meleeLevel: number;
+  /** RANGED powerup LEVEL (0..3, within-run). 0 = single shot. Each level adds a
+   *  projectile to a spread (RANGED_LEVELS.shots). Reset to 0 on death. */
+  rangedLevel: number;
+  /** PIERCE powerup LEVEL (0..3, within-run): ranged shots pass THROUGH up to
+   *  PIERCE_LEVELS[level] distinct enemies (0 = first-hit-stops, 3 = infinite —
+   *  the pre-Phase-9 behaviour). Reset to 0 on death via createPlayer. */
+  pierceLevel: number;
+  /** KNOCKBACK powerup LEVEL (0..3, within-run): melee hits apply a shove scaled
+   *  by KNOCKBACK_LEVELS[level] (0 = base MELEE.knockback). PR1 scales FORCE only;
+   *  stun (II) + AoE (III) land in PR2. Reset to 0 on death via createPlayer. */
+  knockbackLevel: number;
   /** EXTRA-CHARGE powerup (within-run): +DASH.extraChargeBonus dash charges (a
    *  second dash before recharge). Binary toggle; reset on death via createPlayer. */
   extraCharge: boolean;
@@ -111,8 +118,10 @@ export function createPlayer(x: number, y: number): PlayerState {
     rangedCdTimer: 0,
     hitFlashTimer: 0,
     dodgeFxTimer: 0,
-    pierce: false,
-    meleeKnockback: false,
+    meleeLevel: 0,
+    rangedLevel: 0,
+    pierceLevel: 0,
+    knockbackLevel: 0,
     extraCharge: false,
     fasterRecharge: false,
     dashStrike: false,

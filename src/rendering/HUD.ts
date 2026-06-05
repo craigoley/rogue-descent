@@ -32,10 +32,23 @@ import {
   CSS_PALETTE,
   DASH,
   PLAYER_COMBAT,
+  POWERUP_MAX_LEVEL,
   SOFTLOCK_DETECT,
   TUNING,
   TUNING_RANGES,
 } from '../utils/constants';
+
+/** A leveled-powerup chip (Phase 9): the chip element + its pip dots. */
+interface LevelChip {
+  chip: HTMLSpanElement;
+  pips: HTMLSpanElement[];
+}
+
+/** Light the chip when held (level > 0) and fill `level` pips. */
+function setChipLevel(c: LevelChip, level: number): void {
+  c.chip.classList.toggle('is-on', level > 0);
+  for (let i = 0; i < c.pips.length; i++) c.pips[i].classList.toggle('is-filled', i < level);
+}
 
 const f2 = (n: number): string => n.toFixed(2);
 /** Format an NDC screen delta and tag the dominant visual direction. */
@@ -87,8 +100,12 @@ export class HUD {
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
   private readonly depthEl: HTMLDivElement;
-  private readonly pierceChip: HTMLSpanElement;
-  private readonly knockbackChip: HTMLSpanElement;
+  /** Leveled-powerup chips (Phase 9): each shows up to POWERUP_MAX_LEVEL pips
+   *  (filled = current level), lit when level > 0. */
+  private readonly meleeChip: LevelChip;
+  private readonly rangedChip: LevelChip;
+  private readonly pierceChip: LevelChip;
+  private readonly knockbackChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -155,21 +172,35 @@ export class HUD {
     dashRow.append(dashLabel, pips);
     bars.appendChild(dashRow);
 
-    // Active-powerup chips (#30) — always visible so the held build reads at a
-    // glance (powerups persist across descent). Dimmed when not held, lit when
-    // held. Colour = the verb language (pierce = projectile blue, knockback =
-    // melee orange); CSS-drawn glyphs take --chip-color reliably. The two DASH
-    // powerups are surfaced by the pips above, so the chips stay verb-only here.
+    // Active-powerup chips (#30, #9 leveled) — always visible so the held build
+    // reads at a glance (powerups persist across descent). Dimmed when level 0,
+    // lit when held; each carries up to POWERUP_MAX_LEVEL pips (filled = level) so
+    // the TIER reads (reusing the dash-pip idiom). Colour = the verb language
+    // (melee/knockback orange, ranged/pierce blue).
     const powersRow = document.createElement('div');
     powersRow.className = 'hud-bar-row is-powers hud-powers';
-    const makeChip = (text: string, mod: string, color: string): HTMLSpanElement => {
+    const makeChip = (text: string, mod: string, color: string): LevelChip => {
       const chip = document.createElement('span');
       chip.className = `hud-chip ${mod}`;
-      chip.textContent = text;
       chip.style.setProperty('--chip-color', color);
+      const label = document.createElement('span');
+      label.className = 'hud-chip-label';
+      label.textContent = text;
+      const pipWrap = document.createElement('span');
+      pipWrap.className = 'hud-chip-pips';
+      const pips: HTMLSpanElement[] = [];
+      for (let i = 0; i < POWERUP_MAX_LEVEL; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'hud-chip-pip';
+        pipWrap.appendChild(pip);
+        pips.push(pip);
+      }
+      chip.append(label, pipWrap);
       powersRow.appendChild(chip);
-      return chip;
+      return { chip, pips };
     };
+    this.meleeChip = makeChip('MELEE', 'is-melee', CSS_PALETTE.melee);
+    this.rangedChip = makeChip('RANGED', 'is-ranged', CSS_PALETTE.projectile);
     this.pierceChip = makeChip('PIERCE', 'is-pierce', CSS_PALETTE.projectile);
     this.knockbackChip = makeChip('KNOCKBACK', 'is-knockback', CSS_PALETTE.melee);
     bars.appendChild(powersRow);
@@ -487,10 +518,12 @@ export class HUD {
     // Depth (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
 
-    // Active powerups (always): lit when held, dimmed when not. Persists across
-    // descent, so this is the only on-screen reminder of the carried build.
-    this.pierceChip.classList.toggle('is-on', state.player.pierce);
-    this.knockbackChip.classList.toggle('is-on', state.player.meleeKnockback);
+    // Active powerups (always): lit when held (level > 0), with filled pips = the
+    // tier. Persists across descent, so this is the only on-screen build reminder.
+    setChipLevel(this.meleeChip, state.player.meleeLevel);
+    setChipLevel(this.rangedChip, state.player.rangedLevel);
+    setChipLevel(this.pierceChip, state.player.pierceLevel);
+    setChipLevel(this.knockbackChip, state.player.knockbackLevel);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);
@@ -580,8 +613,8 @@ export class HUD {
       `floor seed ${state.seed}   (press G to regenerate)\n` +
       `rooms ${cleared}/${state.rooms.length} cleared  active ${state.activeRoom}\n` +
       softlockBlock +
-      `powerups  pierce ${state.player.pierce ? 'ON' : 'off'}  ` +
-      `knockback ${state.player.meleeKnockback ? 'ON' : 'off'}  ` +
+      `powerups  melee L${state.player.meleeLevel}  ranged L${state.player.rangedLevel}  ` +
+      `pierce L${state.player.pierceLevel}  knockback L${state.player.knockbackLevel}  ` +
       `xcharge ${state.player.extraCharge ? 'ON' : 'off'}  ` +
       `frecharge ${state.player.fasterRecharge ? 'ON' : 'off'}  ` +
       `dstrike ${state.player.dashStrike ? 'ON' : 'off'}\n` +

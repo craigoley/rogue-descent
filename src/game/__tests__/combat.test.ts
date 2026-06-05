@@ -188,7 +188,7 @@ describe('Melee', () => {
     // Powered swing: same hit, far stronger shove, identical damage.
     const buf = arena();
     for (const e of buf.enemies) e.active = false;
-    buf.player.meleeKnockback = true;
+    buf.player.knockbackLevel = 1; // tier I = the old powerup force (DROP.meleeKnockback)
     spawnEnemy(buf.enemies, buf.player.x + 1.0, buf.player.y);
     const ep = buf.enemies.find((x) => x.active)!;
     const hpp = ep.health;
@@ -247,7 +247,7 @@ describe('Ranged', () => {
     for (const e of s.enemies) e.active = false;
     s.player.facingX = 1;
     s.player.facingY = 0;
-    s.player.pierce = true; // POWERUP ON
+    s.player.pierceLevel = 3; // tier III = infinite pass-through (the old pierce=true)
     spawnEnemy(s.enemies, s.player.x + 2, s.player.y);
     spawnEnemy(s.enemies, s.player.x + 4, s.player.y);
     const [e1, e2] = s.enemies.filter((e) => e.active);

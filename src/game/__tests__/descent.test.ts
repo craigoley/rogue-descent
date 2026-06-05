@@ -200,9 +200,9 @@ describe('Descent — stepping on active stairs descends', () => {
 describe('Descent — the build COMPOUNDS across floors', () => {
   it('descent preserves both powerups + current health (no refill, no reset)', () => {
     const s = createGameState();
-    // Build up a within-run state on floor 1.
-    s.player.pierce = true;
-    s.player.meleeKnockback = true;
+    // Build up a within-run state on floor 1 (Phase 9: powerup LEVELS).
+    s.player.pierceLevel = 2;
+    s.player.knockbackLevel = 1;
     s.player.health = 50; // hurt, below max — must NOT be refilled by descending
     expect(s.player.health).toBeLessThan(PLAYER_COMBAT.maxHealth);
 
@@ -211,14 +211,14 @@ describe('Descent — the build COMPOUNDS across floors', () => {
     update(s, idle(), DT); // DESCEND to floor 2
 
     expect(s.run.depth).toBe(2); // confirm we actually descended
-    expect(s.player.pierce).toBe(true); // carried
-    expect(s.player.meleeKnockback).toBe(true); // carried
+    expect(s.player.pierceLevel).toBe(2); // carried (level, not reset)
+    expect(s.player.knockbackLevel).toBe(1); // carried
     expect(s.player.health).toBe(50); // carried verbatim — NOT refilled, NOT reset
   });
 
   it('the build keeps compounding across multiple descents', () => {
     const s = createGameState();
-    s.player.pierce = true;
+    s.player.pierceLevel = 3;
     s.player.health = 40;
 
     clearFloor(s, 1);
@@ -229,21 +229,21 @@ describe('Descent — the build COMPOUNDS across floors', () => {
     update(s, idle(), DT); // -> depth 3
 
     expect(s.run.depth).toBe(3);
-    expect(s.player.pierce).toBe(true); // still carried two floors down
+    expect(s.player.pierceLevel).toBe(3); // still carried two floors down
     expect(s.player.health).toBe(40); // still the carried value
   });
 
   it('a NEW run fully resets the player (toggles off, health full)', () => {
     const s = createGameState();
-    s.player.pierce = true;
-    s.player.meleeKnockback = true;
+    s.player.pierceLevel = 2;
+    s.player.knockbackLevel = 3;
     s.player.health = 50;
 
     startNewRun(s, 4242);
 
     expect(s.run.depth).toBe(1);
-    expect(s.player.pierce).toBe(false); // reset
-    expect(s.player.meleeKnockback).toBe(false); // reset
+    expect(s.player.pierceLevel).toBe(0); // reset
+    expect(s.player.knockbackLevel).toBe(0); // reset
     expect(s.player.health).toBe(PLAYER_COMBAT.maxHealth); // refilled
   });
 });
