@@ -621,7 +621,8 @@ export class HUD {
       `dash  charges ${state.player.dashCharges}/${dashMaxCharges(state.player)}  ` +
       `recharge ${state.player.dashRechargeTimer.toFixed(2)}s\n` +
       `drops spawned ${spawned} / collected ${collected}` +
-      `   (hp ${state.dropCounts.health} · pi ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback}` +
+      `   (hp ${state.dropCounts.health} · ml ${state.dropCounts.melee} · rn ${state.dropCounts.ranged}` +
+      ` · pi ${state.dropCounts.pierce} · kb ${state.dropCounts.knockback}` +
       ` · xc ${state.dropCounts.extraCharge} · fr ${state.dropCounts.fasterRecharge}` +
       ` · ds ${state.dropCounts.dashStrike})\n` +
       `FIRE  aimEngaged ${controls.aimEngaged}  ranged ${intent.ranged}  ` +

@@ -1,12 +1,10 @@
 /**
- * Within-run drops: health (restore HP) + FIVE powerups. Two are verb-coupled —
- * PIERCE (ranged shots pass through enemies) and KNOCKBACK (melee launches) — and
- * three upgrade the DASH: EXTRA-CHARGE (a second dash before recharge),
- * FASTER-RECHARGE (charges refill quicker) and DASH-STRIKE (a damaging dash with
- * reduced i-frames). Powerups are binary toggles that
- * change what a verb/resource DOES; they last the rest of the run (carried across
- * descent) and vanish on death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool
- * (POOL.pickups); spawning never grows it.
+ * Within-run drops: health (restore HP) + SEVEN powerups. Four are LEVELED weapon
+ * tracks (MELEE, RANGED, PIERCE, KNOCKBACK — stack to tier III via Phase 9); three
+ * upgrade the DASH (EXTRA-CHARGE, FASTER-RECHARGE, DASH-STRIKE — binary toggles).
+ * Powerups last the rest of the run (carried across descent) and reset on
+ * death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning
+ * never grows it.
  *
  * NOT an item system: no inventory, no rarity, no stacking — rolled by a seeded
  * RNG, applied immediately on touch.
@@ -85,7 +83,7 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, or one of the five powerups. Deterministic
+/** Seeded drop roll: nothing, health, or one of the seven powerups. Deterministic
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
  *  second (only consumed for a powerup) picks uniformly among POWERUP_KINDS. */
 export function rollDrop(rng: Rng): PickupKind | null {
@@ -95,8 +93,6 @@ export function rollDrop(rng: Rng): PickupKind | null {
   return POWERUP_KINDS[i];
 }
 
-/** Apply a pickup's effect immediately. Health is capped at max; the powerups
- *  flip a within-run behaviour toggle (reset on death via createPlayer). Pure. */
 /** Increment a leveled powerup, capped at POWERUP_MAX_LEVEL (Phase 9): picking up
  *  a kind you already have raises its tier I→II→III; a 4th is a no-op. */
 function levelUp(level: number): number {

@@ -694,9 +694,9 @@ export const STAIRS = {
   glyphSize: 1.1,
 } as const;
 
-/** Within-run drops. EXACTLY three kinds: health + two VERB-COUPLED powerups
- *  (PIERCE for ranged, KNOCKBACK for melee). Powerups are binary toggles — they
- *  change what a verb DOES, not its stats; not stackable; reset on death. */
+/** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:
+ *  melee, ranged, pierce, knockback — stack to tier III) and three binary DASH
+ *  toggles (extra-charge, faster-recharge, dash-strike). Reset on death. */
 export const DROP = {
   /** Chance a slain enemy drops anything (seeded roll). Tuned DOWN from 0.45 —
    *  drops were too frequent (every kill rolls: regular enemies + the boss +
