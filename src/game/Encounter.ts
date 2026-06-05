@@ -18,6 +18,7 @@ import { enemiesPerRoomForDepth, rangedCountForDepth, swarmerCountForDepth } fro
 import { boxOverlapsTile } from './Collision';
 import type { Rng } from '../utils/rng';
 import { roomEnemyCount, spawnEnemy } from './Enemy';
+import { createBossState } from './Boss';
 import { rollDrop, spawnPickup } from './Pickup';
 import type { Floor, Rect } from './Dungeon';
 import type { RoomState } from './Room';
@@ -78,12 +79,14 @@ function computeSpawns(rect: Rect, depth: number): { x: number; y: number; type:
   return out;
 }
 
-/** Build the encounter table for a floor. Room 0 (spawn) starts cleared (safe). */
+/** Build the encounter table for a floor. Room 0 (spawn) starts cleared (safe).
+ *  The BOSS room (Phase 8) gets NO normal spawns — it's boss-alone; the single
+ *  boss is spawned on activation in updateEncounterEntry. */
 export function buildEncounters(floor: Floor, depth = 1): RoomEncounter[] {
   return floor.rooms.map((rect, i) => ({
     rect,
     phase: i === 0 ? ('cleared' as RoomPhase) : ('idle' as RoomPhase),
-    spawns: computeSpawns(rect, depth),
+    spawns: i === floor.bossRoom ? [] : computeSpawns(rect, depth),
     doorCells: computeDoorCells(floor.room, rect),
     dropsSpawned: 0,
     dropsCollected: 0,
@@ -162,8 +165,22 @@ export function updateEncounterEntry(state: GameState): void {
   if (state.room.corridor?.[ty * state.room.tilesX + tx]) return;
   enc.phase = 'active';
   state.activeRoom = idx;
-  // Tag each enemy with its owning room so the room clears on ITS OWN enemies.
-  for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type, idx);
+  if (idx === state.bossRoom) {
+    // BOSS room (Phase 8): spawn the SINGLE boss at the room centre (boss-alone,
+    // no normal spawns) and build its companion state. Tagged with this room so
+    // the room clears — and descent unlocks — on the boss's death (roomEnemyCount).
+    const r = enc.rect;
+    const ts = state.room.tileSize;
+    const bx = (r.x + r.w / 2) * ts;
+    const by = (r.y + r.h / 2) * ts;
+    if (spawnEnemy(state.enemies, bx, by, state.run.depth, 'boss', idx)) {
+      const slot = state.enemies.findIndex((e) => e.active && e.type === 'boss');
+      state.boss = createBossState(slot, state.run.depth);
+    }
+  } else {
+    // Tag each enemy with its owning room so the room clears on ITS OWN enemies.
+    for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type, idx);
+  }
   setDoors(state, enc, true);
 }
 
@@ -191,9 +208,13 @@ export function updateEncounterResolve(state: GameState): void {
     enc.phase = 'cleared';
     setDoors(state, enc, false);
     state.activeRoom = -1;
-    // Stairs follow the most-recently-cleared room; the final clear lands them
-    // in the last-cleared room (the descent-flow fix).
-    placeStairs(state, clearedIdx);
+    // Phase 8: descent stairs are PINNED to the boss room — the boss is the final
+    // gate, so the way down lives in its arena (the player ends the boss fight
+    // standing on the stairs). Idempotent across intermediate clears; falls back
+    // to the cleared room for hand-built states with no valid boss room.
+    const target =
+      state.bossRoom >= 0 && state.bossRoom < state.rooms.length ? state.bossRoom : clearedIdx;
+    placeStairs(state, target);
   }
 }
 

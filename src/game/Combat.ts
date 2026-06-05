@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { DASH_STRIKE, DROP, ENEMY_COMMON, ENEMY_TYPES, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, DASH_STRIKE, DROP, ENEMY_COMMON, ENEMY_TYPES, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -47,6 +47,28 @@ export function damageEnemy(
   kbForce: number,
   state: GameState,
 ): void {
+  // GIMMICK #1 (Phase 8): a boss only takes damage from its VULNERABLE side. A
+  // hit from the armored side is BLOCKED — no health loss (blockedDamageMult 0),
+  // no knockback, no hit-stop; it flashes the SHIELD tell instead. kbDir is the
+  // attacker -> enemy direction, so boss -> attacker is its negation; the hit is
+  // vulnerable when that lies within half the weak arc. Inlined (not imported
+  // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
+  if (enemy.type === 'boss' && state.boss) {
+    const len = Math.hypot(kbDirX, kbDirY) || 1;
+    const dot =
+      (-kbDirX / len) * Math.cos(state.boss.vulnerableAngle) +
+      (-kbDirY / len) * Math.sin(state.boss.vulnerableAngle);
+    if (dot < Math.cos(BOSS.vulnerableArc / 2)) {
+      state.boss.blockedFlash = ENEMY_COMMON.flash; // shield "clang" tell
+      spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
+      enemy.health -= amount * BOSS.blockedDamageMult; // 0 => fully negated
+      if (enemy.health <= 0) {
+        enemy.active = false;
+        spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
+      }
+      return;
+    }
+  }
   enemy.health -= amount;
   enemy.flashTimer = ENEMY_COMMON.flash;
   // Per-type mass: light enemies (swarmers) get launched farther by the same

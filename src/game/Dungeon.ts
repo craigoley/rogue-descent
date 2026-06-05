@@ -38,6 +38,10 @@ export interface Floor {
   spawn: { x: number; y: number };
   /** The seed this floor was generated from. */
   seed: number;
+  /** Index into rooms[] of the BOSS room (Phase 8): the room reached LAST = max
+   *  corridor-hop distance from spawn over the carved corridor spanning tree.
+   *  Additive — does not affect the carved layout. */
+  bossRoom: number;
 }
 
 interface Node {
@@ -200,18 +204,77 @@ function connect(
   walkable: boolean[],
   corridor: boolean[],
   rooms: Rect[],
+  edges: [number, number][],
   tilesX: number,
   tilesY: number,
 ): Rect {
   if (node.room) return node.room;
-  const a = connect(node.left!, rng, walkable, corridor, rooms, tilesX, tilesY);
-  const b = connect(node.right!, rng, walkable, corridor, rooms, tilesX, tilesY);
+  const a = connect(node.left!, rng, walkable, corridor, rooms, edges, tilesX, tilesY);
+  const b = connect(node.right!, rng, walkable, corridor, rooms, edges, tilesX, tilesY);
   const ca = rectCenterTile(a);
   const cb = rectCenterTile(b);
   // a/b are the connected rooms — their own interiors stay untagged; only OTHER
   // rooms the L-path crosses get the corridor (pass-through) tag.
   carveCorridor(walkable, corridor, rooms, a, b, tilesX, tilesY, ca.tx, ca.ty, cb.tx, cb.ty);
+  // Record the corridor as a graph edge (the carved corridors form a spanning
+  // TREE over the rooms) so we can pick the boss room by max hops from spawn.
+  edges.push([rooms.indexOf(a), rooms.indexOf(b)]);
   return rng.next() < 0.5 ? a : b;
+}
+
+/** Designate the BOSS room: the room you reach LAST on a natural playthrough =
+ *  the MAX corridor-hop distance from the spawn room (rooms[0]) over the carved
+ *  corridor spanning tree (graph distance, NOT geometric — corridors connect
+ *  rng-picked representatives, so a far-away room can be few hops). Ties → the
+ *  LARGEST room (also helps it hold the big boss), then lowest index. Then a
+ *  boss-FIT fallback: if the winner is too small for the boss radius, take the
+ *  largest among the farthest band. Deterministic per seed. */
+function pickBossRoom(rooms: Rect[], edges: [number, number][]): number {
+  const adj: number[][] = rooms.map(() => []);
+  for (const [a, b] of edges) {
+    adj[a].push(b);
+    adj[b].push(a);
+  }
+  // BFS hop-distance from spawn (rooms[0]).
+  const dist = rooms.map(() => -1);
+  dist[0] = 0;
+  const queue = [0];
+  for (let head = 0; head < queue.length; head++) {
+    const u = queue[head];
+    for (const v of adj[u]) {
+      if (dist[v] === -1) {
+        dist[v] = dist[u] + 1;
+        queue.push(v);
+      }
+    }
+  }
+  const area = (r: Rect): number => r.w * r.h;
+  // Boss must physically fit (radius + the room-rect clamp margin). Prefer the
+  // farthest; among equally-far, the largest; fall back to the largest room that
+  // fits if the farthest is too small.
+  const fits = (r: Rect): boolean =>
+    Math.min(r.w, r.h) >= DUNGEON.bossMinRoomSide;
+  let best = 0;
+  let bestKey = -1; // sort key: dist (primary), then area, then -index
+  for (let i = 1; i < rooms.length; i++) {
+    if (!fits(rooms[i])) continue;
+    // pack (dist, area) into a comparable: dist dominates, area breaks ties.
+    const key = dist[i] * 1e6 + area(rooms[i]);
+    if (key > bestKey) {
+      bestKey = key;
+      best = i;
+    }
+  }
+  // Fallback: if no room "fits" (shouldn't happen with minRoom 6), take the
+  // farthest regardless.
+  if (bestKey < 0) {
+    let far = 0;
+    for (let i = 1; i < rooms.length; i++) {
+      if (dist[i] > dist[far] || (dist[i] === dist[far] && area(rooms[i]) > area(rooms[far]))) far = i;
+    }
+    best = far;
+  }
+  return best;
 }
 
 /** Generate a connected multi-room floor from `seed`. */
@@ -230,7 +293,9 @@ export function generateDungeon(seed: number): Floor {
   // player is only PASSING THROUGH (see Encounter.updateEncounterEntry).
   const corridor = new Array<boolean>(tilesX * tilesY).fill(false);
   for (const r of rooms) carveRoom(walkable, tilesX, tilesY, r);
-  connect(root, rng, walkable, corridor, rooms, tilesX, tilesY);
+  const edges: [number, number][] = [];
+  connect(root, rng, walkable, corridor, rooms, edges, tilesX, tilesY);
+  const bossRoom = pickBossRoom(rooms, edges);
 
   // Build the contract: solid = !walkable; walls = border solid tiles only.
   const solid = new Array<boolean>(tilesX * tilesY);
@@ -252,7 +317,7 @@ export function generateDungeon(seed: number): Floor {
     x: (spawnRoom.x + spawnRoom.w / 2) * ROOM.tileSize,
     y: (spawnRoom.y + spawnRoom.h / 2) * ROOM.tileSize,
   };
-  return { room, rooms, spawn, seed };
+  return { room, rooms, spawn, seed, bossRoom };
 }
 
 /** True if any 8-neighbour of (tx, ty) is walkable (so this wall is a visible

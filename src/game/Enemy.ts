@@ -22,6 +22,7 @@ import { resolveX, resolveY } from './Collision';
 import { damagePlayer } from './Combat';
 import { fireEnemyProjectile } from './EnemyProjectile';
 import { damageMultForDepth, healthMultForDepth, speedMultForDepth } from './Difficulty';
+import { updateBoss } from './Boss';
 import type { GameState } from './GameState';
 
 /** Clamp `v` to the symmetric range [-limit, limit]. */
@@ -340,6 +341,9 @@ export function updateEnemies(state: GameState, dt: number): void {
         break;
       case 'swarmer':
         updateSwarmer(e, state, dt, dx, dy, d);
+        break;
+      case 'boss':
+        updateBoss(e, state, dt, dx, dy, d, _vel);
         break;
       default:
         updateChaser(e, state, dt, dx, dy, d);
