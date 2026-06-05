@@ -218,6 +218,19 @@ export class Controls {
     if (!this.isTouch) return;
     if (this.aimTouchId === null && this.firePersistTimer > 0) {
       this.firePersistTimer = Math.max(0, this.firePersistTimer - dt);
+      // When the persist window EXPIRES, return aim to IDLE so the movement ->
+      // facing fallback re-engages (aimDirection's else branch + Player.facing).
+      // The aim is intentionally RETAINED while the thumb is down and through the
+      // persist window (#25's flick-aim-then-tap-melee ergonomics) — we release
+      // it only HERE, the moment the persisted burst ends. Without this, retained
+      // aim was never cleared after #25 removed the per-fight cold-start, freezing
+      // facing at the last aim (melee fired that direction regardless of
+      // movement). Desktop is unaffected: main.ts recomputes aim from the cursor
+      // every frame.
+      if (this.firePersistTimer === 0) {
+        this.intent.aimX = 0;
+        this.intent.aimY = 0;
+      }
     }
     this.updateRanged();
     this.updateFireIndicator();
