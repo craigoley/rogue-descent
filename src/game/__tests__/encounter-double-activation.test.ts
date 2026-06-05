@@ -15,7 +15,6 @@ import { SIM_DT } from '../../utils/constants';
 const DT = SIM_DT;
 const idle = createIntent;
 
-/** Centre the player in encounter room `i` (world units). */
 /** Place the player on a guaranteed ROOM-BODY (non-corridor) cell of room `i`.
  *  A room is activated by stepping onto its BODY floor, not a corridor carved
  *  THROUGH its rect (incl. the rare seed where a foreign corridor crosses the
