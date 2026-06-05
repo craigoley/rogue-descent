@@ -113,14 +113,13 @@ const SUMMON: BossAttack = {
   },
 };
 
-/** The active attack table for a (gimmick, phase). Gimmick-aware selection is the
- *  one framework seam #44 anticipated: positioning is an always-on modifier so it
- *  adds no entries; the adds gimmick contributes SUMMON, but only in phase 2 (so a
- *  single-phase boss never summons). The telegraph->strike->recover loop + the
- *  BossAttack shape are unchanged — new gimmicks just add a branch here. */
+// Pre-allocated attack tables (returned by reference — no per-frame allocation).
+const TABLE_SLAM: BossAttack[] = [SLAM];
+const TABLE_SLAM_SUMMON: BossAttack[] = [SLAM, SUMMON];
+
 function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
-  if (gimmick === 'adds' && phase2) return [SLAM, SUMMON];
-  return [SLAM];
+  if (gimmick === 'adds' && phase2) return TABLE_SLAM_SUMMON;
+  return TABLE_SLAM;
 }
 
 /** Build the companion state for a freshly-spawned boss at `slot` (its Enemy
