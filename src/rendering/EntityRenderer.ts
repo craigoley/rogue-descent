@@ -884,7 +884,7 @@ export class EntityRenderer {
       this.bossWeakMat.color.setHex(PALETTE.enemyBossWeak);
       this.bossWeakMat.emissive.setHex(PALETTE.enemyBossWeak);
     }
-    const pulse = 1 + 0.15 * (0.5 + 0.5 * Math.sin(now * 0.006));
+    const pulse = 1 + BOSS_VFX.weakPointPulseAmp * (0.5 + 0.5 * Math.sin(now * BOSS_VFX.weakPointPulseRate));
     this.bossWeak.scale.setScalar(pulse);
   }
 

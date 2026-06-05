@@ -1008,4 +1008,8 @@ export const BOSS_VFX = {
   emissive: 0.55,
   /** Extra scale at the peak of a slam telegraph (grows then strikes). */
   telegraphScale: 0.22,
+  /** Weak-point marker pulse amplitude (0 = no pulse, 0.15 = ±15% scale). */
+  weakPointPulseAmp: 0.15,
+  /** Weak-point marker pulse rate (per-ms frequency for performance.now()). */
+  weakPointPulseRate: 0.006,
 } as const;
