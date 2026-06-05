@@ -12,7 +12,7 @@
  *   - Pool capacity: boss + wave <= POOL.enemies; summon respects a full pool.
  */
 import { describe, expect, it } from 'vitest';
-import { createGameState, update, type GameState } from '../GameState';
+import { createGameState, update, consumeBossSummon, type GameState } from '../GameState';
 import { createIntent } from '../Input';
 import { spawnEnemy, roomEnemyCount, activeEnemyCount } from '../Enemy';
 import { createBossState, updateBoss } from '../Boss';
@@ -37,7 +37,9 @@ function withBoss(depth: number, bx = 20, by = 20): { s: GameState; e: GameState
 }
 
 /** Force the boss into a SUMMON strike this tick (adds gimmick, phase 2, the
- *  SUMMON entry of [SLAM, SUMMON]) with the player along +x for a known line. */
+ *  SUMMON entry of [SLAM, SUMMON]) with the player along +x for a known line.
+ *  Drives the FULL signal path: updateBoss RECORDS the request, then
+ *  consumeBossSummon performs the spawn (exactly as `update` does). */
 function fireSummon(s: GameState, e: GameState['enemies'][number]): void {
   const boss = s.boss!;
   boss.gimmick = 'adds';
@@ -52,6 +54,7 @@ function fireSummon(s: GameState, e: GameState['enemies'][number]): void {
   const dx = s.player.x - e.x;
   const dy = s.player.y - e.y;
   updateBoss(e, s, DT, dx, dy, Math.hypot(dx, dy), SCRATCH);
+  consumeBossSummon(s); // the spawn side-effect (GameState owns it)
 }
 
 const addsOf = (s: GameState) => s.enemies.filter((e) => e.active && e.type === 'bossadd');
@@ -74,6 +77,45 @@ describe('SUMMON — finite, line-shaped, deterministic wave', () => {
       expect(adds[k].x).toBeCloseTo(20 + BOSS.summon.lineOffset + k * BOSS.summon.lineSpacing, 9);
       expect(adds[k].y).toBeCloseTo(20, 9); // colinear -> one pierce shot can skewer them
     }
+  });
+});
+
+describe('SUMMON signal — boss records intent, GameState performs the spawn', () => {
+  it('updateBoss RECORDS pendingSummon without spawning; consume spawns + clears it', () => {
+    const { s, e } = withBoss(4);
+    s.boss!.gimmick = 'adds';
+    s.boss!.outerPhase = 2;
+    s.boss!.attackCursor = 1; // SUMMON
+    e.health = s.boss!.maxHealth;
+    e.phase = 'strike';
+    e.struck = false;
+    e.timer = 1;
+    s.player.x = e.x + 5;
+    s.player.y = e.y;
+    updateBoss(e, s, DT, 5, 0, 5, SCRATCH);
+
+    // The strike only RECORDED intent — Boss spawned nothing (no spawnEnemy import).
+    expect(s.boss!.pendingSummon).not.toBeNull();
+    expect(s.boss!.pendingSummon!.count).toBe(BOSS.summon.count);
+    expect(addsOf(s)).toHaveLength(0);
+
+    // GameState consumes the request: spawns the wave, then clears it.
+    consumeBossSummon(s);
+    expect(addsOf(s)).toHaveLength(BOSS.summon.count);
+    expect(s.boss!.pendingSummon).toBeNull();
+  });
+
+  it('the gated guard records NO request while a wave is alive', () => {
+    const { s, e } = withBoss(4);
+    fireSummon(s, e); // a wave of 3 is now alive
+    expect(addsOf(s)).toHaveLength(BOSS.summon.count);
+    // A second SUMMON strike while the wave lives must not even record a request.
+    s.boss!.attackCursor = 1;
+    e.phase = 'strike';
+    e.struck = false;
+    e.timer = 1;
+    updateBoss(e, s, DT, 5, 0, 5, SCRATCH);
+    expect(s.boss!.pendingSummon).toBeNull();
   });
 });
 
@@ -108,7 +150,9 @@ describe('Phase / depth gating — shallow + positioning bosses never summon', (
       const dy = s.player.y - e.y;
       updateBoss(e, s, DT, dx, dy, Math.hypot(dx, dy), SCRATCH);
     }
-    expect(addsOf(s)).toHaveLength(0);
+    expect(s.boss!.pendingSummon).toBeNull(); // never even REQUESTED a summon
+    consumeBossSummon(s);
+    expect(addsOf(s)).toHaveLength(0); // ...so no adds spawn
   });
 
   it('a POSITIONING boss never summons (no SUMMON in its table)', () => {
@@ -121,6 +165,8 @@ describe('Phase / depth gating — shallow + positioning bosses never summon', (
     s.player.x = e.x + 5;
     s.player.y = e.y;
     updateBoss(e, s, DT, 5, 0, 5, SCRATCH);
+    expect(s.boss!.pendingSummon).toBeNull(); // no request recorded
+    consumeBossSummon(s);
     expect(addsOf(s)).toHaveLength(0);
   });
 
