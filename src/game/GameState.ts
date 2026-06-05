@@ -128,6 +128,8 @@ export interface GameState {
   /** Per-kind drop tally for the ?debug funnel (within-run; reset on death). */
   dropCounts: {
     health: number;
+    melee: number;
+    ranged: number;
     pierce: number;
     knockback: number;
     extraCharge: number;
@@ -173,7 +175,7 @@ export function createGameState(): GameState {
     bossDefeated: false,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -213,6 +215,8 @@ function loadFloor(state: GameState, seed: number): void {
   state.stairs.active = false;
   state.dropRng = createRng(dropSeed(seed));
   state.dropCounts.health = 0;
+  state.dropCounts.melee = 0;
+  state.dropCounts.ranged = 0;
   state.dropCounts.pierce = 0;
   state.dropCounts.knockback = 0;
   state.dropCounts.extraCharge = 0;
@@ -303,16 +307,21 @@ function descendIfReady(state: GameState): boolean {
   // loadFloor→createPlayer path in startNewRun. Position is NOT carried: the
   // player still moves to the new floor's spawn point.
   const carried = {
-    pierce: p.pierce,
-    meleeKnockback: p.meleeKnockback,
+    // Phase 9: the four weapon LEVELS (ints) carry like the booleans did.
+    meleeLevel: p.meleeLevel,
+    rangedLevel: p.rangedLevel,
+    pierceLevel: p.pierceLevel,
+    knockbackLevel: p.knockbackLevel,
     extraCharge: p.extraCharge,
     fasterRecharge: p.fasterRecharge,
     dashStrike: p.dashStrike,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
-  state.player.pierce = carried.pierce;
-  state.player.meleeKnockback = carried.meleeKnockback;
+  state.player.meleeLevel = carried.meleeLevel;
+  state.player.rangedLevel = carried.rangedLevel;
+  state.player.pierceLevel = carried.pierceLevel;
+  state.player.knockbackLevel = carried.knockbackLevel;
   state.player.extraCharge = carried.extraCharge;
   state.player.fasterRecharge = carried.fasterRecharge;
   state.player.dashStrike = carried.dashStrike;
@@ -381,7 +390,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   // what a shot DOES, not how fast it fires — fire rate is fixed.)
   if (intent.ranged && p.rangedCdTimer <= 0) {
     const aim = aimDirection(p, intent, _aim);
-    fireProjectile(state.projectiles, p.x, p.y, aim.x, aim.y);
+    fireProjectile(state.projectiles, p.x, p.y, aim.x, aim.y, p.rangedLevel); // Phase 9: multishot by level
     p.rangedCdTimer = RANGED.cooldown;
   }
 

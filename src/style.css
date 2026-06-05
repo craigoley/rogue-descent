@@ -242,6 +242,39 @@ body {
   clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
 }
 
+/* MELEE: an upright blade bar (mirrors drawSword). */
+.hud-chip.is-melee::before {
+  width: 3px;
+  height: 9px;
+  background: currentColor;
+}
+
+/* RANGED: a small square bolt (mirrors drawMultishot's projectiles). */
+.hud-chip.is-ranged::before {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+/* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
+   read: small dots after the label, lit at the chip's --chip-color. */
+.hud-chip-pips {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.hud-chip-pip {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.5;
+}
+.hud-chip-pip.is-filled {
+  background: currentColor;
+  opacity: 1;
+}
+
 /* Touch virtual stick — purely visual feedback; the listeners capture touches,
    so these never intercept pointer events. Centred on their left/top via
    translate(-50%, -50%). Hidden until a touch is active. */

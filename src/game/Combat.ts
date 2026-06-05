@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, DASH_STRIKE, DROP, ENEMY_COMMON, ENEMY_TYPES, MELEE, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -136,13 +136,18 @@ export function dashStrike(state: GameState): void {
  */
 export function meleeAttack(state: GameState, aimX: number, aimY: number): void {
   const { player, enemies } = state;
-  const arcCos = Math.cos(MELEE.halfArc);
-  // KNOCKBACK powerup turns the swing into a launcher: same hit, far stronger
-  // shove. Damage is unchanged — this is a behaviour toggle, not a damage buff.
-  const kbForce = player.meleeKnockback ? DROP.meleeKnockback : MELEE.knockback;
+  // Phase 9 MELEE level: damage scales (× over the live TUNING.meleeDamage so the
+  // ?debug slider still drives the base); reach + arc widen only at the cap (III).
+  const ml = player.meleeLevel;
+  const damage = TUNING.meleeDamage * MELEE_LEVELS.damageMult[ml];
+  const reachBase = MELEE.range * MELEE_LEVELS.reachMult[ml];
+  const arcCos = Math.cos(MELEE.halfArc * MELEE_LEVELS.arcMult[ml]);
+  // Phase 9 KNOCKBACK level: shove force scales (level 0 = base MELEE.knockback).
+  // PR1 = force only; stun (II) + AoE (III) arrive in PR2.
+  const kbForce = KNOCKBACK_LEVELS.force[player.knockbackLevel];
   for (const e of enemies) {
     if (!e.active) continue;
-    const reach = MELEE.range + ENEMY_TYPES[e.type].radius; // per-type hitbox
+    const reach = reachBase + ENEMY_TYPES[e.type].radius; // per-type hitbox
     const dx = e.x - player.x;
     const dy = e.y - player.y;
     const d = Math.hypot(dx, dy);
@@ -150,6 +155,6 @@ export function meleeAttack(state: GameState, aimX: number, aimY: number): void 
     // Within the arc if the angle to the enemy is <= halfArc from the aim dir.
     const dot = (dx / d) * aimX + (dy / d) * aimY;
     if (dot < arcCos) continue;
-    damageEnemy(e, TUNING.meleeDamage, dx / d, dy / d, kbForce, state);
+    damageEnemy(e, damage, dx / d, dy / d, kbForce, state);
   }
 }

@@ -224,12 +224,54 @@ function drawBladeDash(g: CanvasRenderingContext2D, s: number, color: string): v
   }
 }
 
+/** An upright blade with a crossguard (MELEE level — the swing gets stronger).
+ *  A sword silhouette reads as the melee weapon, distinct from the dash-strike
+ *  diagonal slash and the knockback burst. */
+function drawSword(g: CanvasRenderingContext2D, s: number, color: string): void {
+  g.strokeStyle = color;
+  g.fillStyle = color;
+  g.lineCap = 'round';
+  g.lineWidth = s * 0.13;
+  g.beginPath(); // blade
+  g.moveTo(s * 0.5, s * 0.16);
+  g.lineTo(s * 0.5, s * 0.7);
+  g.stroke();
+  g.beginPath(); // crossguard
+  g.moveTo(s * 0.34, s * 0.66);
+  g.lineTo(s * 0.66, s * 0.66);
+  g.stroke();
+  g.beginPath(); // pommel
+  g.moveTo(s * 0.5, s * 0.7);
+  g.lineTo(s * 0.5, s * 0.84);
+  g.stroke();
+}
+
+/** Three stacked right-arrows (RANGED level — multishot spread). The fan of
+ *  arrows reads as "more shots", distinct from the single pierce arrow. */
+function drawMultishot(g: CanvasRenderingContext2D, s: number, color: string): void {
+  g.strokeStyle = color;
+  g.lineWidth = s * 0.1;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const cy of [s * 0.28, s * 0.5, s * 0.72]) {
+    g.beginPath(); // a short right-pointing arrow
+    g.moveTo(s * 0.2, cy);
+    g.lineTo(s * 0.66, cy);
+    g.moveTo(s * 0.52, cy - s * 0.1);
+    g.lineTo(s * 0.66, cy);
+    g.lineTo(s * 0.52, cy + s * 0.1);
+    g.stroke();
+  }
+}
+
 /** Per-drop-kind presentation: VERB/system colour + glyph + toast label. The
  *  verb powerups borrow their verb colour (pierce = ranged blue, knockback =
  *  melee orange); the three DASH powerups share the dash magenta and differ by
  *  glyph; health keeps its own green. */
 const DROP_COLOR: Record<PickupKind, number> = {
   health: PALETTE.pickupHealth,
+  melee: PALETTE.melee,
+  ranged: PALETTE.projectile,
   pierce: PALETTE.projectile,
   knockback: PALETTE.melee,
   extraCharge: PALETTE.dash,
@@ -238,6 +280,8 @@ const DROP_COLOR: Record<PickupKind, number> = {
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
+  melee: drawSword,
+  ranged: drawMultishot,
   pierce: drawArrow,
   knockback: drawBurst,
   extraCharge: drawDoubleChevron,
@@ -246,6 +290,8 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
+  melee: 'MELEE',
+  ranged: 'RANGED',
   pierce: 'PIERCE',
   knockback: 'KNOCKBACK',
   extraCharge: 'EXTRA DASH',
@@ -254,6 +300,8 @@ const DROP_LABEL: Record<PickupKind, string> = {
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
+  'melee',
+  'ranged',
   'pierce',
   'knockback',
   'extraCharge',

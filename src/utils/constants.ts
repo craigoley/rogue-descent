@@ -694,9 +694,9 @@ export const STAIRS = {
   glyphSize: 1.1,
 } as const;
 
-/** Within-run drops. EXACTLY three kinds: health + two VERB-COUPLED powerups
- *  (PIERCE for ranged, KNOCKBACK for melee). Powerups are binary toggles — they
- *  change what a verb DOES, not its stats; not stackable; reset on death. */
+/** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:
+ *  melee, ranged, pierce, knockback — stack to tier III) and three binary DASH
+ *  toggles (extra-charge, faster-recharge, dash-strike). Reset on death. */
 export const DROP = {
   /** Chance a slain enemy drops anything (seeded roll). Tuned DOWN from 0.45 —
    *  drops were too frequent (every kill rolls: regular enemies + the boss +
@@ -715,9 +715,56 @@ export const DROP = {
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much
    *  stronger than the base MELEE.knockback shove so the upgraded swing reads as
-   *  a launcher — the behaviour change is felt, not a subtle stat nudge. */
+   *  a launcher — the behaviour change is felt, not a subtle stat nudge. (Now the
+   *  tier-I force in KNOCKBACK_LEVELS — kept here for back-reference.) */
   meleeKnockback: 18,
 } as const;
+
+// ============================================================================
+// ESCALATING POWERUPS (Phase 9). Each weapon stat has LEVELS 0..3 (cap III). LEVEL
+// 0 IS THE NO-POWERUP BASE — an un-upgraded run is byte-identical to before. Each
+// array is indexed by level (length 4). Per the no-magic-numbers rule, melee
+// damage scales as a MULTIPLIER over TUNING.meleeDamage so the ?debug slider still
+// drives the base at every level; ranged keeps TUNING.rangedDamage per shot and
+// escalates the COUNT instead.
+// ============================================================================
+/** MELEE level → damage multiplier (over TUNING.meleeDamage) + reach/arc growth.
+ *  Default slider (34) yields 34 / 51 / 68 / 85 damage. Reach + arc only widen at
+ *  the cap (III) so the top tier visibly swings bigger, not just harder. */
+export const MELEE_LEVELS = {
+  damageMult: [1, 1.5, 2, 2.5],
+  /** MELEE.range multiplier per level (cap III reaches further). */
+  reachMult: [1, 1, 1, 1.18],
+  /** MELEE.halfArc multiplier per level (cap III sweeps wider). */
+  arcMult: [1, 1, 1, 1.18],
+} as const;
+
+/** RANGED level → number of projectiles per shot (a spread). Level 0 = 1 (single
+ *  shot, unchanged); each level adds one. Damage stays TUNING.rangedDamage/shot —
+ *  the COUNT is the escalation (crowd DPS + pierce synergy). */
+export const RANGED_LEVELS = {
+  shots: [1, 2, 3, 4],
+  /** Total fan angle (radians) the shots spread across; 1 shot ignores it. */
+  spreadAngle: 0.35,
+} as const;
+
+/** PIERCE level → MAX DISTINCT ENEMIES a bolt damages before it despawns. Level 0
+ *  = 1 (first-hit-stops, no pierce — unchanged); I = 2, II = 3, III = Infinity
+ *  (the pre-Phase-9 infinite pass-through, now the cap). The reframing of "more
+ *  pierce" as a counted resource IS the escalation axis (pass-through was maxed). */
+export const PIERCE_LEVELS = {
+  maxHits: [1, 2, 3, Infinity],
+} as const;
+
+/** KNOCKBACK level → melee shove force (world units/sec). Level 0 = MELEE.knockback
+ *  (base, unchanged); I = the old powerup force (DROP.meleeKnockback), II/III grow.
+ *  PR1 scales FORCE only — stun (II) + AoE (III) land in PR2 on top of these. */
+export const KNOCKBACK_LEVELS = {
+  force: [MELEE.knockback, DROP.meleeKnockback, 26, 34],
+} as const;
+
+/** Hard cap on every powerup level (tier III). applyPickup clamps to this. */
+export const POWERUP_MAX_LEVEL = 3;
 
 /** Pickup tuning. */
 export const PICKUP = {
