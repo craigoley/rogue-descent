@@ -312,7 +312,7 @@ function descendIfReady(state: GameState): boolean {
     rangedLevel: p.rangedLevel,
     pierceLevel: p.pierceLevel,
     knockbackLevel: p.knockbackLevel,
-    extraCharge: p.extraCharge,
+    extraChargeLevel: p.extraChargeLevel,
     fasterRecharge: p.fasterRecharge,
     dashStrike: p.dashStrike,
     health: p.health,
@@ -322,7 +322,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.rangedLevel = carried.rangedLevel;
   state.player.pierceLevel = carried.pierceLevel;
   state.player.knockbackLevel = carried.knockbackLevel;
-  state.player.extraCharge = carried.extraCharge;
+  state.player.extraChargeLevel = carried.extraChargeLevel;
   state.player.fasterRecharge = carried.fasterRecharge;
   state.player.dashStrike = carried.dashStrike;
   state.player.health = carried.health;

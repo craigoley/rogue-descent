@@ -75,9 +75,10 @@ export interface PlayerState {
    *  by KNOCKBACK_LEVELS[level] (0 = base MELEE.knockback). PR1 scales FORCE only;
    *  stun (II) + AoE (III) land in PR2. Reset to 0 on death via createPlayer. */
   knockbackLevel: number;
-  /** EXTRA-CHARGE powerup (within-run): +DASH.extraChargeBonus dash charges (a
-   *  second dash before recharge). Binary toggle; reset on death via createPlayer. */
-  extraCharge: boolean;
+  /** EXTRA-CHARGE powerup LEVEL (0..3, within-run; Phase 9 PR3): each level adds
+   *  DASH.extraChargeBonus to the dash-charge ceiling (I=+1 → 2, II → 3, III → 4).
+   *  0 = base (1 charge). Reset to 0 on death via createPlayer. */
+  extraChargeLevel: number;
   /** FASTER-RECHARGE powerup (within-run): dash charges refill quicker
    *  (×TUNING.dashFasterRechargeFactor). Binary toggle; reset via createPlayer. */
   fasterRecharge: boolean;
@@ -122,7 +123,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     rangedLevel: 0,
     pierceLevel: 0,
     knockbackLevel: 0,
-    extraCharge: false,
+    extraChargeLevel: 0,
     fasterRecharge: false,
     dashStrike: false,
     dashHits: new Set<number>(),
@@ -131,7 +132,7 @@ export function createPlayer(x: number, y: number): PlayerState {
 
 /** Max dash charges given the player's powerups (base + extra-charge bonus). */
 export function dashMaxCharges(player: PlayerState): number {
-  return DASH.baseCharges + (player.extraCharge ? DASH.extraChargeBonus : 0);
+  return DASH.baseCharges + player.extraChargeLevel * DASH.extraChargeBonus;
 }
 
 /** True while the player can't be damaged (dash i-frames or post-hit i-frames). */
