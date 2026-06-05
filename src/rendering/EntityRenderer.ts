@@ -67,15 +67,18 @@ const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
   // figure — this entry only satisfies the Record<EnemyType> type; it's never
   // built (boss is excluded from ENEMY_KINDS).
   boss: FIGURE.chaser,
+  bossadd: FIGURE.bossadd,
 };
 const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
   chaser: PALETTE.enemy,
   ranged: PALETTE.enemyRanged,
   swarmer: PALETTE.enemySwarmer,
   boss: PALETTE.enemyBoss,
+  bossadd: PALETTE.enemyBossAdd,
 };
-/** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled). */
-const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged', 'swarmer'];
+/** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled);
+ *  the boss-add (gimmick #2) IS pooled like the base enemies. */
+const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged', 'swarmer', 'bossadd'];
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -295,7 +298,7 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [], boss: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [], boss: [], bossadd: [] };
   /** Bespoke single boss mesh (Phase 8): a large armored body + head, an orbiting
    *  bright WEAK-POINT marker (gimmick #1 tell) and a floor ring. Not pooled. */
   private readonly bossGroup: Group;
