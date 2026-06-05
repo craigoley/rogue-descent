@@ -4,7 +4,7 @@ import { createPlayer, updatePlayer, dashMaxCharges, type PlayerState } from '..
 import { createIntent } from '../Input';
 import { applyPickup, activePickupCount, spawnPickup } from '../Pickup';
 import { buildTestRoom } from '../Room';
-import { DASH, POOL, SIM_DT, TUNING } from '../../utils/constants';
+import { DASH, POOL, POWERUP_MAX_LEVEL, SIM_DT, TUNING } from '../../utils/constants';
 
 const DT = SIM_DT;
 const room = buildTestRoom();
@@ -68,12 +68,22 @@ describe('Dash economy — starts full, scarce recharge', () => {
 });
 
 describe('Dash economy — EXTRA-CHARGE powerup', () => {
-  it('raises the cap to 2 and grants the charge immediately on pickup', () => {
+  it('each pickup raises the cap by a level (1→2→3→4) + refills on pickup; caps at III', () => {
     const p = createPlayer(7, 7);
+    expect(dashMaxCharges(p)).toBe(1); // level 0 = base, un-upgraded
     applyPickup(p, 'extraCharge');
-    expect(p.extraCharge).toBe(true);
+    expect(p.extraChargeLevel).toBe(1);
     expect(dashMaxCharges(p)).toBe(2);
-    expect(p.dashCharges).toBe(2); // felt on pickup, not after a recharge
+    expect(p.dashCharges).toBe(2); // felt on pickup (refilled to new max), not after a recharge
+    applyPickup(p, 'extraCharge');
+    expect(dashMaxCharges(p)).toBe(3);
+    expect(p.dashCharges).toBe(3);
+    applyPickup(p, 'extraCharge');
+    expect(p.extraChargeLevel).toBe(POWERUP_MAX_LEVEL); // 3
+    expect(dashMaxCharges(p)).toBe(4);
+    applyPickup(p, 'extraCharge'); // 4th = no-op at the cap
+    expect(p.extraChargeLevel).toBe(POWERUP_MAX_LEVEL);
+    expect(dashMaxCharges(p)).toBe(4);
   });
 
   it('allows TWO dashes before empty (vs one at baseline)', () => {
@@ -117,7 +127,7 @@ describe('Dash economy — persistence + reset (mirrors pierce/knockback)', () =
     applyPickup(s.player, 'fasterRecharge');
     descendOnce(s);
     expect(s.run.depth).toBe(2); // confirm we descended
-    expect(s.player.extraCharge).toBe(true);
+    expect(s.player.extraChargeLevel).toBe(1); // level carried across descent
     expect(s.player.fasterRecharge).toBe(true);
     expect(s.player.dashCharges).toBe(dashMaxCharges(s.player)); // full (2) on arrival
   });
@@ -127,7 +137,7 @@ describe('Dash economy — persistence + reset (mirrors pierce/knockback)', () =
     applyPickup(s.player, 'extraCharge');
     applyPickup(s.player, 'fasterRecharge');
     startNewRun(s, 4242);
-    expect(s.player.extraCharge).toBe(false);
+    expect(s.player.extraChargeLevel).toBe(0);
     expect(s.player.fasterRecharge).toBe(false);
     expect(dashMaxCharges(s.player)).toBe(DASH.baseCharges);
     expect(s.player.dashCharges).toBe(DASH.baseCharges);

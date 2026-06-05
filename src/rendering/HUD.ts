@@ -158,7 +158,10 @@ export class HUD {
     dashLabel.textContent = 'DASH';
     const pips = document.createElement('div');
     pips.className = 'hud-dash-pips';
-    const maxPips = DASH.baseCharges + DASH.extraChargeBonus;
+    // Phase 9 PR3: extra-charge is a LEVEL (0..POWERUP_MAX_LEVEL), so build enough
+    // pips for the maxed ceiling (base + max level); the per-frame show/hide reveals
+    // only dashMaxCharges(player) of them.
+    const maxPips = DASH.baseCharges + POWERUP_MAX_LEVEL * DASH.extraChargeBonus;
     for (let i = 0; i < maxPips; i++) {
       const pip = document.createElement('div');
       pip.className = 'hud-dash-pip';
@@ -615,7 +618,7 @@ export class HUD {
       softlockBlock +
       `powerups  melee L${state.player.meleeLevel}  ranged L${state.player.rangedLevel}  ` +
       `pierce L${state.player.pierceLevel}  knockback L${state.player.knockbackLevel}  ` +
-      `xcharge ${state.player.extraCharge ? 'ON' : 'off'}  ` +
+      `xcharge L${state.player.extraChargeLevel}  ` +
       `frecharge ${state.player.fasterRecharge ? 'ON' : 'off'}  ` +
       `dstrike ${state.player.dashStrike ? 'ON' : 'off'}\n` +
       `dash  charges ${state.player.dashCharges}/${dashMaxCharges(state.player)}  ` +

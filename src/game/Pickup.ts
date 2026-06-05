@@ -1,7 +1,7 @@
 /**
- * Within-run drops: health (restore HP) + SEVEN powerups. Four are LEVELED weapon
- * tracks (MELEE, RANGED, PIERCE, KNOCKBACK — stack to tier III via Phase 9); three
- * upgrade the DASH (EXTRA-CHARGE, FASTER-RECHARGE, DASH-STRIKE — binary toggles).
+ * Within-run drops: health (restore HP) + SEVEN powerups. Five are LEVELED tracks
+ * (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III via Phase 9);
+ * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE).
  * Powerups last the rest of the run (carried across descent) and reset on
  * death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning
  * never grows it.
@@ -10,9 +10,9 @@
  * RNG, applied immediately on touch.
  */
 
-import { DASH, DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL, POWERUP_MAX_LEVEL } from '../utils/constants';
+import { DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL, POWERUP_MAX_LEVEL } from '../utils/constants';
 import type { Rng } from '../utils/rng';
-import type { PlayerState } from './Player';
+import { dashMaxCharges, type PlayerState } from './Player';
 import type { GameState } from './GameState';
 
 export type PickupKind =
@@ -27,8 +27,8 @@ export type PickupKind =
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
- *  Phase 9: melee/ranged/pierce/knockback are LEVELED (stack to tier III); the
- *  three dash kinds remain binary toggles. */
+ *  Phase 9: melee/ranged/pierce/knockback/extraCharge are LEVELED (stack to tier
+ *  III); fasterRecharge + dashStrike remain binary toggles. */
 const POWERUP_KINDS: readonly PickupKind[] = [
   'melee',
   'ranged',
@@ -111,9 +111,11 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
   } else if (kind === 'knockback') {
     player.knockbackLevel = levelUp(player.knockbackLevel);
   } else if (kind === 'extraCharge') {
-    // Raise the dash cap and grant the new charge immediately (felt on pickup).
-    player.extraCharge = true;
-    player.dashCharges = DASH.baseCharges + DASH.extraChargeBonus;
+    // Phase 9 PR3: extra-charge is now a LEVEL — each pickup raises the dash
+    // ceiling by one (cap III). Refill to the NEW max so the charge is felt on
+    // pickup (the original "grant immediately" pop).
+    player.extraChargeLevel = levelUp(player.extraChargeLevel);
+    player.dashCharges = dashMaxCharges(player);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {
