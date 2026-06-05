@@ -90,9 +90,10 @@ describe('Permadeath — run stats accumulate during the run', () => {
     const before = s.run.timeSec;
     expect(before).toBeGreaterThan(0);
 
-    // Clear the floor (room 1 last) then step on the stairs to descend.
+    // Clear the floor (room 1 last) + kill the boss, then step on the stairs.
     for (let i = 0; i < s.rooms.length; i++) s.rooms[i].phase = i === 1 ? 'active' : 'cleared';
     s.activeRoom = 1;
+    s.bossDefeated = true; // Phase 8: descent gates on the boss being dead
     s.player.x = s.spawn.x;
     s.player.y = s.spawn.y;
     update(s, idle(), DT); // resolves room 1 -> stairs placed + active

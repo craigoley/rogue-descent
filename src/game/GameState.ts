@@ -71,15 +71,16 @@ export interface RunState {
 }
 
 /** Descent stairs for the CURRENT floor (per-floor; RESET unplaced by loadFloor,
- *  POSITIONED into the last-cleared room by the encounter resolve as rooms clear).
- *  Inactive until every room is cleared, then steppable to descend. */
+ *  PINNED to the boss room by the encounter resolve on its clear — see #44).
+ *  Inactive until the floor's BOSS is dead (Phase 8), then steppable to descend. */
 export interface Stairs {
-  /** World position (centre of the LAST-cleared room; (0,0) until first clear). */
+  /** World position (centre of the boss room; (0,0) until first placed). */
   x: number;
   y: number;
   /** Index into rooms[] of the stairs room, or -1 before any room clears. */
   roomIndex: number;
-  /** True once every room on the floor is cleared — the exit is open. */
+  /** True once this floor's BOSS is defeated (bossDefeated) — the exit is open.
+   *  (Was "every room cleared"; side rooms are optional as of Phase 8.) */
   active: boolean;
 }
 
@@ -114,6 +115,12 @@ export interface GameState {
    *  (between floors, or before the boss room activates / after the boss dies).
    *  The boss itself is a pooled Enemy; this holds its rich phase/gimmick state. */
   boss: BossState | null;
+  /** Durable per-floor flag: true once THIS floor's boss has been killed. The
+   *  boss is the floor's descent gate (Phase 8) — stairs unlock on boss death,
+   *  not on every room being cleared (side rooms are optional). Distinct from
+   *  `boss === null`, which is ALSO true before the boss spawns; this only flips
+   *  true on death and resets in loadFloor. */
+  bossDefeated: boolean;
   /** Enemy active-flags snapshot from the start of this frame, for death detection. */
   prevEnemyActive: boolean[];
   /** Seeded RNG for drop rolls (separate stream from generation). */
@@ -163,6 +170,7 @@ export function createGameState(): GameState {
     activeRoom: -1,
     bossRoom: -1,
     boss: null,
+    bossDefeated: false,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
@@ -194,6 +202,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.activeRoom = -1;
   state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
   state.boss = null; // no boss until its room activates
+  state.bossDefeated = false; // this floor's boss must be killed to unlock descent
   // Stairs start UNPLACED + inactive: they're positioned by the encounter resolve
   // as rooms clear (into the LAST-cleared room) and only shown once all rooms are
   // cleared. NOTE: state.run is intentionally NOT touched here (it spans the whole
@@ -272,13 +281,15 @@ export function nextFloorSeed(seed: number, depth: number): number {
  *  Returns true if a descent happened (caller should end the frame). */
 function descendIfReady(state: GameState): boolean {
   const stairs = state.stairs;
-  // All-cleared is monotonic (cleared is terminal), so this just tracks progress.
-  // For-loop (not .every()) to avoid per-frame closure allocation.
-  let allCleared = true;
-  for (let i = 0; i < state.rooms.length; i++) {
-    if (state.rooms[i].phase !== 'cleared') { allCleared = false; break; }
-  }
-  stairs.active = allCleared;
+  // Phase 8: the BOSS is the floor's climax + descent gate. Stairs unlock when the
+  // floor's boss is DEAD — NOT when every room is cleared. The spanning-tree layout
+  // lets the player reach + kill the boss with side rooms never entered, so an
+  // all-cleared gate would strand them with no stairs (the progression-blocker).
+  // Side rooms are now optional (loot/explore). bossDefeated is durable + per-floor
+  // (set on boss death, reset in loadFloor); the stairs are already pinned to the
+  // boss room by placeStairs on its clear (same frame), so they're positioned the
+  // moment they activate and the player is standing on them.
+  stairs.active = state.bossDefeated;
   if (!stairs.active) return false;
   const p = state.player;
   if (Math.hypot(p.x - stairs.x, p.y - stairs.y) > DESCENT.contactRadius) return false;
@@ -402,6 +413,9 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
       if (a.active && a.roomIndex === state.bossRoom) a.active = false;
     }
     state.boss = null;
+    // Durable signal that THIS floor's boss is dead -> descent unlocks (see
+    // descendIfReady). Survives state.boss going null; reset in loadFloor.
+    state.bossDefeated = true;
   }
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
