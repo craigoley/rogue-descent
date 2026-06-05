@@ -13,7 +13,7 @@
  * at a time — so "cleared = active room with zero live enemies".
  */
 
-import { ENCOUNTER, PLAYER, ROOM, type EnemyType } from '../utils/constants';
+import { DROP, ENCOUNTER, PLAYER, PLAYER_COMBAT, ROOM, type EnemyType } from '../utils/constants';
 import {
   bossDamageForDepth,
   bossHpForDepth,
@@ -235,6 +235,13 @@ export function updateEncounterResolve(state: GameState): void {
 export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rng): void {
   const kind = rollDrop(rng);
   if (!kind) return;
+  // Suppress a HEALTH drop at/above near-full HP — it would just clamp to max, so
+  // spawning it is useless litter (drop spam). The roll already happened above
+  // (seed-deterministic); only the spawn is skipped. Drops feel meaningful: health
+  // shows up when you're actually hurt.
+  if (kind === 'health' && state.player.health >= PLAYER_COMBAT.maxHealth * DROP.healthSuppressAboveFrac) {
+    return;
+  }
   const room = state.activeRoom;
   if (spawnPickup(state.pickups, x, y, kind, room)) {
     state.dropCounts[kind]++; // ?debug funnel tally

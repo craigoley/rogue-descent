@@ -698,11 +698,19 @@ export const STAIRS = {
  *  (PIERCE for ranged, KNOCKBACK for melee). Powerups are binary toggles — they
  *  change what a verb DOES, not its stats; not stackable; reset on death. */
 export const DROP = {
-  /** Chance a slain enemy drops anything (seeded roll). */
-  chance: 0.45,
+  /** Chance a slain enemy drops anything (seeded roll). Tuned DOWN from 0.45 —
+   *  drops were too frequent (every kill rolls: regular enemies + the boss +
+   *  player-killed adds). By-feel; re-tune on replay. */
+  chance: 0.3,
   /** Of the drops that happen, the share that are health (rest = a powerup,
    *  picked uniformly among the powerup kinds — see Pickup.rollDrop). */
   healthShare: 0.6,
+  /** Suppress a rolled HEALTH drop when the player is at/above this fraction of
+   *  max HP — a health pickup at (near-)full just clamps to max, so spawning one
+   *  is useless litter that reads as drop spam. The roll still happens (seed-
+   *  deterministic); only the SPAWN is skipped (see Encounter.rollAndSpawnDrop).
+   *  Makes health drops appear when you actually need them. By-feel. */
+  healthSuppressAboveFrac: 0.9,
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much
