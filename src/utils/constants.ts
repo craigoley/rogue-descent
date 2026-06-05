@@ -360,7 +360,7 @@ export const DASH = {
   duration: 0.16,
   /** Dash charges without any powerup. */
   baseCharges: 1,
-  /** Extra charges granted by the EXTRA-CHARGE powerup (-> 2 total). */
+  /** Extra charges per EXTRA-CHARGE level (×extraChargeLevel). */
   extraChargeBonus: 1,
 } as const;
 

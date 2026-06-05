@@ -1,7 +1,7 @@
 /**
- * Within-run drops: health (restore HP) + SEVEN powerups. Four are LEVELED weapon
- * tracks (MELEE, RANGED, PIERCE, KNOCKBACK — stack to tier III via Phase 9); three
- * upgrade the DASH (EXTRA-CHARGE, FASTER-RECHARGE, DASH-STRIKE — binary toggles).
+ * Within-run drops: health (restore HP) + SEVEN powerups. Five are LEVELED tracks
+ * (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III via Phase 9);
+ * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE).
  * Powerups last the rest of the run (carried across descent) and reset on
  * death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning
  * never grows it.
@@ -27,8 +27,8 @@ export type PickupKind =
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
- *  Phase 9: melee/ranged/pierce/knockback are LEVELED (stack to tier III); the
- *  three dash kinds remain binary toggles. */
+ *  Phase 9: melee/ranged/pierce/knockback/extraCharge are LEVELED (stack to tier
+ *  III); fasterRecharge + dashStrike remain binary toggles. */
 const POWERUP_KINDS: readonly PickupKind[] = [
   'melee',
   'ranged',

@@ -44,7 +44,7 @@ export interface PlayerState {
   dashDirY: number;
   /** Dash charges currently available (the dash ECONOMY). Starts full
    *  (= maxCharges). Each dash spends one; they refill ONE AT A TIME at the
-   *  (faster-recharge-adjusted) rate. max = DASH.baseCharges + (extraCharge?bonus:0). */
+   *  (faster-recharge-adjusted) rate. max = dashMaxCharges(player). */
   dashCharges: number;
   /** Time left until the next charge regenerates, seconds (0 = idle/at-max). */
   dashRechargeTimer: number;
