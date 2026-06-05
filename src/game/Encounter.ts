@@ -149,6 +149,17 @@ export function updateEncounterEntry(state: GameState): void {
   if (idx < 0) return;
   const enc = state.rooms[idx];
   if (enc.phase !== 'idle') return; // still needed: don't re-activate a CLEARED room
+  // Only activate from the room's BODY floor, not a corridor carved THROUGH its
+  // rect — a player merely passing through (on the 2-wide corridor strip) must
+  // not spuriously activate the room (spawn enemies + lock doors). The room body
+  // is the rest of the rect, so genuine entry (incl. an endpoint/boss room, whose
+  // corridor ends at its centre) still activates the moment the player steps onto
+  // body floor. ?. keeps it backward-compatible: a room with no corridor grid
+  // (hand-built test arenas) activates on plain rect-containment as before.
+  const ts = state.room.tileSize;
+  const tx = Math.floor(state.player.x / ts);
+  const ty = Math.floor(state.player.y / ts);
+  if (state.room.corridor?.[ty * state.room.tilesX + tx]) return;
   enc.phase = 'active';
   state.activeRoom = idx;
   // Tag each enemy with its owning room so the room clears on ITS OWN enemies.
