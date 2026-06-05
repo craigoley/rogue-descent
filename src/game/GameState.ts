@@ -203,9 +203,9 @@ function loadFloor(state: GameState, seed: number): void {
   state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
   state.boss = null; // no boss until its room activates
   state.bossDefeated = false; // this floor's boss must be killed to unlock descent
-  // Stairs start UNPLACED + inactive: they're positioned by the encounter resolve
-  // as rooms clear (into the LAST-cleared room) and only shown once all rooms are
-  // cleared. NOTE: state.run is intentionally NOT touched here (it spans the whole
+  // Stairs start UNPLACED + inactive: PINNED to the boss room by the encounter
+  // resolve on its clear, and only shown once the boss is dead (bossDefeated).
+  // NOTE: state.run is intentionally NOT touched here (it spans the whole
   // run; Phase 8b owns the new-run reset).
   state.stairs.roomIndex = -1;
   state.stairs.x = 0;
@@ -276,7 +276,7 @@ export function nextFloorSeed(seed: number, depth: number): number {
   return (seed + Math.imul(DESCENT.seedStride, depth)) >>> 0;
 }
 
-/** Refresh stairs.active from the all-cleared signal and, if the player is on the
+/** Refresh stairs.active from the boss-death signal and, if the player is on the
  *  open stairs, DESCEND: bump run depth/floorsCleared and load the next floor.
  *  Returns true if a descent happened (caller should end the frame). */
 function descendIfReady(state: GameState): boolean {
@@ -422,8 +422,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   // Collect any pickup the player is touching.
   updatePickups(state);
 
-  // Descent: once every room is cleared the stairs open; stepping on them loads
-  // the next floor. On descend the state is rebuilt, so end the frame here.
+  // Descent: once the boss is dead the stairs open; stepping on them loads the
+  // next floor. On descend the state is rebuilt, so end the frame here.
   if (descendIfReady(state)) return;
 
   updateParticles(state.particles, dt);
