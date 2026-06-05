@@ -121,19 +121,62 @@ function carveRoom(walkable: boolean[], tilesX: number, tilesY: number, r: Rect)
   }
 }
 
-/** Square brush so corridors have width and bends stay contiguous. */
-function brush(walkable: boolean[], tilesX: number, tilesY: number, cx: number, cy: number): void {
+/** True if tile (tx, ty) lies inside a room that is NOT one of this corridor's
+ *  two endpoints — i.e. a room the corridor is merely PASSING THROUGH. Those
+ *  cells get the corridor tag so a pass-through can't spuriously activate the
+ *  room; an endpoint room's OWN entry corridor (incl. the strip to its centre)
+ *  is left untagged so genuine entry still activates. */
+function isForeignRoomCell(
+  rooms: Rect[],
+  ea: Rect,
+  eb: Rect,
+  tx: number,
+  ty: number,
+): boolean {
+  for (const r of rooms) {
+    if (r === ea || r === eb) continue; // endpoint room: own-entry corridor, not foreign
+    if (tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h) return true;
+  }
+  return false;
+}
+
+/** Square brush so corridors have width and bends stay contiguous. Carves
+ *  walkable, and tags as CORRIDOR only cells inside a FOREIGN room (one this
+ *  corridor isn't connecting) — the pass-through strips. */
+function brush(
+  walkable: boolean[],
+  corridor: boolean[],
+  rooms: Rect[],
+  ea: Rect,
+  eb: Rect,
+  tilesX: number,
+  tilesY: number,
+  cx: number,
+  cy: number,
+): void {
   const w = DUNGEON.corridorWidth;
   const h0 = Math.floor((w - 1) / 2);
   const h1 = w - 1 - h0;
   for (let dy = -h0; dy <= h1; dy++) {
-    for (let dx = -h0; dx <= h1; dx++) carve(walkable, tilesX, tilesY, cx + dx, cy + dy);
+    for (let dx = -h0; dx <= h1; dx++) {
+      const tx = cx + dx;
+      const ty = cy + dy;
+      if (tx < 1 || ty < 1 || tx >= tilesX - 1 || ty >= tilesY - 1) continue;
+      walkable[ty * tilesX + tx] = true;
+      if (isForeignRoomCell(rooms, ea, eb, tx, ty)) corridor[ty * tilesX + tx] = true;
+    }
   }
 }
 
-/** L-shaped corridor (horizontal then vertical) between two tile centres. */
+/** L-shaped corridor (horizontal then vertical) between two room CENTRES. `ea`/
+ *  `eb` are the endpoint rooms (so their own interiors aren't tagged corridor).
+ *  Cells crossing any OTHER room's rect are tagged — see Encounter. */
 function carveCorridor(
   walkable: boolean[],
+  corridor: boolean[],
+  rooms: Rect[],
+  ea: Rect,
+  eb: Rect,
   tilesX: number,
   tilesY: number,
   ax: number,
@@ -143,10 +186,10 @@ function carveCorridor(
 ): void {
   const x0 = Math.min(ax, bx);
   const x1 = Math.max(ax, bx);
-  for (let x = x0; x <= x1; x++) brush(walkable, tilesX, tilesY, x, ay);
+  for (let x = x0; x <= x1; x++) brush(walkable, corridor, rooms, ea, eb, tilesX, tilesY, x, ay);
   const y0 = Math.min(ay, by);
   const y1 = Math.max(ay, by);
-  for (let y = y0; y <= y1; y++) brush(walkable, tilesX, tilesY, bx, y);
+  for (let y = y0; y <= y1; y++) brush(walkable, corridor, rooms, ea, eb, tilesX, tilesY, bx, y);
 }
 
 /** Walk up the tree connecting sibling subtrees; returns a representative room
@@ -155,15 +198,19 @@ function connect(
   node: Node,
   rng: Rng,
   walkable: boolean[],
+  corridor: boolean[],
+  rooms: Rect[],
   tilesX: number,
   tilesY: number,
 ): Rect {
   if (node.room) return node.room;
-  const a = connect(node.left!, rng, walkable, tilesX, tilesY);
-  const b = connect(node.right!, rng, walkable, tilesX, tilesY);
+  const a = connect(node.left!, rng, walkable, corridor, rooms, tilesX, tilesY);
+  const b = connect(node.right!, rng, walkable, corridor, rooms, tilesX, tilesY);
   const ca = rectCenterTile(a);
   const cb = rectCenterTile(b);
-  carveCorridor(walkable, tilesX, tilesY, ca.tx, ca.ty, cb.tx, cb.ty);
+  // a/b are the connected rooms — their own interiors stay untagged; only OTHER
+  // rooms the L-path crosses get the corridor (pass-through) tag.
+  carveCorridor(walkable, corridor, rooms, a, b, tilesX, tilesY, ca.tx, ca.ty, cb.tx, cb.ty);
   return rng.next() < 0.5 ? a : b;
 }
 
@@ -177,8 +224,13 @@ export function generateDungeon(seed: number): Floor {
   placeRooms(root, rng, rooms);
 
   const walkable = new Array<boolean>(tilesX * tilesY).fill(false);
+  // Parallel grid recording which walkable cells are CORRIDOR (set only by the
+  // corridor brush, never carveRoom). A corridor carved THROUGH a room's rect
+  // tags that strip, so the encounter layer can refuse to activate a room the
+  // player is only PASSING THROUGH (see Encounter.updateEncounterEntry).
+  const corridor = new Array<boolean>(tilesX * tilesY).fill(false);
   for (const r of rooms) carveRoom(walkable, tilesX, tilesY, r);
-  connect(root, rng, walkable, tilesX, tilesY);
+  connect(root, rng, walkable, corridor, rooms, tilesX, tilesY);
 
   // Build the contract: solid = !walkable; walls = border solid tiles only.
   const solid = new Array<boolean>(tilesX * tilesY);
@@ -194,7 +246,7 @@ export function generateDungeon(seed: number): Floor {
     }
   }
 
-  const room: RoomState = { tilesX, tilesY, tileSize: ROOM.tileSize, walls, solid };
+  const room: RoomState = { tilesX, tilesY, tileSize: ROOM.tileSize, walls, solid, corridor };
   const spawnRoom = rooms[0];
   const spawn = {
     x: (spawnRoom.x + spawnRoom.w / 2) * ROOM.tileSize,

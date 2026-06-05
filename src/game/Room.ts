@@ -28,6 +28,11 @@ export interface RoomState {
   walls: WallTile[];
   /** Row-major solidity grid (length tilesX*tilesY) for O(1) collision tests. */
   solid: boolean[];
+  /** Row-major flags for cells carved as CORRIDOR (vs room-body floor). Optional:
+   *  only the generated dungeon sets it; hand-built rooms (tests) omit it. The
+   *  encounter layer uses it to NOT activate a room the player is only passing
+   *  THROUGH on a corridor carved across its rect (see updateEncounterEntry). */
+  corridor?: boolean[];
 }
 
 /** Parse the hand-authored layout into a RoomState. Deterministic. */

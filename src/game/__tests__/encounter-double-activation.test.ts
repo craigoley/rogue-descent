@@ -16,10 +16,25 @@ const DT = SIM_DT;
 const idle = createIntent;
 
 /** Centre the player in encounter room `i` (world units). */
+/** Place the player on a guaranteed ROOM-BODY (non-corridor) cell of room `i`.
+ *  A room is activated by stepping onto its BODY floor, not a corridor carved
+ *  THROUGH its rect (incl. the rare seed where a foreign corridor crosses the
+ *  centre) — so scan for a non-corridor interior cell rather than assuming the
+ *  centre is body. Seed-robust. */
 function placeInRoom(s: GameState, i: number): void {
   const r = s.rooms[i].rect;
-  s.player.x = (r.x + r.w / 2) * s.room.tileSize;
-  s.player.y = (r.y + r.h / 2) * s.room.tileSize;
+  const room = s.room;
+  for (let ty = r.y; ty < r.y + r.h; ty++) {
+    for (let tx = r.x; tx < r.x + r.w; tx++) {
+      if (room.corridor?.[ty * room.tilesX + tx]) continue; // skip corridor strips
+      s.player.x = (tx + 0.5) * room.tileSize;
+      s.player.y = (ty + 0.5) * room.tileSize;
+      return;
+    }
+  }
+  // Fallback (no corridor grid / fully-corridor rect — shouldn't happen): centre.
+  s.player.x = (r.x + r.w / 2) * room.tileSize;
+  s.player.y = (r.y + r.h / 2) * room.tileSize;
 }
 const firstIdleRoom = (s: GameState): number => s.rooms.findIndex((e) => e.phase === 'idle');
 /** Kill every living enemy that belongs to room `i`. */
