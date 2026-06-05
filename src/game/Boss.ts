@@ -19,12 +19,19 @@
 import { BOSS, ENEMY_TYPES } from '../utils/constants';
 import { bossGimmickForDepth, bossPhasesForDepth, healthMultForDepth } from './Difficulty';
 import { damagePlayer } from './Combat';
+import { spawnEnemy } from './Enemy';
 import type { Enemy } from './Enemy';
 import type { GameState } from './GameState';
 import type { Vec2 } from '../utils/math';
 
-/** Boss gimmicks. Only 'positioning' is built; the others are future table entries. */
-export type BossGimmick = 'positioning';
+// NOTE on imports: Enemy.ts runtime-imports updateBoss (the dispatch) and this
+// module runtime-imports spawnEnemy (gimmick #2's SUMMON), forming an Enemy<->Boss
+// cycle. It is BENIGN: both bindings are used only at CALL time (inside functions),
+// never at module-eval top level, so ESM's live bindings resolve them fine.
+
+/** Boss gimmicks (the rotation roster in Difficulty.BOSS_GIMMICKS). #1
+ *  positioning + #2 adds are built; #3 (knockback-interrupt) is the last entry. */
+export type BossGimmick = 'positioning' | 'adds';
 
 export interface BossState {
   /** Pool index of the boss Enemy (its liveness/health/position live there). */
@@ -72,10 +79,49 @@ const SLAM: BossAttack = {
   },
 };
 
-// Per-phase attack tables. Phase 2 reuses the SAME attacks (amplified via the
-// phase2 flag) — escalation, not a new moveset. Future gimmicks add entries here.
-const PHASE1_ATTACKS: BossAttack[] = [SLAM];
-const PHASE2_ATTACKS: BossAttack[] = [SLAM];
+/** GIMMICK #2 — SUMMON ADDS (phase-2-only table entry). Spawns a FINITE wave of
+ *  weak adds in a LINE on the boss->player axis (a column a single PIERCE shot
+ *  skewers — the toolkit this gimmick tests). GATED: no-ops while any add from
+ *  this wave is still alive, so there's never more than one wave and no instant
+ *  respawn (pressure, not a grind). The wave is despawned on boss death (the
+ *  fight ends — see GameState). Goes through the normal telegraph->strike->recover
+ *  cycle, so the existing boss wind-up render is the summon tell. */
+const SUMMON: BossAttack = {
+  id: 'summon',
+  telegraph: BOSS.summon.telegraph,
+  strike: BOSS.summon.strike,
+  recover: BOSS.summon.recover,
+  // phase2 unused (summon already only runs in phase 2) — omit the 4th param.
+  run(e, state, d) {
+    // GATED RE-SUMMON: if a previous wave is still alive, do nothing this cycle.
+    for (const a of state.enemies) {
+      if (a.active && a.type === 'bossadd' && a.roomIndex === state.bossRoom) return;
+    }
+    // Unit vector boss -> player (the spawn line); default axis if coincident.
+    let ux = 1;
+    let uy = 0;
+    if (d > 0) {
+      ux = (state.player.x - e.x) / d;
+      uy = (state.player.y - e.y) / d;
+    }
+    // A column of adds marching down the axis toward the player (pierce-friendly).
+    // Off-arena spawns are pulled back in by the per-step room-rect clamp.
+    for (let k = 0; k < BOSS.summon.count; k++) {
+      const dist = BOSS.summon.lineOffset + k * BOSS.summon.lineSpacing;
+      spawnEnemy(state.enemies, e.x + ux * dist, e.y + uy * dist, state.run.depth, 'bossadd', state.bossRoom);
+    }
+  },
+};
+
+/** The active attack table for a (gimmick, phase). Gimmick-aware selection is the
+ *  one framework seam #44 anticipated: positioning is an always-on modifier so it
+ *  adds no entries; the adds gimmick contributes SUMMON, but only in phase 2 (so a
+ *  single-phase boss never summons). The telegraph->strike->recover loop + the
+ *  BossAttack shape are unchanged — new gimmicks just add a branch here. */
+function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
+  if (gimmick === 'adds' && phase2) return [SLAM, SUMMON];
+  return [SLAM];
+}
 
 /** Build the companion state for a freshly-spawned boss at `slot` (its Enemy
  *  health was set to ENEMY_TYPES.boss.maxHealth * depth mult by spawnEnemy). */
@@ -141,7 +187,7 @@ export function updateBoss(
   const rot = BOSS.vulnerableRotateRate * (phase2 ? BOSS.vulnerableRotatePhase2Mult : 1);
   boss.vulnerableAngle = (boss.vulnerableAngle + rot * dt) % (Math.PI * 2);
 
-  const table = phase2 ? PHASE2_ATTACKS : PHASE1_ATTACKS;
+  const table = attacksFor(boss.gimmick, phase2);
   const atk = table[boss.attackCursor % table.length];
   const teleMult = phase2 ? BOSS.phase2.telegraphMult : 1;
 

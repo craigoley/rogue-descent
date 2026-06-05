@@ -42,6 +42,11 @@ export const PALETTE = {
   /** BOSS shield "blocked" flash — cold steel: a hit from the armored side did
    *  nothing (reposition to the weak-point). */
   enemyBossShield: 0x88aacc,
+  /** BOSS ADD body (Phase 8, gimmick #2) — ember orange: warm (reads "threat")
+   *  but lighter/oranger than the chaser pink-red, ranged crimson, swarmer
+   *  vermilion and boss maroon, so a summoned minion reads as its own weak,
+   *  glowing thing. */
+  enemyBossAdd: 0xff8a3c,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -412,7 +417,7 @@ export const ENEMY_PROJ = {
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
-export type EnemyType = 'chaser' | 'ranged' | 'swarmer' | 'boss';
+export type EnemyType = 'chaser' | 'ranged' | 'swarmer' | 'boss' | 'bossadd';
 
 /** Shared across ALL enemy types (not per-type tuning). */
 export const ENEMY_COMMON = {
@@ -544,6 +549,34 @@ export const ENEMY_TYPES = {
     radius: 1.4,
     /** HEAVY — resists knockback (the boss isn't a swarmer to fling around). */
     knockbackMult: 0.25,
+  },
+  /** BOSS ADD (Phase 8, gimmick #2) — a weak minion the boss SUMMONS in phase 2.
+   *  GLASSY (dies to ~1-2 ranged/pierce hits) and marches STRAIGHT at the player
+   *  (no kiting, no flock-surround) so a summoned line rewards PIERCE and can be
+   *  thinned at range before it closes. It is PRESSURE, not a second fight: few,
+   *  finite, and despawned when the boss dies. Reuses the chaser-style
+   *  chase->telegraph->strike->recover melee, with its OWN weak timings/stats. */
+  bossadd: {
+    /** GLASSY base HP — ~one ranged shot (13) at shallow depth, two when scaled. */
+    maxHealth: 12,
+    /** Modest march speed (below the player so the line can be kited + pierced). */
+    moveSpeed: 3,
+    /** Distance at which it stops and telegraphs its melee, world units. */
+    attackRange: 1.2,
+    /** Wind-up before the strike, seconds (a real, dodgeable tell). */
+    telegraph: 0.5,
+    /** Strike active window, seconds. */
+    strike: 0.12,
+    /** Post-strike pause before marching again, seconds. */
+    recover: 0.5,
+    /** LOW melee damage — the threat is split focus, not the individual add. */
+    attackDamage: 8,
+    /** A strike connects within this distance at strike time, world units. */
+    attackReach: 1.4,
+    /** Small collision/visual radius (a minor, scuttling summoned thing). */
+    radius: 0.3,
+    /** Knockback multiplier — light, so melee shoves them off the boss easily. */
+    knockbackMult: 1.6,
   },
 } as const;
 
@@ -820,6 +853,16 @@ export const FIGURE = {
     headRadius: 0.2,
     visorSize: 0.14,
   },
+  /** Boss-add silhouette (Phase 8, gimmick #2) — SMALL + spindly with a big head:
+   *  a frail summoned thing. Reads as the weak, glowing minion (ember palette),
+   *  distinct from the squat chaser / tall ranged / low swarmer. */
+  bossadd: {
+    bodyRadiusTop: 0.16,
+    bodyRadiusBottom: 0.22,
+    bodyHeight: 0.6,
+    headRadius: 0.22,
+    visorSize: 0.16,
+  },
   /** Forward lean (radians) while dashing — the figure tips into the burst. */
   dashLean: 0.4,
   /** Lean ease rate toward the target lean, per second (exp smoothing). */
@@ -984,6 +1027,30 @@ export const BOSS = {
     telegraphMult: 0.7,
     /** Slam reach grows (bigger AoE). */
     reachMult: 1.3,
+  },
+
+  /** GIMMICK #2 — SUMMON ADDS. A phase-2-only attack-table entry (so single-phase
+   *  bosses never summon) that spawns a FINITE, telegraphed wave of weak adds in a
+   *  LINE on the player->boss axis (pierce reward). GATED: it no-ops while a wave
+   *  is still alive, so there's never more than one wave and no instant respawn —
+   *  pressure, not a grind. Killing the boss despawns the wave (the fight ends).
+   *  Adds are tuned in ENEMY_TYPES.bossadd; these are the summon's count/cadence/
+   *  geometry. */
+  summon: {
+    /** Adds per wave (finite). boss(1) + count must stay <= POOL.enemies (8). */
+    count: 3,
+    /** Wind-up before the adds appear, seconds (reuses the boss telegraph render). */
+    telegraph: 0.8,
+    /** Strike window (the adds spawn on the first strike frame), seconds. */
+    strike: 0.2,
+    /** Recovery after summoning before the next attack, seconds. */
+    recover: 0.7,
+    /** Spacing between adds along the spawn line, world units (a column a single
+     *  pierce shot can skewer). */
+    lineSpacing: 0.9,
+    /** Distance from the boss centre to the wave's near end, world units (just
+     *  outside the boss body so adds don't spawn inside it). */
+    lineOffset: 1.8,
   },
 } as const;
 

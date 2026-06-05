@@ -360,7 +360,19 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   // Phase 8: drop the boss companion state once the boss Enemy dies (its slot is
   // freed) so render/HUD/shield logic all switch off together. The death already
   // counted above + cleared the room via roomEnemyCount.
-  if (state.boss && !state.enemies[state.boss.slot].active) state.boss = null;
+  if (state.boss && !state.enemies[state.boss.slot].active) {
+    // GIMMICK #2 (adds): the boss is dead -> DESPAWN any lingering adds so (1) the
+    // room clears on BOSS death (roomEnemyCount hits 0 in updateEncounterResolve
+    // on the next line) instead of requiring every add dead — the research-
+    // condemned grind — and (2) adds don't strand the room or chase the player
+    // post-fight. The kill/drop loop above ran first (prevEnemyActive is snapshot
+    // at frame start), so these despawns are NOT counted as kills and roll NO
+    // drops. Non-boss rooms never reach here (state.boss is null).
+    for (const a of state.enemies) {
+      if (a.active && a.roomIndex === state.bossRoom) a.active = false;
+    }
+    state.boss = null;
+  }
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
   // Collect any pickup the player is touching.

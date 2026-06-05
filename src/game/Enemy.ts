@@ -141,6 +141,51 @@ export function roomEnemyCount(pool: Enemy[], roomIndex: number): number {
  *  dispatch allocates nothing per enemy per frame. */
 const _vel = { x: 0, y: 0 };
 
+/** Boss-add AI (Phase 8, gimmick #2): a weak summoned minion that marches STRAIGHT
+ *  at the player and melees — chase -> telegraph -> strike -> recover, same shape
+ *  as the chaser but reading its OWN (weak) ENEMY_TYPES.bossadd timings. No kiting,
+ *  no flock-surround, so a summoned column stays pierce-friendly. Writes _vel. */
+function updateBossAdd(e: Enemy, state: GameState, dt: number, dx: number, dy: number, d: number): void {
+  const A = ENEMY_TYPES.bossadd;
+  const { player } = state;
+  _vel.x = 0;
+  _vel.y = 0;
+  switch (e.phase) {
+    case 'chase':
+      if (player.alive && d <= A.attackRange) {
+        e.phase = 'telegraph';
+        e.timer = A.telegraph;
+      } else if (player.alive && d > 0) {
+        _vel.x = (dx / d) * e.moveSpeed; // depth-scaled at spawn
+        _vel.y = (dy / d) * e.moveSpeed;
+      }
+      break;
+    case 'telegraph':
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'strike';
+        e.timer = A.strike;
+        e.struck = false;
+      }
+      break;
+    case 'strike':
+      if (!e.struck) {
+        e.struck = true;
+        if (player.alive && d <= A.attackReach) damagePlayer(player, e.attackDamage, state);
+      }
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'recover';
+        e.timer = A.recover;
+      }
+      break;
+    case 'recover':
+      e.timer -= dt;
+      if (e.timer <= 0) e.phase = 'chase';
+      break;
+  }
+}
+
 /** Chaser AI: chase -> telegraph -> strike (melee) -> recover. Writes _vel. */
 function updateChaser(e: Enemy, state: GameState, dt: number, dx: number, dy: number, d: number): void {
   const C = ENEMY_TYPES.chaser;
@@ -344,6 +389,9 @@ export function updateEnemies(state: GameState, dt: number): void {
         break;
       case 'boss':
         updateBoss(e, state, dt, dx, dy, d, _vel);
+        break;
+      case 'bossadd':
+        updateBossAdd(e, state, dt, dx, dy, d);
         break;
       default:
         updateChaser(e, state, dt, dx, dy, d);
