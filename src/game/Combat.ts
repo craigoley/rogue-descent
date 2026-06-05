@@ -85,6 +85,16 @@ export function damageEnemy(
   }
 }
 
+/** Apply a knockback impulse ONLY — no damage, death, hit-stop or particles. Used
+ *  by the level-III melee AoE to shove (and stun) out-of-arc, in-range enemies
+ *  without nuking them (crowd-control, not crowd-damage). Mirrors the kb-impulse
+ *  lines of damageEnemy, with the same per-type mass (knockbackMult). */
+export function applyKnockback(enemy: Enemy, dirX: number, dirY: number, force: number): void {
+  const kb = force * ENEMY_TYPES[enemy.type].knockbackMult;
+  enemy.kbVx += dirX * kb;
+  enemy.kbVy += dirY * kb;
+}
+
 /** Apply damage to the player unless invulnerable (dash i-frames or post-hit
  *  i-frames). Triggers flash, brief i-frames and a screen shake. Death itself
  *  is detected by GameState.update (health <= 0). */
@@ -143,18 +153,32 @@ export function meleeAttack(state: GameState, aimX: number, aimY: number): void 
   const reachBase = MELEE.range * MELEE_LEVELS.reachMult[ml];
   const arcCos = Math.cos(MELEE.halfArc * MELEE_LEVELS.arcMult[ml]);
   // Phase 9 KNOCKBACK level: shove force scales (level 0 = base MELEE.knockback).
-  // PR1 = force only; stun (II) + AoE (III) arrive in PR2.
-  const kbForce = KNOCKBACK_LEVELS.force[player.knockbackLevel];
+  // II+ also STUNS the hit enemy; III adds an AoE that shoves+stuns ALL in-range
+  // enemies (out-of-arc ones take force+stun only — no damage — crowd-control).
+  const kbLevel = player.knockbackLevel;
+  const kbForce = KNOCKBACK_LEVELS.force[kbLevel];
+  const aoe = kbLevel === 3;
+  const stunOn = kbLevel >= 2;
   for (const e of enemies) {
     if (!e.active) continue;
-    const reach = reachBase + ENEMY_TYPES[e.type].radius; // per-type hitbox
+    const er = ENEMY_TYPES[e.type].radius; // per-type hitbox
     const dx = e.x - player.x;
     const dy = e.y - player.y;
     const d = Math.hypot(dx, dy);
-    if (d > reach || d === 0) continue;
-    // Within the arc if the angle to the enemy is <= halfArc from the aim dir.
-    const dot = (dx / d) * aimX + (dy / d) * aimY;
-    if (dot < arcCos) continue;
-    damageEnemy(e, damage, dx / d, dy / d, kbForce, state);
+    if (d === 0) continue;
+    const ux = dx / d;
+    const uy = dy / d;
+    // In the swing if within reach AND inside the arc (the damage zone).
+    const inArc = d <= reachBase + er && ux * aimX + uy * aimY >= arcCos;
+    if (inArc) {
+      damageEnemy(e, damage, ux, uy, kbForce, state); // damage + force
+    } else if (aoe && d <= KNOCKBACK_LEVELS.aoeRadius + er) {
+      applyKnockback(e, ux, uy, kbForce); // AoE: force only, no damage
+    } else {
+      continue; // out of the swing AND out of the AoE
+    }
+    // STUN (level >= 2): freeze the enemy's AI. Bosses are STUN-IMMUNE — the force
+    // above still applies (via their knockbackMult); only the AI freeze is exempt.
+    if (stunOn && e.type !== 'boss') e.stunTimer = KNOCKBACK_LEVELS.stunDuration;
   }
 }

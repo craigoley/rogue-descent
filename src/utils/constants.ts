@@ -47,6 +47,11 @@ export const PALETTE = {
    *  vermilion and boss maroon, so a summoned minion reads as its own weak,
    *  glowing thing. */
   enemyBossAdd: 0xff8a3c,
+  /** STUNNED enemy tint (Phase 9 PR2) — a cold, desaturated grey-blue: clearly
+   *  "disabled / dazed", pulled OUT of the warm enemy-threat reds so the CC reads
+   *  at a glance. Distinct from the white hit-flash, amber telegraph, and steel
+   *  boss-shield. */
+  enemyStunned: 0x6f8aa6,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -761,6 +766,15 @@ export const PIERCE_LEVELS = {
  *  PR1 scales FORCE only — stun (II) + AoE (III) land in PR2 on top of these. */
 export const KNOCKBACK_LEVELS = {
   force: [MELEE.knockback, DROP.meleeKnockback, 26, 34],
+  /** PR2: STUN duration (seconds) applied on a melee knockback hit at level >= 2.
+   *  Flat for II + III (III's extra is the AoE, not a longer stun). Long enough to
+   *  open space / make the enemy miss a beat, short enough not to perma-lock.
+   *  By-feel. Bosses are stun-immune (never set). */
+  stunDuration: 0.25,
+  /** PR2: level-III AoE radius (world units) from the player centre — a shockwave
+   *  slightly wider than the swing (MELEE.range 1.7) that shoves + stuns ALL
+   *  in-range enemies (out-of-arc ones take NO damage — crowd-control). By-feel. */
+  aoeRadius: 2.5,
 } as const;
 
 /** Hard cap on every powerup level (tier III). applyPickup clamps to this. */
@@ -851,6 +865,10 @@ export const VFX = {
   trailOpacity: 0.35,
   /** Enemy telegraph max scale boost (1 + this at full wind-up). */
   telegraphScale: 0.3,
+  /** Stunned-enemy "dazed" sway: rotation.z amplitude (radians) + rate (per-ms for
+   *  performance.now()). Render-only feel for the Phase 9 PR2 stun tell. */
+  stunSwayAmp: 0.22,
+  stunSwayRate: 0.018,
   /** Melee arc indicator Y position above the floor, world units. */
   meleeArcHeight: 0.05,
   /** Melee arc indicator peak opacity. */

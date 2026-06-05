@@ -699,7 +699,7 @@ export class EntityRenderer {
     this.player.inner.rotation.z = -this.playerLean;
 
     this.syncTrail(p, px, py);
-    this.syncEnemies(state, alpha, px, py);
+    this.syncEnemies(state, alpha, px, py, now);
     this.syncBoss(state, alpha, px, py, now);
     this.syncProjectiles(state, alpha);
     this.syncEnemyProjectiles(state, alpha);
@@ -829,7 +829,7 @@ export class EntityRenderer {
     }
   }
 
-  private syncEnemies(state: GameState, alpha: number, px: number, py: number): void {
+  private syncEnemies(state: GameState, alpha: number, px: number, py: number, now: number): void {
     const list = state.enemies;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
@@ -861,10 +861,20 @@ export class EntityRenderer {
       if (dx * dx + dy * dy > 1e-6) fig.group.rotation.y = Math.atan2(-dy, dx);
 
       const mat = fig.bodyMat;
+      // Recolour priority: hit-flash > STUN > telegraph > resting. Sway is reset
+      // here and only re-applied by the stun branch (so a recovered enemy stops).
+      fig.inner.rotation.z = 0;
       if (e.flashTimer > 0) {
         mat.color.setHex(PALETTE.hitFlash);
         mat.emissiveIntensity = VFX.invulnEmissive;
         fig.group.scale.setScalar(1);
+      } else if (e.stunTimer > 0) {
+        // STUNNED (Phase 9 PR2): cold disabled tint + a dazed sway, so the CC
+        // reads. No telegraph grow (the AI — and its phase tell — is frozen).
+        mat.color.setHex(PALETTE.enemyStunned);
+        mat.emissiveIntensity = VFX.enemyEmissive;
+        fig.group.scale.setScalar(1);
+        fig.inner.rotation.z = Math.sin(now * VFX.stunSwayRate) * VFX.stunSwayAmp;
       } else if (e.phase === 'telegraph') {
         // Wind-up tell (shared across types): warning colour + grow toward the
         // strike. Scale uses the type's own telegraph duration.
