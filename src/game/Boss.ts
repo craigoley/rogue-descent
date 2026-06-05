@@ -148,7 +148,7 @@ export function updateBoss(
   switch (e.phase) {
     case 'chase': {
       if (!player.alive || d === 0) break;
-      const engage = (ENEMY_TYPES.boss.attackReach + ENEMY_TYPES.boss.radius) * BOSS.phase2.reachMult;
+      const engage = (ENEMY_TYPES.boss.attackReach + ENEMY_TYPES.boss.radius) * (phase2 ? BOSS.phase2.reachMult : 1);
       if (d <= engage) {
         // In range: commit the attack (big telegraph).
         e.phase = 'telegraph';
