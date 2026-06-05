@@ -60,6 +60,11 @@ export interface Enemy {
    *  on ITS OWN enemies rather than the whole pool (so two rooms' enemies can't
    *  block each other's clear). -1 = unowned (e.g. an idle pooled slot). */
   roomIndex: number;
+  /** STUN countdown, seconds (Phase 9 PR2, knockback level >= 2). While > 0 the
+   *  AI is FROZEN (no decision-making) — but knockback velocity still integrates,
+   *  so a stunned enemy is still shoved. Bosses are stun-immune (never set). 0 =
+   *  not stunned. Reset on spawn so a recycled pool slot never inherits a stun. */
+  stunTimer: number;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -80,6 +85,7 @@ export function createEnemyPool(): Enemy[] {
     kbVy: 0,
     struck: false,
     roomIndex: -1,
+    stunTimer: 0,
   }));
 }
 
@@ -118,6 +124,7 @@ export function spawnEnemy(
     e.kbVy = 0;
     e.struck = false;
     e.roomIndex = roomIndex;
+    e.stunTimer = 0; // recycled slot never inherits a stun
     return true;
   }
   return false;
@@ -379,22 +386,32 @@ export function updateEnemies(state: GameState, dt: number): void {
     const dy = player.y - e.y;
     const d = Math.hypot(dx, dy);
 
-    // Per-type behaviour writes the desired velocity into _vel.
-    switch (e.type) {
-      case 'ranged':
-        updateRanged(e, state, dt, dx, dy, d);
-        break;
-      case 'swarmer':
-        updateSwarmer(e, state, dt, dx, dy, d);
-        break;
-      case 'boss':
-        updateBoss(e, state, dt, dx, dy, d, _vel);
-        break;
-      case 'bossadd':
-        updateBossAdd(e, state, dt, dx, dy, d);
-        break;
-      default:
-        updateChaser(e, state, dt, dx, dy, d);
+    // STUN (Phase 9 PR2): a stunned enemy FREEZES its AI — skip the per-type
+    // behaviour and hold its phase/timer — but the integrate tail below still
+    // runs, so knockback keeps shoving it (stun freezes decisions, not physics).
+    // Uniform across all types; the boss is never stunned (set-side exemption).
+    if (e.stunTimer > 0) {
+      e.stunTimer = Math.max(0, e.stunTimer - dt);
+      _vel.x = 0;
+      _vel.y = 0;
+    } else {
+      // Per-type behaviour writes the desired velocity into _vel.
+      switch (e.type) {
+        case 'ranged':
+          updateRanged(e, state, dt, dx, dy, d);
+          break;
+        case 'swarmer':
+          updateSwarmer(e, state, dt, dx, dy, d);
+          break;
+        case 'boss':
+          updateBoss(e, state, dt, dx, dy, d, _vel);
+          break;
+        case 'bossadd':
+          updateBossAdd(e, state, dt, dx, dy, d);
+          break;
+        default:
+          updateChaser(e, state, dt, dx, dy, d);
+      }
     }
 
     // Shared tail: integrate desired movement + decaying knockback, one axis at a
