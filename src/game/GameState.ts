@@ -10,12 +10,13 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
+import { BOSS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
 import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
 import {
   createEnemyPool,
+  spawnEnemy,
   updateEnemies,
   type Enemy,
 } from './Enemy';
@@ -232,6 +233,34 @@ export function startNewRun(state: GameState, seed: number): void {
   loadFloor(state, seed);
 }
 
+/**
+ * GIMMICK #2 — perform a pending boss SUMMON. The boss's SUMMON strike only
+ * RECORDS intent (state.boss.pendingSummon) so Boss never imports spawnEnemy (no
+ * Enemy<->Boss cycle); the spawn side-effect lives HERE. Spawns `count` adds along
+ * the recorded line (origin + axis * (lineOffset + k*lineSpacing)) — a pierce-
+ * friendly column — tagged to the boss room (so despawn-on-death + roomEnemyCount
+ * treat them as the boss's), then clears the request. No-op when none pending.
+ * Exported so the consume step is unit-testable in isolation. Spawns respect a
+ * full pool (spawnEnemy returns false silently). Called from `update` after
+ * updateEnemies. Idempotent: clears pendingSummon so it can't re-spawn next frame.
+ */
+export function consumeBossSummon(state: GameState): void {
+  const summon = state.boss?.pendingSummon;
+  if (!summon) return;
+  for (let k = 0; k < summon.count; k++) {
+    const dist = BOSS.summon.lineOffset + k * BOSS.summon.lineSpacing;
+    spawnEnemy(
+      state.enemies,
+      summon.originX + summon.axisX * dist,
+      summon.originY + summon.axisY * dist,
+      state.run.depth,
+      'bossadd',
+      state.bossRoom,
+    );
+  }
+  state.boss!.pendingSummon = null;
+}
+
 /** Deterministic next-floor seed from the current seed + the (new) depth. Pure +
  *  exported so the descent is reproducible and unit-testable. 32-bit via imul. */
 export function nextFloorSeed(seed: number, depth: number): number {
@@ -346,7 +375,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   }
 
   updateProjectiles(state, dt);
-  updateEnemies(state, dt); // ranged enemies fire bolts here
+  updateEnemies(state, dt); // ranged enemies fire bolts here; the boss may request a summon
+  consumeBossSummon(state); // GIMMICK #2: perform any wave the SUMMON strike recorded
   updateEnemyProjectiles(state, dt); // ...which travel + hit the player here
 
   // Deaths this frame -> run kill tally + seeded drop rolls at the death positions.

@@ -19,19 +19,34 @@
 import { BOSS, ENEMY_TYPES } from '../utils/constants';
 import { bossGimmickForDepth, bossPhasesForDepth, healthMultForDepth } from './Difficulty';
 import { damagePlayer } from './Combat';
-import { spawnEnemy } from './Enemy';
 import type { Enemy } from './Enemy';
 import type { GameState } from './GameState';
 import type { Vec2 } from '../utils/math';
 
-// NOTE on imports: Enemy.ts runtime-imports updateBoss (the dispatch) and this
-// module runtime-imports spawnEnemy (gimmick #2's SUMMON), forming an Enemy<->Boss
-// cycle. It is BENIGN: both bindings are used only at CALL time (inside functions),
-// never at module-eval top level, so ESM's live bindings resolve them fine.
+// IMPORT DIRECTION: this module has NO runtime import of Enemy (only `type Enemy`,
+// erased at compile). The SUMMON strike (gimmick #2) RECORDS a pending-summon
+// request on BossState; GameState performs the spawn side-effect (it owns
+// spawnEnemy). So the runtime graph is one-directional — Enemy -> Boss (the
+// updateBoss dispatch) and GameState -> {Boss, Enemy} — with no Enemy<->Boss cycle.
 
 /** Boss gimmicks (the rotation roster in Difficulty.BOSS_GIMMICKS). #1
  *  positioning + #2 adds are built; #3 (knockback-interrupt) is the last entry. */
 export type BossGimmick = 'positioning' | 'adds';
+
+/** A recorded SUMMON request (gimmick #2): the boss's SUMMON strike sets this on
+ *  BossState (data + intent only — no spawn), and GameState consumes it by
+ *  spawning `count` adds along the line `origin + axis * (offset + k*spacing)`
+ *  (BOSS.summon geometry), then clears it. Keeps spawnEnemy out of Boss. */
+export interface PendingSummon {
+  /** Adds to spawn this wave. */
+  count: number;
+  /** Line origin (the boss centre at strike time), world units. */
+  originX: number;
+  originY: number;
+  /** Unit boss->player axis the column marches down (pierce-friendly). */
+  axisX: number;
+  axisY: number;
+}
 
 export interface BossState {
   /** Pool index of the boss Enemy (its liveness/health/position live there). */
@@ -51,6 +66,10 @@ export interface BossState {
   /** Render tell: seconds remaining to flash the SHIELD (a blocked, armored-side
    *  hit). Distinct from the Enemy.flashTimer white hit-flash (a weak-side hit). */
   blockedFlash: number;
+  /** GIMMICK #2: a SUMMON request recorded by the SUMMON strike and consumed +
+   *  cleared by GameState (the spawn side-effect), or null when none is pending.
+   *  This indirection keeps spawnEnemy out of Boss (no Enemy<->Boss cycle). */
+  pendingSummon: PendingSummon | null;
 }
 
 /** One boss attack: a wind-up + active window + recovery, and a strike effect.
@@ -93,7 +112,10 @@ const SUMMON: BossAttack = {
   recover: BOSS.summon.recover,
   // phase2 unused (summon already only runs in phase 2) — omit the 4th param.
   run(e, state, d) {
-    // GATED RE-SUMMON: if a previous wave is still alive, do nothing this cycle.
+    const boss = state.boss;
+    if (!boss) return;
+    // GATED RE-SUMMON: if a previous wave is still alive, do nothing this cycle
+    // (don't even record a request) — never more than one wave, no instant respawn.
     for (const a of state.enemies) {
       if (a.active && a.type === 'bossadd' && a.roomIndex === state.bossRoom) return;
     }
@@ -104,12 +126,11 @@ const SUMMON: BossAttack = {
       ux = (state.player.x - e.x) / d;
       uy = (state.player.y - e.y) / d;
     }
-    // A column of adds marching down the axis toward the player (pierce-friendly).
-    // Off-arena spawns are pulled back in by the per-step room-rect clamp.
-    for (let k = 0; k < BOSS.summon.count; k++) {
-      const dist = BOSS.summon.lineOffset + k * BOSS.summon.lineSpacing;
-      spawnEnemy(state.enemies, e.x + ux * dist, e.y + uy * dist, state.run.depth, 'bossadd', state.bossRoom);
-    }
+    // RECORD the wave request (data + intent only). GameState performs the spawn
+    // along this line — so Boss never imports spawnEnemy. The column marches down
+    // the boss->player axis (pierce-friendly); off-arena cells are pulled back in
+    // by the per-step room-rect clamp.
+    boss.pendingSummon = { count: BOSS.summon.count, originX: e.x, originY: e.y, axisX: ux, axisY: uy };
   },
 };
 
@@ -134,6 +155,7 @@ export function createBossState(slot: number, depth: number): BossState {
     vulnerableAngle: 0,
     maxHealth: ENEMY_TYPES.boss.maxHealth * healthMultForDepth(depth),
     blockedFlash: 0,
+    pendingSummon: null,
   };
 }
 
