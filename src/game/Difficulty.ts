@@ -58,3 +58,22 @@ export function damageMultForDepth(depth: number): number {
 export function speedMultForDepth(depth: number): number {
   return 1 + (Math.max(1, depth) - 1) * DIFFICULTY.speedMultPerDepth;
 }
+
+/** How many PHASES the boss runs at `depth` (Phase 8): 1 (single-phase, lighter
+ *  teaching fight) below bossTwoPhaseMinDepth, else 2 (escalates at 50% HP). */
+export function bossPhasesForDepth(depth: number): 1 | 2 {
+  return Math.max(1, depth) >= DIFFICULTY.bossTwoPhaseMinDepth ? 2 : 1;
+}
+
+/** The boss-gimmick rotation (Phase 8). Only #1 (positioning) is built; #2
+ *  (ranged/adds) and #3 (knockback-interrupt) append here as they ship, and the
+ *  rotation below picks them up with no other change. */
+const BOSS_GIMMICKS = ['positioning'] as const;
+export type BossGimmickId = (typeof BOSS_GIMMICKS)[number];
+
+/** Which boss GIMMICK is active at `depth` (Phase 8): rotates through the roster
+ *  by depth so successive floors vary. With one entry it's always 'positioning';
+ *  it diversifies automatically as #2/#3 are added to BOSS_GIMMICKS. */
+export function bossGimmickForDepth(depth: number): BossGimmickId {
+  return BOSS_GIMMICKS[(Math.max(1, depth) - 1) % BOSS_GIMMICKS.length];
+}

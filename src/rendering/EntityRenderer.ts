@@ -40,6 +40,7 @@ import type { InputIntent } from '../game/Input';
 import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
+  BOSS_VFX,
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
@@ -62,12 +63,18 @@ const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
   chaser: FIGURE.chaser,
   ranged: FIGURE.ranged,
   swarmer: FIGURE.swarmer,
+  // The boss is a BESPOKE single mesh (see makeBoss / syncBoss), NOT a pooled
+  // figure — this entry only satisfies the Record<EnemyType> type; it's never
+  // built (boss is excluded from ENEMY_KINDS).
+  boss: FIGURE.chaser,
 };
 const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
   chaser: PALETTE.enemy,
   ranged: PALETTE.enemyRanged,
   swarmer: PALETTE.enemySwarmer,
+  boss: PALETTE.enemyBoss,
 };
+/** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled). */
 const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged', 'swarmer'];
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
@@ -288,7 +295,15 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [], boss: [] };
+  /** Bespoke single boss mesh (Phase 8): a large armored body + head, an orbiting
+   *  bright WEAK-POINT marker (gimmick #1 tell) and a floor ring. Not pooled. */
+  private readonly bossGroup: Group;
+  private readonly bossInner: Group;
+  private readonly bossBodyMat: MeshStandardMaterial;
+  private readonly bossWeak: Mesh;
+  private readonly bossWeakMat: MeshStandardMaterial;
+  private readonly bossWeakOrbit: number;
   private readonly projectiles: Mesh[] = [];
   /** Ranged-enemy bolts (scarlet spheres) — own pool, distinct from player shots. */
   private readonly enemyProjectiles: Mesh[] = [];
@@ -475,6 +490,54 @@ export class EntityRenderer {
     this.stairsRing.visible = false;
     scene.add(this.stairsRing);
 
+    // --- Bespoke BOSS mesh (Phase 8): a large armored body + head, a bright
+    // WEAK-POINT marker that orbits to the vulnerable side (gimmick #1 tell), and
+    // a floor ring. One per floor (the boss room); shown only while it lives. ---
+    {
+      const r = ENEMY_TYPES.boss.radius;
+      this.bossBodyMat = new MeshStandardMaterial({
+        color: PALETTE.enemyBoss,
+        emissive: PALETTE.enemyBoss,
+        emissiveIntensity: BOSS_VFX.emissive,
+        roughness: 0.6,
+      });
+      const body = new Mesh(
+        new CylinderGeometry(r * 0.85, r, BOSS_VFX.bodyHeight, FIGURE.segments),
+        this.bossBodyMat,
+      );
+      body.position.y = BOSS_VFX.bodyHeight / 2;
+      const head = new Mesh(
+        new SphereGeometry(BOSS_VFX.headRadius, FIGURE.segments, FIGURE.segments),
+        this.bossBodyMat,
+      );
+      head.position.y = BOSS_VFX.bodyHeight + BOSS_VFX.headRadius * 0.6;
+      // The weak-point marker: a glowing box that orbits the body at the radius,
+      // placed each frame at the sim's vulnerableAngle so the player sees the side
+      // to hit. Lives in the (non-rotating) inner group; positioned in syncBoss.
+      this.bossWeakMat = new MeshStandardMaterial({
+        color: PALETTE.enemyBossWeak,
+        emissive: PALETTE.enemyBossWeak,
+        emissiveIntensity: VFX.visorEmissive,
+        roughness: 0.3,
+      });
+      this.bossWeak = new Mesh(
+        new BoxGeometry(BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize),
+        this.bossWeakMat,
+      );
+      this.bossWeakOrbit = r;
+      const ring = new Mesh(
+        new TorusGeometry(BOSS_VFX.ringRadius, BOSS_VFX.ringTube, 8, 32),
+        new MeshBasicMaterial({ color: PALETTE.enemyBoss, transparent: true, opacity: 0.5 }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      this.bossInner = new Group();
+      this.bossInner.add(body, head, this.bossWeak, ring);
+      this.bossGroup = new Group();
+      this.bossGroup.add(this.bossInner);
+      this.bossGroup.visible = false;
+      scene.add(this.bossGroup);
+    }
+
     const descendLabel = textTexture('DESCEND', cssHex(PALETTE.stairs));
     this.stairsLabel = new Sprite(
       new SpriteMaterial({ map: descendLabel.tex, transparent: true, depthTest: false }),
@@ -583,6 +646,7 @@ export class EntityRenderer {
 
     this.syncTrail(p, px, py);
     this.syncEnemies(state, alpha, px, py);
+    this.syncBoss(state, alpha, px, py, now);
     this.syncProjectiles(state, alpha);
     this.syncEnemyProjectiles(state, alpha);
     this.syncParticles(state);
@@ -715,6 +779,12 @@ export class EntityRenderer {
     const list = state.enemies;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
+      // The boss is a bespoke mesh (syncBoss), not a pooled figure — hide every
+      // pooled-kind figure at this slot and skip (no enemyFigs.boss pool exists).
+      if (e.type === 'boss') {
+        for (const kind of ENEMY_KINDS) this.enemyFigs[kind][i].group.visible = false;
+        continue;
+      }
       // Show the figure matching this slot's enemy type; hide every other kind's
       // figure at this slot (slots are reused across types as the pool recycles).
       const fig = this.enemyFigs[e.type][i];
@@ -754,6 +824,68 @@ export class EntityRenderer {
         fig.group.scale.setScalar(1);
       }
     }
+  }
+
+  /** Position + recolour the bespoke boss mesh from state.boss + its pooled Enemy.
+   *  Shows the rotating weak-point (gimmick #1 tell), the phase-2 escalation tint,
+   *  the slam telegraph grow, and the hit / blocked-shield flashes. */
+  private syncBoss(state: GameState, alpha: number, px: number, py: number, now: number): void {
+    const boss = state.boss;
+    const e = boss ? state.enemies[boss.slot] : null;
+    if (!boss || !e || !e.active) {
+      this.bossGroup.visible = false;
+      return;
+    }
+    this.bossGroup.visible = true;
+    const ex = lerp(e.prevX, e.x, alpha);
+    const ey = lerp(e.prevY, e.y, alpha);
+    this.bossGroup.position.set(ex, 0, ey);
+    // Face the player (whole group), so the body/head orient toward the fight.
+    const dx = px - ex;
+    const dy = py - ey;
+    if (dx * dx + dy * dy > 1e-6) this.bossGroup.rotation.y = Math.atan2(-dy, dx);
+
+    // Weak-point marker orbits to the sim's vulnerableAngle. That angle is in
+    // WORLD space (game x/y); the group is rotated to face the player, so place
+    // the marker in the group's LOCAL frame by undoing the group rotation. Game
+    // (x, y) -> three (x, z); the figure faces +x, group.rotation.y = atan2(-dy,dx).
+    const wa = boss.vulnerableAngle;
+    const wx = Math.cos(wa) * this.bossWeakOrbit;
+    const wz = -Math.sin(wa) * this.bossWeakOrbit; // game y -> three z, with the -y map
+    const gr = this.bossGroup.rotation.y;
+    const cos = Math.cos(-gr);
+    const sin = Math.sin(-gr);
+    this.bossWeak.position.set(wx * cos - wz * sin, BOSS_VFX.weakPointHeight, wx * sin + wz * cos);
+
+    const phase2 = boss.outerPhase === 2;
+    const baseColor = phase2 ? PALETTE.enemyBossPhase2 : PALETTE.enemyBoss;
+    const mat = this.bossBodyMat;
+    // Body recolour priority: weak-side hit flash > slam telegraph > resting tint.
+    if (e.flashTimer > 0) {
+      mat.color.setHex(PALETTE.hitFlash);
+      mat.emissiveIntensity = VFX.invulnEmissive;
+      this.bossGroup.scale.setScalar(1);
+    } else if (e.phase === 'telegraph') {
+      mat.color.setHex(PALETTE.enemyTelegraph);
+      mat.emissiveIntensity = VFX.enemyEmissive;
+      const t = 1 - e.timer / ENEMY_TYPES.boss.telegraph; // 0 -> 1 across wind-up
+      this.bossGroup.scale.setScalar(1 + BOSS_VFX.telegraphScale * t);
+    } else {
+      mat.color.setHex(baseColor);
+      mat.emissiveIntensity = BOSS_VFX.emissive;
+      this.bossGroup.scale.setScalar(1);
+    }
+    // Weak-point marker: flashes the SHIELD colour on a blocked (armored) hit,
+    // otherwise glows the weak-point amber (pulsing so it draws the eye).
+    if (boss.blockedFlash > 0) {
+      this.bossWeakMat.color.setHex(PALETTE.enemyBossShield);
+      this.bossWeakMat.emissive.setHex(PALETTE.enemyBossShield);
+    } else {
+      this.bossWeakMat.color.setHex(PALETTE.enemyBossWeak);
+      this.bossWeakMat.emissive.setHex(PALETTE.enemyBossWeak);
+    }
+    const pulse = 1 + 0.15 * (0.5 + 0.5 * Math.sin(now * 0.006));
+    this.bossWeak.scale.setScalar(pulse);
   }
 
   private syncEnemyProjectiles(state: GameState, alpha: number): void {

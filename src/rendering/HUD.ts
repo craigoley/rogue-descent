@@ -80,6 +80,10 @@ export class HUD {
   /** Rising-edge latch: fire/banner once per stall, clear on recovery. */
   private softlockFired = false;
   private readonly healthFill: HTMLDivElement;
+  // Boss HP bar (Phase 8): top-centre, shown only while a boss lives.
+  private readonly bossWrap: HTMLDivElement;
+  private readonly bossFill: HTMLDivElement;
+  private readonly bossPhaseMark: HTMLDivElement;
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
   private readonly depthEl: HTMLDivElement;
@@ -185,6 +189,24 @@ export class HUD {
     this.softlockBannerEl = document.createElement('div');
     this.softlockBannerEl.className = 'hud-softlock-banner';
     container.appendChild(this.softlockBannerEl);
+
+    // Boss HP bar (Phase 8): top-centre, hidden until a boss is active. A vertical
+    // marker at 50% shows the phase-2 escalation threshold (two-phase bosses).
+    this.bossWrap = document.createElement('div');
+    this.bossWrap.className = 'hud-boss';
+    this.bossWrap.style.display = 'none';
+    const bossLabel = document.createElement('div');
+    bossLabel.className = 'hud-boss-label';
+    bossLabel.textContent = 'BOSS';
+    const bossTrack = document.createElement('div');
+    bossTrack.className = 'hud-boss-track';
+    this.bossFill = document.createElement('div');
+    this.bossFill.className = 'hud-boss-fill';
+    this.bossPhaseMark = document.createElement('div');
+    this.bossPhaseMark.className = 'hud-boss-phase-mark';
+    bossTrack.append(this.bossFill, this.bossPhaseMark);
+    this.bossWrap.append(bossLabel, bossTrack);
+    container.appendChild(this.bossWrap);
 
     if (!this.debug) return;
 
@@ -446,6 +468,20 @@ export class HUD {
       if (!shown) continue;
       const fill = i < p.dashCharges ? 1 : i === p.dashCharges ? rechargeProg : 0;
       this.dashPipFills[i].style.width = `${(fill * 100).toFixed(1)}%`;
+    }
+
+    // Boss HP bar (Phase 8): visible while the boss lives; width = HP fraction.
+    // The 50% phase marker shows only for two-phase bosses (the escalation point).
+    const boss = state.boss;
+    const bossE = boss ? state.enemies[boss.slot] : null;
+    if (boss && bossE && bossE.active) {
+      this.bossWrap.style.display = '';
+      const frac = Math.max(0, bossE.health) / boss.maxHealth;
+      this.bossFill.style.width = `${(frac * 100).toFixed(1)}%`;
+      this.bossPhaseMark.style.display = boss.phases === 2 ? '' : 'none';
+      this.bossWrap.classList.toggle('is-phase2', boss.outerPhase === 2);
+    } else {
+      this.bossWrap.style.display = 'none';
     }
 
     // Depth (always): current floor this run.

@@ -8,11 +8,11 @@ const idle = createIntent;
 
 /**
  * Clear the whole floor, resolving room `lastIdx` LAST through the real encounter
- * path so the stairs are PLACED in it (mirrors play: stairs spawn in the last-
- * cleared room). All other rooms are marked cleared directly; `lastIdx` is set
- * `active` with no live enemies, so the next `update` resolves it -> places
- * stairs there + flips stairs.active. The player is parked at spawn (away from
- * the stairs) so it activates without descending.
+ * path so the stairs are PLACED (Phase 8: pinned to the BOSS room, not lastIdx).
+ * All other rooms are marked cleared directly; `lastIdx` is set `active` with no
+ * live enemies, so the next `update` resolves it -> places stairs (at the boss
+ * room) + flips stairs.active. The player is parked at spawn (away from the
+ * stairs) so it activates without descending.
  */
 function clearFloor(s: GameState, lastIdx = 1): void {
   for (let i = 0; i < s.rooms.length; i++) {
@@ -36,32 +36,31 @@ function roomCenter(s: GameState, i: number): { x: number; y: number } {
   return { x: (r.x + r.w / 2) * s.room.tileSize, y: (r.y + r.h / 2) * s.room.tileSize };
 }
 
-describe('Descent — stairs go in the LAST-cleared room', () => {
+describe('Descent — stairs are PINNED to the boss room (Phase 8)', () => {
   it('on a fresh floor the stairs are unplaced (no room cleared yet)', () => {
     const s = createGameState();
     expect(s.stairs.roomIndex).toBe(-1);
     expect(s.stairs.active).toBe(false);
   });
 
-  it('the room that clears LAST becomes the stairs room (at its centre)', () => {
+  it('stairs land in the BOSS room (at its centre), whichever room clears last', () => {
     const s = createGameState();
-    const last = 2;
-    clearFloor(s, last);
-    expect(s.stairs.roomIndex).toBe(last);
-    const c = roomCenter(s, last);
+    clearFloor(s, 2); // resolve a NON-boss room last...
+    expect(s.stairs.roomIndex).toBe(s.bossRoom); // ...stairs still pin to the boss room
+    const c = roomCenter(s, s.bossRoom);
     expect(s.stairs.x).toBeCloseTo(c.x, 9);
     expect(s.stairs.y).toBeCloseTo(c.y, 9);
     expect(s.stairs.active).toBe(true);
   });
 
-  it('is player-PATH dependent: a different last-cleared room => different stairs', () => {
+  it('is path-INDEPENDENT: a different last-cleared room => SAME (boss-room) stairs', () => {
     const a = createGameState();
     const b = createGameState(); // same seed/floor as `a`
     clearFloor(a, 1);
     clearFloor(b, 3);
-    expect(a.stairs.roomIndex).toBe(1);
-    expect(b.stairs.roomIndex).toBe(3);
-    expect(a.stairs.roomIndex).not.toBe(b.stairs.roomIndex);
+    expect(a.stairs.roomIndex).toBe(a.bossRoom);
+    expect(b.stairs.roomIndex).toBe(b.bossRoom);
+    expect(a.stairs.roomIndex).toBe(b.stairs.roomIndex); // same floor => same boss room
   });
 });
 

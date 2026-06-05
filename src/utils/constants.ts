@@ -31,6 +31,17 @@ export const PALETTE = {
    *  distinct from the chaser's pink-red and the ranged crimson. The SMALL
    *  scuttling silhouette is the primary tell; hue is secondary (crowded wheel). */
   enemySwarmer: 0xff4422,
+  /** BOSS body (Phase 8) — dark armored maroon: clearly "boss", distinct from the
+   *  three brighter enemy reds. The SIZE + HP bar are the primary tells. */
+  enemyBoss: 0x7a1020,
+  /** BOSS phase-2 escalation tint — hotter/brighter so "it got angrier" reads. */
+  enemyBossPhase2: 0xc81830,
+  /** BOSS weak-point glow — bright amber: the VULNERABLE side you must hit
+   *  (positioning gimmick). Reuses the telegraph-warning language. */
+  enemyBossWeak: 0xffcc33,
+  /** BOSS shield "blocked" flash — cold steel: a hit from the armored side did
+   *  nothing (reposition to the weak-point). */
+  enemyBossShield: 0x88aacc,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -401,7 +412,7 @@ export const ENEMY_PROJ = {
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
-export type EnemyType = 'chaser' | 'ranged' | 'swarmer';
+export type EnemyType = 'chaser' | 'ranged' | 'swarmer' | 'boss';
 
 /** Shared across ALL enemy types (not per-type tuning). */
 export const ENEMY_COMMON = {
@@ -506,6 +517,34 @@ export const ENEMY_TYPES = {
      *  melee crowd-control against a surrounding pack). */
     knockbackMult: 2.2,
   },
+  /** Phase 8 BOSS: a bespoke, large, two-phase enemy in the LAST room of every
+   *  floor that gates descent. It's a pooled Enemy (reuses damage/clearing/
+   *  gating) but its rich behaviour lives in state.boss (see Boss.ts); its
+   *  per-attack timings come from the attack table (BOSS), not these fields.
+   *  Big radius + high base HP (depth-scaled at spawn). HEAVY (knockbackMult < 1
+   *  so it isn't trivially shoved). attackDamage/reach/telegraph here are the
+   *  baseline slam the attack table uses. */
+  boss: {
+    /** Base HP — depth-scaled by healthMultForDepth at spawn (NON-sponge: the
+     *  gimmick + telegraphs are the test, not the HP; tuned at playtest). */
+    maxHealth: 220,
+    /** Slow — it holds the arena and rotates its shield; the player circles it. */
+    moveSpeed: 2,
+    /** Baseline slam damage (depth-scaled at spawn). */
+    attackDamage: 20,
+    /** Slam connects within this distance at strike time (an AoE-ish reach). */
+    attackReach: 2.6,
+    /** Big, clear wind-up before a slam, seconds (NON-sponge: very readable). */
+    telegraph: 0.9,
+    /** Slam active window, seconds. */
+    strike: 0.2,
+    /** Pause after a slam before the next attack, seconds. */
+    recover: 0.8,
+    /** Large collision/visual radius (fits minRoom 6 with the room-rect clamp). */
+    radius: 1.4,
+    /** HEAVY — resists knockback (the boss isn't a swarmer to fling around). */
+    knockbackMult: 0.25,
+  },
 } as const;
 
 /** Back-compat alias + the chaser baseline: existing ENEMY.* references (the
@@ -583,6 +622,12 @@ export const DIFFICULTY = {
   /** Additional swarmers per depth beyond swarmerMinDepth (floored). 0.5 => +1
    *  every 2 floors. Clamped so chasers + ranged + swarmers leave >= 1 chaser. */
   swarmerPerDepth: 0.5,
+  // --- Boss (Phase 8): HP/damage reuse the mult curves above; these add the
+  // boss-specific depth rules. Shallow bosses are a gentle teach (single phase);
+  // the two-phase escalation arrives deeper.
+  /** First depth the boss runs TWO phases (escalate at 50% HP). Below it the boss
+   *  is single-phase (never escalates) — a lighter teaching fight. */
+  bossTwoPhaseMinDepth: 3,
 } as const;
 
 /**
@@ -802,6 +847,11 @@ export const DUNGEON = {
   roomPadding: 1,
   /** Corridor thickness, tiles. */
   corridorWidth: 2,
+  /** Min room side (tiles) for a room to qualify as the BOSS room — it must hold
+   *  the big boss (radius ~1.4) with play room under the room-rect clamp. With
+   *  minRoom 6 every room qualifies; this is a defensive fit-filter for future
+   *  bigger bosses / smaller rooms (then the farthest-LARGEST fitting room wins). */
+  bossMinRoomSide: 5,
   /** Acceptance bounds for the generated room count (asserted by tests). */
   minRooms: 4,
   maxRooms: 16,
@@ -904,4 +954,58 @@ export const AUDIO = {
     /** Low-pass cutoff (Hz) to keep it soft. */
     cutoff: 1200,
   },
+} as const;
+
+// ============================================================================
+// BOSS (Phase 8) — bespoke two-phase boss. Per-attack timings live in ENEMY_TYPES
+// .boss (the baseline slam); this block holds the GIMMICK + phase-2 amplification
+// + framework knobs. Gimmicks #2 (adds) and #3 (knockback-interrupt) will slot in
+// as future attack-table entries — only #1 (positioning) exists now.
+// ============================================================================
+export const BOSS = {
+  /** GIMMICK #1 — directional shield. Damage only counts when the hit comes from
+   *  within this arc (radians, full width) centred on the VULNERABLE angle; hits
+   *  from outside are blocked. ~120° vulnerable wedge — generous but you must get
+   *  behind it. */
+  vulnerableArc: (2 * Math.PI) / 3,
+  /** The vulnerable angle rotates at this rate (radians/sec) so the player must
+   *  keep repositioning (tests dash + positioning). */
+  vulnerableRotateRate: 0.7,
+  /** Phase-2 rotates the weak-point faster (escalation). */
+  vulnerableRotatePhase2Mult: 1.6,
+  /** Damage multiplier for a blocked (armored-side) hit — 0 = fully negated. The
+   *  blocked hit still flashes the shield colour so the tell reads. */
+  blockedDamageMult: 0,
+
+  /** PHASE 2 amplification (at <= 50% HP, depth >= bossTwoPhaseMinDepth): the SAME
+   *  slam, escalated — NOT new moves. */
+  phase2: {
+    /** Telegraph shrinks (faster wind-up) — still readable, just tighter. */
+    telegraphMult: 0.7,
+    /** Slam reach grows (bigger AoE). */
+    reachMult: 1.3,
+  },
+} as const;
+
+/** BOSS render tuning (Phase 8) — the bespoke single boss mesh (rendering layer
+ *  only; the pure sim reads ENEMY_TYPES.boss + BOSS). Dimensions are world units;
+ *  the body radius comes from ENEMY_TYPES.boss.radius so the silhouette matches
+ *  the collision/clamp footprint. */
+export const BOSS_VFX = {
+  /** Body cylinder height (tall, looming). */
+  bodyHeight: 2.4,
+  /** Head sphere radius. */
+  headRadius: 0.5,
+  /** Bright weak-point marker size (the box that orbits to the vulnerable side). */
+  weakPointSize: 0.55,
+  /** Height (y) of the orbiting weak-point marker. */
+  weakPointHeight: 1.2,
+  /** Floor ring radius around the base (reads "arena boss"). */
+  ringRadius: 1.7,
+  /** Floor ring tube thickness. */
+  ringTube: 0.12,
+  /** Body emissive intensity. */
+  emissive: 0.55,
+  /** Extra scale at the peak of a slam telegraph (grows then strikes). */
+  telegraphScale: 0.22,
 } as const;

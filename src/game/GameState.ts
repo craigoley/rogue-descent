@@ -49,6 +49,7 @@ import { aimDirection, dashStrike, meleeAttack } from './Combat';
 import { createRng, type Rng } from '../utils/rng';
 import type { InputIntent } from './Input';
 import type { Vec2 } from '../utils/math';
+import type { BossState } from './Boss';
 
 /**
  * Run-level state (Phase 8a). Spans the WHOLE descent — it PERSISTS across a
@@ -104,6 +105,14 @@ export interface GameState {
   rooms: RoomEncounter[];
   /** Index of the currently-active (locked) room, or -1. At most one. */
   activeRoom: number;
+  /** Index into rooms[] of this floor's BOSS room (Phase 8) — set per-floor from
+   *  the generated Floor.bossRoom. The boss spawns when this room activates and
+   *  gates descent (stairs pin here). */
+  bossRoom: number;
+  /** Companion state for the live boss (Phase 8), or null when no boss is active
+   *  (between floors, or before the boss room activates / after the boss dies).
+   *  The boss itself is a pooled Enemy; this holds its rich phase/gimmick state. */
+  boss: BossState | null;
   /** Enemy active-flags snapshot from the start of this frame, for death detection. */
   prevEnemyActive: boolean[];
   /** Seeded RNG for drop rolls (separate stream from generation). */
@@ -151,6 +160,8 @@ export function createGameState(): GameState {
     pickups: createPickupPool(),
     rooms: [],
     activeRoom: -1,
+    bossRoom: -1,
+    boss: null,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     dropCounts: { health: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
@@ -180,6 +191,8 @@ function loadFloor(state: GameState, seed: number): void {
   for (const pk of state.pickups) pk.active = false;
   state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
   state.activeRoom = -1;
+  state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
+  state.boss = null; // no boss until its room activates
   // Stairs start UNPLACED + inactive: they're positioned by the encounter resolve
   // as rooms clear (into the LAST-cleared room) and only shown once all rooms are
   // cleared. NOTE: state.run is intentionally NOT touched here (it spans the whole
@@ -344,6 +357,10 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
       rollAndSpawnDrop(state, e.x, e.y, state.dropRng);
     }
   }
+  // Phase 8: drop the boss companion state once the boss Enemy dies (its slot is
+  // freed) so render/HUD/shield logic all switch off together. The death already
+  // counted above + cleared the room via roomEnemyCount.
+  if (state.boss && !state.enemies[state.boss.slot].active) state.boss = null;
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
   // Collect any pickup the player is touching.
