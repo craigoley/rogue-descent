@@ -99,6 +99,32 @@ function levelUp(level: number): number {
   return Math.min(level + 1, POWERUP_MAX_LEVEL);
 }
 
+/** The player's CURRENT level in a powerup track (Phase 9 scarcity gate). Leveled
+ *  kinds return their int level; binary kinds (fasterRecharge/dashStrike) return 0
+ *  when unowned or POWERUP_MAX_LEVEL when owned — so an owned repeat reads as
+ *  "maxed" and gets rejected (the dead-repeat-drop fix). 'health' is not a powerup
+ *  (callers gate it out); returns 0. */
+export function currentPowerupLevel(player: PlayerState, kind: PickupKind): number {
+  switch (kind) {
+    case 'melee':
+      return player.meleeLevel;
+    case 'ranged':
+      return player.rangedLevel;
+    case 'pierce':
+      return player.pierceLevel;
+    case 'knockback':
+      return player.knockbackLevel;
+    case 'extraCharge':
+      return player.extraChargeLevel;
+    case 'fasterRecharge':
+      return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
+    case 'dashStrike':
+      return player.dashStrike ? POWERUP_MAX_LEVEL : 0;
+    default:
+      return 0; // health
+  }
+}
+
 export function applyPickup(player: PlayerState, kind: PickupKind): void {
   if (kind === 'health') {
     player.health = Math.min(PLAYER_COMBAT.maxHealth, player.health + DROP.healAmount);

@@ -25,7 +25,7 @@ import { boxOverlapsTile } from './Collision';
 import type { Rng } from '../utils/rng';
 import { roomEnemyCount, spawnEnemy } from './Enemy';
 import { createBossState } from './Boss';
-import { rollDrop, spawnPickup } from './Pickup';
+import { currentPowerupLevel, rollDrop, spawnPickup } from './Pickup';
 import type { Floor, Rect } from './Dungeon';
 import type { RoomState } from './Room';
 import type { GameState } from './GameState';
@@ -241,6 +241,15 @@ export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rn
   // shows up when you're actually hurt.
   if (kind === 'health' && state.player.health >= PLAYER_COMBAT.maxHealth * DROP.healthSuppressAboveFrac) {
     return;
+  }
+  // Phase 9 SCARCITY: thin HIGH-LEVEL powerup top-ups so reaching tier III is
+  // EARNED — entry stays quick (level 0 accepts 100%). Same post-roll-reject
+  // pattern as the health suppression above; consumes one dropRng draw
+  // (deterministic). A maxed leveled track / already-owned binary reads as level
+  // MAX -> accept 0 -> always rejected (no wasted drop).
+  if (kind !== 'health') {
+    const accept = DROP.powerupAcceptByLevel[currentPowerupLevel(state.player, kind)];
+    if (rng.next() >= accept) return;
   }
   const room = state.activeRoom;
   if (spawnPickup(state.pickups, x, y, kind, room)) {

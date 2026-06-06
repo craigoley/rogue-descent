@@ -716,6 +716,14 @@ export const DROP = {
    *  deterministic); only the SPAWN is skipped (see Encounter.rollAndSpawnDrop).
    *  Makes health drops appear when you actually need them. By-feel. */
   healthSuppressAboveFrac: 0.9,
+  /** Phase 9 SCARCITY — per-level ACCEPTANCE probability for a rolled POWERUP,
+   *  indexed by the player's CURRENT level in that track (the level you'd advance
+   *  FROM). Reaching tier III is EARNED without a stingy entry: 0->I always (entry
+   *  quick), I->II 60%, II->III 30%, already-maxed (3) 0% (reject — no wasted
+   *  drop). Binary powerups read as level 0 (unowned) or max (owned), so an owned
+   *  repeat is rejected too. A reject = no spawn (post-roll filter beside the
+   *  health suppression). Replaces the decay idea; by-feel. */
+  powerupAcceptByLevel: [1.0, 0.6, 0.3, 0.0],
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much
