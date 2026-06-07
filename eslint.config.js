@@ -16,4 +16,13 @@ export default tseslint.config(
       globals: { ...globals.browser },
     },
   },
+  {
+    // Node-context files: build/test config + the Playwright E2E specs (they use
+    // process.env + run under Node, not the browser). Add node globals so the
+    // syntactic lint doesn't flag them.
+    files: ['*.config.{js,ts}', 'tests/e2e/**'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 );

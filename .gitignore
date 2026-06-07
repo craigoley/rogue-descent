@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (L2 E2E) — run artifacts (reports/results/cache). Screenshot
+# baselines under tests/e2e/**-snapshots ARE committed (they're the baseline).
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

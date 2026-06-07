@@ -1,0 +1,43 @@
+name: E2E (Playwright)
+
+# L2 visual smoke — SEPARATE from the CI lint/test/build gates and from the
+# claude-review auto-merge (which only runs `npm test`). This is NON-BLOCKING:
+# do NOT add it to branch-protection required checks. It runs the Playwright smoke
+# (the app boots + renders + no console errors) on every PR (informational) and
+# nightly. Pixel screenshot baselines are opt-in (E2E_SNAPSHOTS) and skipped here
+# until baselines are generated + committed on ubuntu (see screenshots.spec).
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 7 * * *' # nightly (07:00 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E smoke (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Chromium + its OS deps (pinned via the @playwright/test version in the lockfile).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
