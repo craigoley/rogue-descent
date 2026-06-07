@@ -120,48 +120,78 @@ const unlockAudio = (): void => {
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
 
-// Mute toggle: M key (desktop) + touch button (mobile). Both use the same path.
-const muteBtn = document.createElement('button');
-muteBtn.className = `hud-mute${settings.muted ? ' is-muted' : ''}`;
-muteBtn.textContent = settings.muted ? 'MUTED' : 'SOUND';
-app.appendChild(muteBtn);
+// SETTINGS surface: a single gear button opens a small panel with clearly-labelled
+// Sound + Reduce Motion toggles — decluttering the play HUD (was two bare, ambiguous
+// "SOUND" / "MOTION ON" buttons). Non-pausing (the game has no pause; this is a light
+// toggle panel). The values already persist (#64 Settings); this only relocates +
+// relabels their controls. Render/state only — the sim is unaware.
+hud.setReduceMotion(settings.reduceMotion); // apply the persisted setting at startup
 
+const settingsBtn = document.createElement('button');
+settingsBtn.className = 'hud-settings-btn';
+settingsBtn.textContent = '⚙';
+settingsBtn.setAttribute('aria-label', 'Settings');
+app.appendChild(settingsBtn);
+
+const settingsPanel = document.createElement('div');
+settingsPanel.className = 'hud-settings-panel';
+app.appendChild(settingsPanel);
+
+const heading = document.createElement('div');
+heading.className = 'hud-settings-heading';
+heading.textContent = 'SETTINGS';
+settingsPanel.appendChild(heading);
+
+// Sound row (clear "Sound: On/Off" — sound ON = not muted). M key shares the toggle.
+const soundRow = document.createElement('button');
+soundRow.className = 'hud-settings-row';
+settingsPanel.appendChild(soundRow);
+const refreshSound = (): void => {
+  soundRow.textContent = `Sound: ${settings.muted ? 'Off' : 'On'}`;
+  soundRow.classList.toggle('is-off', settings.muted);
+};
 const toggleMute = (): void => {
   settings.muted = !settings.muted;
   audio.setMuted(settings.muted);
   audioMgr.setMuted(settings.muted);
-  muteBtn.textContent = settings.muted ? 'MUTED' : 'SOUND';
-  muteBtn.classList.toggle('is-muted', settings.muted);
   saveSettings(settings);
+  refreshSound();
 };
-muteBtn.addEventListener('pointerdown', (e) => {
+refreshSound();
+soundRow.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   toggleMute();
 });
+
+// Reduce-motion row (clear "Reduce Motion: On/Off"). ON => zero camera shake (render
+// loop below) + softened damage vignette (kept as combat info). Behaviour unchanged.
+const motionRow = document.createElement('button');
+motionRow.className = 'hud-settings-row';
+settingsPanel.appendChild(motionRow);
+const refreshMotion = (): void => {
+  motionRow.textContent = `Reduce Motion: ${settings.reduceMotion ? 'On' : 'Off'}`;
+  motionRow.classList.toggle('is-off', !settings.reduceMotion);
+};
+refreshMotion();
+motionRow.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  settings.reduceMotion = !settings.reduceMotion;
+  hud.setReduceMotion(settings.reduceMotion);
+  saveSettings(settings);
+  refreshMotion();
+});
+
+// Gear toggles the panel open/closed.
+settingsBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  settingsPanel.classList.toggle('is-open');
+  settingsBtn.classList.toggle('is-open');
+});
+
+// M key keeps the quick mute shortcut (desktop), routed through the same toggle.
 window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() !== 'm') return;
   toggleMute();
-});
-
-// Reduce-motion accessibility toggle: touch/click button mirroring the mute button.
-// ON => zero camera shake (applied in the render loop below) + soften the damage
-// vignette (the HUD keeps it as combat info). Render/settings only; the sim is unaware.
-const motionBtn = document.createElement('button');
-motionBtn.className = `hud-motion${settings.reduceMotion ? ' is-reduced' : ''}`;
-motionBtn.textContent = settings.reduceMotion ? 'MOTION OFF' : 'MOTION ON';
-app.appendChild(motionBtn);
-hud.setReduceMotion(settings.reduceMotion); // apply the persisted setting at startup
-
-const toggleReduceMotion = (): void => {
-  settings.reduceMotion = !settings.reduceMotion;
-  hud.setReduceMotion(settings.reduceMotion);
-  motionBtn.textContent = settings.reduceMotion ? 'MOTION OFF' : 'MOTION ON';
-  motionBtn.classList.toggle('is-reduced', settings.reduceMotion);
-  saveSettings(settings);
-};
-motionBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  toggleReduceMotion();
 });
 
 // Phase 5 funnel telemetry (?debug only): log room lifecycle + drop transitions.

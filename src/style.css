@@ -636,15 +636,17 @@ body {
 
 /* Mute toggle — top-right, below the minimap. Touch-accessible counterpart of
    the M key. Sized for comfortable thumb taps (48px min touch target). */
-.hud-mute {
+/* SETTINGS surface — a single gear button (where the old SOUND button sat) that
+   toggles a small panel of clearly-labelled toggles. Replaces the two bare
+   "SOUND" / "MOTION ON" HUD buttons, decluttering the play HUD. */
+.hud-settings-btn {
   position: fixed;
   top: calc(var(--safe-top) + var(--hud-band-clear) + 136px);
   right: calc(var(--safe-right) + 10px);
-  min-width: 48px;
-  padding: 0 10px;
-  height: 28px;
-  font: 700 11px/28px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.12em;
+  width: 30px;
+  height: 30px;
+  font: 400 16px/30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: center;
   color: var(--player);
   background: rgba(10, 10, 18, 0.55);
   border: 1px solid rgba(51, 255, 204, 0.25);
@@ -654,31 +656,53 @@ body {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.hud-mute.is-muted {
-  color: rgba(51, 255, 204, 0.35);
+.hud-settings-btn.is-open {
+  color: var(--player);
+  background: rgba(51, 255, 204, 0.18);
 }
 
-/* Reduce-motion accessibility toggle — same idiom as .hud-mute, stacked just below it. */
-.hud-motion {
+.hud-settings-panel {
   position: fixed;
-  top: calc(var(--safe-top) + var(--hud-band-clear) + 170px);
+  /* Just below the gear button, right-aligned with it. */
+  top: calc(var(--safe-top) + var(--hud-band-clear) + 172px);
   right: calc(var(--safe-right) + 10px);
-  min-width: 48px;
-  padding: 0 10px;
-  height: 28px;
-  font: 700 11px/28px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.12em;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(10, 10, 18, 0.85);
+  border: 1px solid rgba(51, 255, 204, 0.25);
+  border-radius: 6px;
+  user-select: none;
+}
+.hud-settings-panel.is-open {
+  display: flex;
+}
+
+.hud-settings-heading {
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.2em;
+  color: rgba(51, 255, 204, 0.55);
+  padding: 2px 2px 4px;
+}
+
+.hud-settings-row {
+  min-width: 150px;
+  padding: 7px 10px;
+  text-align: left;
+  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
   color: var(--player);
   background: rgba(10, 10, 18, 0.55);
   border: 1px solid rgba(51, 255, 204, 0.25);
   border-radius: 4px;
   cursor: pointer;
   touch-action: manipulation;
-  user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.hud-motion.is-reduced {
-  color: rgba(51, 255, 204, 0.35);
+/* Dim the "Off" state so the on/off reads at a glance. */
+.hud-settings-row.is-off {
+  color: rgba(51, 255, 204, 0.4);
 }
 
 /* ?debug=1 tuning panel — interactive (sliders), so pointer-events on. */

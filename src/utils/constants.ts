@@ -865,9 +865,13 @@ export const DROP = {
    *  drops were too frequent (every kill rolls: regular enemies + the boss +
    *  player-killed adds). By-feel; re-tune on replay. */
   chance: 0.3,
-  /** Of the drops that happen, the share that are health (rest = a powerup,
-   *  picked uniformly among the powerup kinds — see Pickup.rollDrop). */
-  healthShare: 0.6,
+  /** Of the drops that happen, the share that are HEALTH (rest = a powerup, picked
+   *  by the weighted roll — see Pickup.rollDrop). Raised 0.6 -> 0.78 now that GOLDEN
+   *  CHESTS (#70) are the deliberate powerup/effect source: the floor leans toward
+   *  health, and floor powerups roughly HALVE (the 0.4 powerup branch -> 0.22) so
+   *  they stop doubling up with chests. Net per kill (×chance 0.3): ~23% health,
+   *  ~7% powerup (was 18% / 12%). By-feel; re-tune on replay. */
+  healthShare: 0.78,
   /** Suppress a rolled HEALTH drop when the player is at/above this fraction of
    *  max HP — a health pickup at (near-)full just clamps to max, so spawning one
    *  is useless litter that reads as drop spam. The roll still happens (seed-
