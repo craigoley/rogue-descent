@@ -16,7 +16,7 @@
  * the renderer's box count stays bounded by perimeter, not floor area.
  */
 
-import { DUNGEON, ROOM } from '../utils/constants';
+import { CHEST, DUNGEON, ROOM } from '../utils/constants';
 import type { Rng } from '../utils/rng';
 import { createRng } from '../utils/rng';
 import type { RoomState, WallTile } from './Room';
@@ -42,6 +42,10 @@ export interface Floor {
    *  corridor-hop distance from spawn over the carved corridor spanning tree.
    *  Additive — does not affect the carved layout. */
   bossRoom: number;
+  /** Indices into rooms[] that hold a GOLDEN CHEST (1-2; never the spawn room 0 nor
+   *  the boss room). Picked from the layout rng AFTER carving, so it's additive —
+   *  the rooms/corridors/walls are byte-identical with or without chests. */
+  chestRooms: number[];
 }
 
 interface Node {
@@ -296,6 +300,11 @@ export function generateDungeon(seed: number): Floor {
   const edges: [number, number][] = [];
   connect(root, rng, walkable, corridor, rooms, edges, tilesX, tilesY);
   const bossRoom = pickBossRoom(rooms, edges);
+  // GOLDEN CHESTS: pick 1-2 chest rooms. Drawn from `rng` AFTER all carving is done
+  // (rooms/corridors/walls are already built above), so it's purely additive — the
+  // layout is byte-identical whether or not chests exist; only `rng`'s spent state
+  // changes, which nothing downstream reads. Deterministic per seed.
+  const chestRooms = pickChestRooms(rooms, bossRoom, rng);
 
   // Build the contract: solid = !walkable; walls = border solid tiles only.
   const solid = new Array<boolean>(tilesX * tilesY);
@@ -317,7 +326,25 @@ export function generateDungeon(seed: number): Floor {
     x: (spawnRoom.x + spawnRoom.w / 2) * ROOM.tileSize,
     y: (spawnRoom.y + spawnRoom.h / 2) * ROOM.tileSize,
   };
-  return { room, rooms, spawn, seed, bossRoom };
+  return { room, rooms, spawn, seed, bossRoom, chestRooms };
+}
+
+/** Pick 1-2 GOLDEN-CHEST rooms: eligible = every room except the spawn (0) and the
+ *  boss room. Deterministic per the (post-carve) rng; additive (carving is done).
+ *  Returns sorted, distinct indices; [] if no room is eligible. */
+function pickChestRooms(rooms: Rect[], bossRoom: number, rng: Rng): number[] {
+  const eligible: number[] = [];
+  for (let i = 1; i < rooms.length; i++) if (i !== bossRoom) eligible.push(i);
+  if (eligible.length === 0) return [];
+  const count = Math.min(eligible.length, rng.int(CHEST.minPerFloor, CHEST.maxPerFloor));
+  // Partial Fisher-Yates: take the first `count` after shuffling the front.
+  for (let i = 0; i < count; i++) {
+    const j = rng.int(i, eligible.length - 1);
+    const t = eligible[i];
+    eligible[i] = eligible[j];
+    eligible[j] = t;
+  }
+  return eligible.slice(0, count).sort((a, b) => a - b);
 }
 
 /** True if any 8-neighbour of (tx, ty) is walkable (so this wall is a visible
