@@ -847,6 +847,14 @@ export const CHEST = {
   /** RENDER: chest body box size + height above the floor (render-only). */
   bodySize: 0.7,
   bodyHeight: 0.35,
+  /** Hover bob amplitude, world units (render-only). */
+  bobAmp: 0.05,
+  /** Hover bob rate multiplier (used as now * 0.001 * bobRate; render-only). */
+  bobRate: 3,
+  /** Y-axis spin speed (radians per ms), render-only. */
+  spinRate: 0.0008,
+  /** Emissive glow intensity (render-only). */
+  emissive: 0.35,
 } as const;
 
 /** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:

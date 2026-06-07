@@ -566,7 +566,7 @@ export class EntityRenderer {
     const chestMat = new MeshStandardMaterial({
       color: PALETTE.chest,
       emissive: PALETTE.chest,
-      emissiveIntensity: 0.35,
+      emissiveIntensity: CHEST.emissive,
     });
     for (let i = 0; i < POOL.chests; i++) {
       const m = new Mesh(chestGeo, chestMat);
@@ -1171,9 +1171,9 @@ export class EntityRenderer {
         continue;
       }
       m.visible = true;
-      const bob = CHEST.bodyHeight + 0.05 * (0.5 + 0.5 * Math.sin(now * 0.003));
+      const bob = CHEST.bodyHeight + CHEST.bobAmp * (0.5 + 0.5 * Math.sin(now * 0.001 * CHEST.bobRate));
       m.position.set(c.x, bob, c.y);
-      m.rotation.y = now * 0.0008; // slow shimmer-spin
+      m.rotation.y = now * CHEST.spinRate;
     }
   }
 
