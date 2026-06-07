@@ -120,6 +120,8 @@ export class HUD {
   private readonly burnChip: LevelChip;
   /** Synergy arc PR3: the CHAIN effect chip (electric blue-white). */
   private readonly chainChip: LevelChip;
+  /** Synergy arc PR4 (finale): the CRIT effect chip (gold). */
+  private readonly critChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -233,6 +235,7 @@ export class HUD {
     this.lifestealChip = makeChip('LIFESTEAL', 'is-lifesteal', CSS_PALETTE.lifesteal);
     this.burnChip = makeChip('BURN', 'is-burn', CSS_PALETTE.burn);
     this.chainChip = makeChip('CHAIN', 'is-chain', CSS_PALETTE.chain);
+    this.critChip = makeChip('CRIT', 'is-crit', CSS_PALETTE.crit);
     bars.appendChild(powersRow);
 
     container.appendChild(bars);
@@ -571,6 +574,7 @@ export class HUD {
     setChipLevel(this.lifestealChip, state.player.lifestealLevel);
     setChipLevel(this.burnChip, state.player.burnLevel);
     setChipLevel(this.chainChip, state.player.chainLevel);
+    setChipLevel(this.critChip, state.player.critLevel);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);

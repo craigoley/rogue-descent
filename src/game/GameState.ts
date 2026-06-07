@@ -129,6 +129,11 @@ export interface GameState {
   prevEnemyActive: boolean[];
   /** Seeded RNG for drop rolls (separate stream from generation). */
   dropRng: Rng;
+  /** Seeded RNG for COMBAT rolls — crit (synergy arc PR4). A stream INDEPENDENT of
+   *  dropRng (distinct seed offset), so adding crit can't shift drop sequences; only
+   *  drawn when critLevel > 0, so default runs / existing tests are byte-identical.
+   *  Reseeded per floor like dropRng (the determinism discipline). */
+  combatRng: Rng;
   /** Per-kind drop tally for the ?debug funnel (within-run; reset on death). */
   dropCounts: {
     health: number;
@@ -142,6 +147,7 @@ export interface GameState {
     lifesteal: number;
     burn: number;
     chain: number;
+    crit: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -159,6 +165,9 @@ const _aim: Vec2 = { x: 0, y: 0 };
 
 /** Drop RNG seed — a distinct stream from the floor generator. */
 const dropSeed = (seed: number): number => (seed + 0x9e3779b9) >>> 0;
+/** Combat-rng seed: a DISTINCT offset from dropSeed so the crit stream is independent
+ *  of the drop stream (adding crit never perturbs drop sequences). */
+const combatSeed = (seed: number): number => (seed + 0x85ebca6b) >>> 0;
 
 export function createGameState(): GameState {
   const state: GameState = {
@@ -183,7 +192,8 @@ export function createGameState(): GameState {
     bossDefeated: false,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0 },
+    combatRng: createRng(combatSeed(DUNGEON.defaultSeed)),
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -223,6 +233,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.stairs.y = 0;
   state.stairs.active = false;
   state.dropRng = createRng(dropSeed(seed));
+  state.combatRng = createRng(combatSeed(seed)); // independent stream, reseeded per floor
   state.dropCounts.health = 0;
   state.dropCounts.melee = 0;
   state.dropCounts.ranged = 0;
@@ -234,6 +245,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.lifesteal = 0;
   state.dropCounts.burn = 0;
   state.dropCounts.chain = 0;
+  state.dropCounts.crit = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -330,6 +342,7 @@ function descendIfReady(state: GameState): boolean {
     lifestealLevel: p.lifestealLevel,
     burnLevel: p.burnLevel,
     chainLevel: p.chainLevel,
+    critLevel: p.critLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -343,6 +356,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.lifestealLevel = carried.lifestealLevel;
   state.player.burnLevel = carried.burnLevel;
   state.player.chainLevel = carried.chainLevel;
+  state.player.critLevel = carried.critLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);

@@ -203,7 +203,8 @@ describe('Descent — the build COMPOUNDS across floors', () => {
     // Build up a within-run state on floor 1 (Phase 9: powerup LEVELS).
     s.player.pierceLevel = 2;
     s.player.knockbackLevel = 1;
-    s.player.lifestealLevel = 2; // synergy arc: the effect axis carries like the tracks
+    s.player.lifestealLevel = 2; // synergy arc: the effect axes carry like the tracks
+    s.player.critLevel = 3;
     s.player.health = 50; // hurt, below max — must NOT be refilled by descending
     expect(s.player.health).toBeLessThan(PLAYER_COMBAT.maxHealth);
 
@@ -215,6 +216,7 @@ describe('Descent — the build COMPOUNDS across floors', () => {
     expect(s.player.pierceLevel).toBe(2); // carried (level, not reset)
     expect(s.player.knockbackLevel).toBe(1); // carried
     expect(s.player.lifestealLevel).toBe(2); // carried
+    expect(s.player.critLevel).toBe(3); // carried (the finale axis)
     expect(s.player.health).toBe(50); // carried verbatim — NOT refilled, NOT reset
   });
 

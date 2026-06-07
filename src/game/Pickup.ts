@@ -28,7 +28,8 @@ export type PickupKind =
   | 'dashStrike'
   | 'lifesteal'
   | 'burn'
-  | 'chain';
+  | 'chain'
+  | 'crit';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
@@ -45,12 +46,13 @@ const POWERUP_KINDS: readonly PickupKind[] = [
   'lifesteal', // APPEND new kinds — existing indices stay stable (tests pin them)
   'burn',
   'chain',
+  'crit',
 ];
 
 /** On-hit EFFECT axes (synergy arc) — picked UNCOMMONLY (DROP.effectWeight) vs the
  *  stat-tracks (DROP.trackWeight) so effects read as build-defining, not common
  *  top-ups. Grows with burn/chain/crit. Drives the weighted roll in rollDrop. */
-const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal', 'burn', 'chain']);
+const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal', 'burn', 'chain', 'crit']);
 
 /** Roll weight for a powerup kind: effect axes are uncommon, stat-tracks common. */
 function powerupWeight(kind: PickupKind): number {
@@ -150,6 +152,8 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
       return player.burnLevel;
     case 'chain':
       return player.chainLevel;
+    case 'crit':
+      return player.critLevel;
     case 'fasterRecharge':
       return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
     case 'dashStrike':
@@ -182,6 +186,8 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     player.burnLevel = levelUp(player.burnLevel);
   } else if (kind === 'chain') {
     player.chainLevel = levelUp(player.chainLevel);
+  } else if (kind === 'crit') {
+    player.critLevel = levelUp(player.critLevel);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {
