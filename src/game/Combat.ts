@@ -62,10 +62,7 @@ export function aimDirection(player: PlayerState, intent: InputIntent, out: Vec2
  *  side — the caller (meleeAttack) uses this as the "weak-side hit" signal for the
  *  gimmick-#3 interrupt.
  *
- *  `isDirect` (default true) marks a DIRECT player hit (melee / ranged / dash-strike)
- *  vs an over-time TICK (synergy arc PR2 burn, which will pass false). LIFESTEAL only
- *  heals on direct hits — a DoT tick must NOT lifesteal (bound E: no passive infinite
- *  sustain). Existing callers are all direct, so they keep the default. */
+ *  `kind` (default 'direct') is the hit taxonomy — see HitKind. */
 export function damageEnemy(
   enemy: Enemy,
   amount: number,
@@ -83,7 +80,7 @@ export function damageEnemy(
   // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
   // GIMMICK #3: while staggerTimer > 0 the shield is DOWN — skip this block so a
   // successful interrupt lets hits land from ANY angle (the free-hit reward).
-  // Burn ticks (isDirect=false) bypass the armor check: the ignition was already
+  // Burn ticks (kind='tick') bypass the armor check: the ignition was already
   // validated by a weak-side direct hit, and the zero kbDir would always read as
   // "armored side" (dot=0 < cos(arc/2)), blocking every tick for zero damage.
   if (kind !== 'tick' && enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
