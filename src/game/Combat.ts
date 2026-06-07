@@ -64,7 +64,10 @@ export function damageEnemy(
   // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
   // GIMMICK #3: while staggerTimer > 0 the shield is DOWN — skip this block so a
   // successful interrupt lets hits land from ANY angle (the free-hit reward).
-  if (enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
+  // Burn ticks (isDirect=false) bypass the armor check: the ignition was already
+  // validated by a weak-side direct hit, and the zero kbDir would always read as
+  // "armored side" (dot=0 < cos(arc/2)), blocking every tick for zero damage.
+  if (isDirect && enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
     const len = Math.hypot(kbDirX, kbDirY) || 1;
     const dot =
       (-kbDirX / len) * Math.cos(state.boss.vulnerableAngle) +

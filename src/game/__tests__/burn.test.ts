@@ -21,6 +21,7 @@ import { spawnEnemy, roomEnemyCount } from '../Enemy';
 import { activeProjectileCount } from '../Projectile';
 import { activePickupCount } from '../Pickup';
 import { damageEnemy } from '../Combat';
+import { createBossState } from '../Boss';
 import { BURN_LEVELS, SIM_DT } from '../../utils/constants';
 
 const DT = SIM_DT;
@@ -86,6 +87,20 @@ describe('Burn — tick (DoT over time)', () => {
     // Total burn ≈ dps × duration; expired (timer back to 0, no further damage).
     expect(e.burnTimer).toBe(0);
     expect(e.health).toBeCloseTo(100 - BURN_LEVELS.dps[3] * BURN_LEVELS.duration, 1);
+  });
+
+  it('a burn tick on the boss bypasses the armor check and deals damage', () => {
+    const s = createGameState();
+    for (const en of s.enemies) en.active = false;
+    spawnEnemy(s.enemies, 20, 20, 1, 'boss', s.bossRoom);
+    const slot = s.enemies.findIndex((en) => en.active && en.type === 'boss');
+    s.boss = createBossState(slot, 1);
+    const e = s.enemies[slot];
+    const hp0 = e.health;
+    e.burnTimer = BURN_LEVELS.duration;
+    e.burnDps = BURN_LEVELS.dps[3];
+    for (let i = 0; i < 30; i++) update(s, createIntent(), DT);
+    expect(e.health).toBeLessThan(hp0);
   });
 
   it('a burn tick does NOT lifesteal (the #66 isDirect guard holds)', () => {
