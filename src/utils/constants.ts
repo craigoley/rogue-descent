@@ -354,6 +354,16 @@ export const PLAYER_COMBAT = {
   dodgeTutorialDuration: 3.5,
 } as const;
 
+/** Full-screen damage VIGNETTE (Phase: juice). A red edge-glow that pulses when the
+ *  player takes damage — the genre-standard "I got hit" signal, stronger than the
+ *  small centred cube-flash on the iso view. RENDER-ONLY: the HUD drives the overlay
+ *  opacity from player.hitFlashTimer (already set by the sim on damage), so it pulses
+ *  + fades in lockstep with the cube flash — NO new sim state / second duration. */
+export const VIGNETTE = {
+  /** Opacity at the instant of a hit (fades to 0 with hitFlashTimer). By-feel. */
+  peakOpacity: 0.35,
+} as const;
+
 /** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */
 export const DASH = {
   /** Burst duration, seconds. dash speed = TUNING.dashDist / duration. */

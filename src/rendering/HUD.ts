@@ -36,6 +36,7 @@ import {
   SOFTLOCK_DETECT,
   TUNING,
   TUNING_RANGES,
+  VIGNETTE,
 } from '../utils/constants';
 
 /** A leveled-powerup chip (Phase 9): the chip element + its pip dots. */
@@ -93,6 +94,9 @@ export class HUD {
   /** Rising-edge latch: fire/banner once per stall, clear on recovery. */
   private softlockFired = false;
   private readonly healthFill: HTMLDivElement;
+  /** Full-screen damage vignette (juice): red edge-glow, opacity driven each frame
+   *  from player.hitFlashTimer — the "I got hit" signal. Render-only. */
+  private readonly damageVignette: HTMLDivElement;
   // Boss HP bar (Phase 8): top-centre, shown only while a boss lives.
   private readonly bossWrap: HTMLDivElement;
   private readonly bossFill: HTMLDivElement;
@@ -114,6 +118,13 @@ export class HUD {
   constructor(container: HTMLElement) {
     this.debug = isDebugEnabled();
     this.minimap = new Minimap(container);
+
+    // Full-screen damage vignette — a red edge-glow over the canvas (below the
+    // interactive HUD; pointer-events:none so it never blocks). Opacity is driven
+    // each frame from player.hitFlashTimer in update(); 0 (invisible) at rest.
+    this.damageVignette = document.createElement('div');
+    this.damageVignette.className = 'hud-damage-vignette';
+    container.appendChild(this.damageVignette);
 
     const title = document.createElement('div');
     title.className = 'hud-title';
@@ -485,6 +496,12 @@ export class HUD {
     controls: Controls,
   ): void {
     const p = state.player;
+
+    // Damage vignette (juice): pulse the red edge-glow from the SAME timer the
+    // cube-flash uses (player.hitFlashTimer, set by the sim on damage), so they
+    // fade in lockstep. Ratio 1 at the instant of a hit -> 0 when the timer expires.
+    const dmg = p.hitFlashTimer > 0 ? (p.hitFlashTimer / PLAYER_COMBAT.hitFlash) * VIGNETTE.peakOpacity : 0;
+    this.damageVignette.style.opacity = dmg.toFixed(3);
 
     // Combat HUD (always): health fraction + dash charge pips.
     const hp = Math.max(0, p.health) / PLAYER_COMBAT.maxHealth;

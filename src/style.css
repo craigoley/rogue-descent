@@ -60,6 +60,19 @@ body {
   display: block;
 }
 
+/* Full-screen damage vignette (juice) — a red edge-glow that pulses on taking a
+   hit. Transparent centre so the action stays visible; opacity is driven each
+   frame from player.hitFlashTimer (HUD.update), 0 at rest. Above the canvas,
+   pointer-events:none so it never blocks input or the HUD. */
+.hud-damage-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, #c81830 100%);
+}
+
 /* Depth indicator — centred just below the title, between the corner widgets.
    Violet (= PALETTE.stairs) ties it to the descent system. */
 .hud-depth {
