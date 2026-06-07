@@ -68,6 +68,9 @@ export const PALETTE = {
    *  hue distinct from every other effect (lifesteal crimson, burn ember, chain
    *  blue) and the verb tracks. */
   crit: 0xffd23f,
+  /** GOLDEN CHEST body (golden chests) — warm amber-gold, distinct from the brighter
+   *  crit gold, so a chest reads as "treasure" from across the room. */
+  chest: 0xffb300,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -722,6 +725,8 @@ export const POOL = {
   /** Chain-arc bolts visible at once (synergy arc PR3). A maxed chain is ≤3 jumps;
    *  with multishot several can fire in a frame, so a small pool covers a volley. */
   chainArcs: 24,
+  /** Golden chests per floor (1-2 spawned; small pool with margin). */
+  chests: 4,
 } as const;
 
 // ============================================================================
@@ -822,6 +827,26 @@ export const STAIRS = {
   /** Billboarded "DESCEND" glyph height above the floor + on-screen size. */
   glyphHeight: 1.6,
   glyphSize: 1.1,
+} as const;
+
+/** GOLDEN CHESTS (risk/reward loot). A chest spawns in 1-2 non-spawn, non-boss rooms
+ *  per floor; opening it (contact, only once the room is CLEARED) pops TWO linked
+ *  pickups — walk over one, the other vanishes (the spatial 1-of-2 choice). PR1 =
+ *  always loot; PR2 adds the mimic roll. All by-feel. */
+export const CHEST = {
+  /** Chests per floor (inclusive range, picked per seed). */
+  minPerFloor: 1,
+  maxPerFloor: 2,
+  /** Open reach by contact, world units (added to PLAYER.radius). */
+  openReach: 0.7,
+  /** Spatial offset of each of the 2 popped pickups from the chest centre, world
+   *  units — far enough apart that walking to one is a clear spatial commitment. */
+  pickupOffset: 1.2,
+  /** Spark burst emitted on opening (the lid-pop tell). */
+  openBurst: 18,
+  /** RENDER: chest body box size + height above the floor (render-only). */
+  bodySize: 0.7,
+  bodyHeight: 0.35,
 } as const;
 
 /** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:

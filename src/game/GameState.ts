@@ -38,6 +38,7 @@ import {
   type Particle,
 } from './Particle';
 import { createChainArcPool, updateChainArcs, type ChainArc } from './ChainArc';
+import { createChestPool, updateChests, type Chest } from './Chest';
 import { createPickupPool, updatePickups, type Pickup } from './Pickup';
 import {
   buildEncounters,
@@ -106,6 +107,9 @@ export interface GameState {
   /** Chain-arc bolts (synergy arc PR3) — cosmetic-in-sim like particles; the chain
    *  loop records segments, the renderer draws + fades them. */
   chainArcs: ChainArc[];
+  /** Golden chests on this floor (placed at chestRooms centres in loadFloor). NOT in
+   *  the enemy pool → never affects roomEnemyCount / the clear-gate. */
+  chests: Chest[];
   pickups: Pickup[];
   /** Per-room encounter table (DFS order; index 0 = spawn room). */
   rooms: RoomEncounter[];
@@ -134,6 +138,10 @@ export interface GameState {
    *  drawn when critLevel > 0, so default runs / existing tests are byte-identical.
    *  Reseeded per floor like dropRng (the determinism discipline). */
   combatRng: Rng;
+  /** Seeded RNG for GOLDEN-CHEST content rolls — a third stream INDEPENDENT of
+   *  dropRng + combatRng (distinct seed offset), so chests can't desync drops/crits.
+   *  Reseeded per floor; drawn only when a chest opens. */
+  chestRng: Rng;
   /** Per-kind drop tally for the ?debug funnel (within-run; reset on death). */
   dropCounts: {
     health: number;
@@ -168,6 +176,9 @@ const dropSeed = (seed: number): number => (seed + 0x9e3779b9) >>> 0;
 /** Combat-rng seed: a DISTINCT offset from dropSeed so the crit stream is independent
  *  of the drop stream (adding crit never perturbs drop sequences). */
 const combatSeed = (seed: number): number => (seed + 0x85ebca6b) >>> 0;
+/** Chest-rng seed: a THIRD distinct offset (≠ drop 0x9e3779b9, ≠ combat 0x85ebca6b)
+ *  so chest content rolls are independent of both the drop + crit streams. */
+const chestSeed = (seed: number): number => (seed + 0xc2b2ae35) >>> 0;
 
 export function createGameState(): GameState {
   const state: GameState = {
@@ -184,6 +195,7 @@ export function createGameState(): GameState {
     enemyProjectiles: createEnemyProjectilePool(),
     particles: createParticlePool(),
     chainArcs: createChainArcPool(),
+    chests: createChestPool(),
     pickups: createPickupPool(),
     rooms: [],
     activeRoom: -1,
@@ -193,6 +205,7 @@ export function createGameState(): GameState {
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     combatRng: createRng(combatSeed(DUNGEON.defaultSeed)),
+    chestRng: createRng(chestSeed(DUNGEON.defaultSeed)),
     dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
@@ -222,6 +235,21 @@ function loadFloor(state: GameState, seed: number): void {
   state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
   state.activeRoom = -1;
   state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
+  // GOLDEN CHESTS: place a chest at each chest room's centre (additive — chestRooms
+  // never the spawn/boss room). Reuse the pool; deactivate the rest. Opened on
+  // contact once the room is cleared (see updateChests).
+  for (const c of state.chests) c.active = false;
+  const ts = floor.room.tileSize;
+  for (let i = 0; i < floor.chestRooms.length && i < state.chests.length; i++) {
+    const ri = floor.chestRooms[i];
+    const r = floor.rooms[ri];
+    const c = state.chests[i];
+    c.active = true;
+    c.opened = false;
+    c.roomIndex = ri;
+    c.x = (r.x + r.w / 2) * ts;
+    c.y = (r.y + r.h / 2) * ts;
+  }
   state.boss = null; // no boss until its room activates
   state.bossDefeated = false; // this floor's boss must be killed to unlock descent
   // Stairs start UNPLACED + inactive: PINNED to the boss room by the encounter
@@ -234,6 +262,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.stairs.active = false;
   state.dropRng = createRng(dropSeed(seed));
   state.combatRng = createRng(combatSeed(seed)); // independent stream, reseeded per floor
+  state.chestRng = createRng(chestSeed(seed)); // independent stream, reseeded per floor
   state.dropCounts.health = 0;
   state.dropCounts.melee = 0;
   state.dropCounts.ranged = 0;
@@ -460,6 +489,10 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   }
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
+  // Open a golden chest the player is touching (only in a cleared room) → pops the
+  // 1-of-2 pickups. BEFORE updatePickups so the popped pickups are collectable the
+  // moment they appear (they're offset from the chest, so not instantly grabbed).
+  updateChests(state);
   // Collect any pickup the player is touching.
   updatePickups(state);
 

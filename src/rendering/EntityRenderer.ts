@@ -46,6 +46,7 @@ import {
   BARRIER,
   BOSS_VFX,
   CHAIN_ARC,
+  CHEST,
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
@@ -452,6 +453,8 @@ export class EntityRenderer {
   /** Chain-arc bolts (synergy arc PR3) — pooled 2-point lines, one per ChainArc slot;
    *  each has its own material so it can fade independently. */
   private readonly chainArcs: Line[] = [];
+  /** Golden chests (PR1) — pooled gold boxes, shown while active && !opened. */
+  private readonly chests: Mesh[] = [];
   private readonly trail: Mesh[] = [];
   private readonly trailX: number[] = [];
   private readonly trailY: number[] = [];
@@ -555,6 +558,21 @@ export class EntityRenderer {
       line.visible = false;
       this.chainArcs.push(line);
       scene.add(line);
+    }
+
+    // --- Golden chests (PR1): pooled gold boxes, shown while active && !opened. The
+    // shared gold material reads as "treasure"; a subtle idle bob is applied in sync. ---
+    const chestGeo = new BoxGeometry(CHEST.bodySize, CHEST.bodySize * 0.7, CHEST.bodySize);
+    const chestMat = new MeshStandardMaterial({
+      color: PALETTE.chest,
+      emissive: PALETTE.chest,
+      emissiveIntensity: 0.35,
+    });
+    for (let i = 0; i < POOL.chests; i++) {
+      const m = new Mesh(chestGeo, chestMat);
+      m.visible = false;
+      this.chests.push(m);
+      scene.add(m);
     }
 
     // --- Melee swing (flat sector, oriented via a parent group) ---
@@ -810,6 +828,7 @@ export class EntityRenderer {
     this.syncEnemyProjectiles(state, alpha);
     this.syncParticles(state);
     this.syncChainArcs(state);
+    this.syncChests(state, now);
     this.syncMelee(p, px, py, aim.x, aim.y);
     this.syncPickups(state, now);
     this.syncToasts(frameDt);
@@ -1136,6 +1155,25 @@ export class EntityRenderer {
       pos.setXYZ(1, a.x2, CHAIN_ARC.height, a.y2);
       pos.needsUpdate = true;
       mat.opacity = Math.max(0, a.life / a.maxLife); // fade out over its lifetime
+    }
+  }
+
+  /** Draw the golden chests (PR1): a gold box at each active, unopened chest, with a
+   *  subtle idle bob so the treasure draws the eye. Hidden once opened (the popped
+   *  pickups render via the normal pickup path). */
+  private syncChests(state: GameState, now: number): void {
+    const list = state.chests;
+    for (let i = 0; i < this.chests.length; i++) {
+      const c = list[i];
+      const m = this.chests[i];
+      if (!c.active || c.opened) {
+        m.visible = false;
+        continue;
+      }
+      m.visible = true;
+      const bob = CHEST.bodyHeight + 0.05 * (0.5 + 0.5 * Math.sin(now * 0.003));
+      m.position.set(c.x, bob, c.y);
+      m.rotation.y = now * 0.0008; // slow shimmer-spin
     }
   }
 

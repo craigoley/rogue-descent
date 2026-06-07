@@ -66,6 +66,10 @@ export interface Pickup {
   kind: PickupKind;
   /** Encounter room this drop belongs to (for telemetry); -1 if none. */
   room: number;
+  /** GOLDEN CHESTS: links the two pickups a chest pops as a PAIR — collecting one
+   *  deactivates its sibling(s) with the same pairId (the spatial 1-of-2 choice:
+   *  exactly one is taken). -1 = a normal, un-paired drop. */
+  pairId: number;
 }
 
 export function createPickupPool(): Pickup[] {
@@ -75,6 +79,7 @@ export function createPickupPool(): Pickup[] {
     y: 0,
     kind: 'health' as PickupKind,
     room: -1,
+    pairId: -1,
   }));
 }
 
@@ -84,6 +89,7 @@ export function spawnPickup(
   y: number,
   kind: PickupKind,
   room: number,
+  pairId = -1,
 ): boolean {
   for (const pk of pool) {
     if (pk.active) continue;
@@ -92,6 +98,7 @@ export function spawnPickup(
     pk.y = y;
     pk.kind = kind;
     pk.room = room;
+    pk.pairId = pairId;
     return true;
   }
   return false;
@@ -208,6 +215,39 @@ export function updatePickups(state: GameState): void {
       applyPickup(p, pk.kind);
       pk.active = false;
       if (pk.room >= 0 && pk.room < state.rooms.length) state.rooms[pk.room].dropsCollected++;
+      // GOLDEN CHESTS: a paired pickup (the 1-of-2 choice) deactivates its sibling(s)
+      // the instant it's taken — so exactly ONE of the two is ever collected. Handles
+      // the simultaneous-overlap case too: the sibling is gone before the loop reaches it.
+      if (pk.pairId >= 0) {
+        for (const other of state.pickups) {
+          if (other !== pk && other.active && other.pairId === pk.pairId) other.active = false;
+        }
+      }
     }
   }
+}
+
+/** GOLDEN CHESTS — choose the TWO distinct kinds a chest offers (the 1-of-2 choice).
+ *  Bias for an INTERESTING decision: guaranteed one EFFECT axis (burn/chain/lifesteal/
+ *  crit — build-defining) + one STAT track or health (reliable power/sustain), BOTH
+ *  filtered to non-maxed for this player (never a dead pick). FALLBACKS keep it always
+ *  two LIVE options: no effect available (all maxed) -> two distinct stats/health;
+ *  the fully-degenerate all-maxed case -> health + health (both heal). Deterministic
+ *  via the passed rng (state.chestRng). */
+export function chooseChestPicks(player: PlayerState, rng: Rng): [PickupKind, PickupKind] {
+  const open = (k: PickupKind): boolean => currentPowerupLevel(player, k) < POWERUP_MAX_LEVEL;
+  const effects = POWERUP_KINDS.filter((k) => EFFECT_KINDS.has(k) && open(k));
+  const stats = POWERUP_KINDS.filter((k) => !EFFECT_KINDS.has(k) && open(k));
+  // Health is always a valid "stat-side" pick (it's not a leveled track).
+  const statPool: PickupKind[] = [...stats, 'health'];
+  const pick = (arr: PickupKind[]): PickupKind => arr[rng.int(0, arr.length - 1)];
+  if (effects.length > 0) {
+    return [pick(effects), pick(statPool)]; // the interesting effect-vs-power choice
+  }
+  // No effect available: offer two DISTINCT stat-side options (degenerate all-maxed
+  // -> health + health, both heal — a harmless floor, exceedingly rare).
+  const a = pick(statPool);
+  const rest = statPool.filter((k) => k !== a);
+  const b = rest.length > 0 ? pick(rest) : a;
+  return [a, b];
 }
