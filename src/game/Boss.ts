@@ -12,8 +12,12 @@
  * AMPLIFIED (faster telegraph / bigger reach), not new moves.
  *
  * GIMMICK #1 (positioning/shield): a rotating VULNERABLE arc — damage only counts
- * from the weak side (see `bossVulnerable`, used by Combat.damageEnemy). Gimmicks
- * #2 (adds) and #3 (knockback-interrupt) slot in as FUTURE attack-table entries.
+ * from the weak side (see `bossVulnerable`, used by Combat.damageEnemy). This arc
+ * is the BASELINE for every boss; gimmicks layer ON it. GIMMICK #2 (adds) appends a
+ * phase-2 SUMMON entry. GIMMICK #3 (knockback-interrupt) adds the CLEAVE entry — a
+ * long, heavily-telegraphed heavy strike a weak-side KNOCKBACK hit CANCELS
+ * mid-telegraph (Combat sets BossState.interruptHit; updateBoss consumes it),
+ * rewarding the read with a shield-down STAGGER window.
  */
 
 import { BOSS, ENEMY_TYPES } from '../utils/constants';
@@ -29,9 +33,9 @@ import type { Vec2 } from '../utils/math';
 // spawnEnemy). So the runtime graph is one-directional — Enemy -> Boss (the
 // updateBoss dispatch) and GameState -> {Boss, Enemy} — with no Enemy<->Boss cycle.
 
-/** Boss gimmicks (the rotation roster in Difficulty.BOSS_GIMMICKS). #1
- *  positioning + #2 adds are built; #3 (knockback-interrupt) is the last entry. */
-export type BossGimmick = 'positioning' | 'adds';
+/** Boss gimmicks (the rotation roster in Difficulty.BOSS_GIMMICKS). All three are
+ *  built: #1 positioning, #2 adds, #3 knockback (interrupt the CLEAVE windup). */
+export type BossGimmick = 'positioning' | 'adds' | 'knockback';
 
 /** A recorded SUMMON request (gimmick #2): the boss's SUMMON strike sets this on
  *  BossState (data + intent only — no spawn), and GameState consumes it by
@@ -70,6 +74,17 @@ export interface BossState {
    *  cleared by GameState (the spawn side-effect), or null when none is pending.
    *  This indirection keeps spawnEnemy out of Boss (no Enemy<->Boss cycle). */
   pendingSummon: PendingSummon | null;
+  /** GIMMICK #3: one-frame signal SET by Combat.meleeAttack when a weak-side,
+   *  knockback-track (knockbackLevel >= 1) melee hit lands on the boss, and
+   *  read+cleared by updateBoss each step. Combat already touches state.boss
+   *  (the inlined vulnerable check), so this needs NO Boss import — same
+   *  Combat->Boss data direction, no cycle. Consumed only in the telegraph phase
+   *  of an interruptible attack (else ignored). */
+  interruptHit: boolean;
+  /** GIMMICK #3: seconds remaining in the SHIELD-DOWN stagger after a successful
+   *  interrupt. While > 0, Combat.damageEnemy bypasses the vulnerable-arc check
+   *  (hits land from any angle) and the render shows the stagger tint. */
+  staggerTimer: number;
 }
 
 /** One boss attack: a wind-up + active window + recovery, and a strike effect.
@@ -79,6 +94,9 @@ interface BossAttack {
   telegraph: number;
   strike: number;
   recover: number;
+  /** GIMMICK #3: true if a weak-side knockback hit during the telegraph CANCELS this
+   *  attack (only CLEAVE). Falsy attacks (slam, summon) ignore the interrupt signal. */
+  interruptible?: boolean;
   /** Execute the strike. `phase2` selects amplified params (same move, escalated). */
   run(e: Enemy, state: GameState, d: number, phase2: boolean): void;
 }
@@ -134,12 +152,36 @@ const SUMMON: BossAttack = {
   },
 };
 
+/** GIMMICK #3 — CLEAVE: the signature heavy strike. A LONG, clearly-telegraphed
+ *  wind-up (BOSS.cleave.telegraph) hitting a bigger AoE for more damage than the
+ *  slam. INTERRUPTIBLE: a weak-side knockback hit during the telegraph cancels it
+ *  (updateBoss). DODGEABLE like the slam if not interrupted — same telegraph->
+ *  strike->recover cycle, so the existing boss wind-up render is the tell. */
+const CLEAVE: BossAttack = {
+  id: 'cleave',
+  telegraph: BOSS.cleave.telegraph,
+  strike: BOSS.cleave.strike,
+  recover: BOSS.cleave.recover,
+  interruptible: true,
+  run(e, state, d, phase2) {
+    const reach =
+      (ENEMY_TYPES.boss.attackReach + ENEMY_TYPES.boss.radius) *
+      BOSS.cleave.reachMult *
+      (phase2 ? BOSS.phase2.reachMult : 1);
+    if (state.player.alive && d <= reach) {
+      damagePlayer(state.player, e.attackDamage * BOSS.cleave.damageMult, state);
+    }
+  },
+};
+
 // Pre-allocated attack tables (returned by reference — no per-frame allocation).
 const TABLE_SLAM: BossAttack[] = [SLAM];
 const TABLE_SLAM_SUMMON: BossAttack[] = [SLAM, SUMMON];
+const TABLE_SLAM_CLEAVE: BossAttack[] = [SLAM, CLEAVE];
 
 function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
   if (gimmick === 'adds' && phase2) return TABLE_SLAM_SUMMON;
+  if (gimmick === 'knockback') return TABLE_SLAM_CLEAVE;
   return TABLE_SLAM;
 }
 
@@ -158,6 +200,8 @@ export function createBossState(slot: number, depth: number): BossState {
     maxHealth: bossHpForDepth(depth),
     blockedFlash: 0,
     pendingSummon: null,
+    interruptHit: false,
+    staggerTimer: 0,
   };
 }
 
@@ -196,6 +240,13 @@ export function updateBoss(
   if (!boss) return; // safety: no companion state -> stand still
   const { player } = state;
 
+  // GIMMICK #3: read + CLEAR the one-frame interrupt signal (Combat set it earlier
+  // THIS step — combat resolves before updateEnemies, so zero latency). Captured to
+  // a local so it's honoured only in the telegraph case below; cleared regardless so
+  // a hit outside a telegraph is a no-op (never queues for a later attack).
+  const interrupted = boss.interruptHit;
+  boss.interruptHit = false;
+
   // Phase escalation: a two-phase boss flips to phase 2 at <= 50% HP (one-way).
   if (boss.phases === 2 && boss.outerPhase === 1 && e.health <= boss.maxHealth * 0.5) {
     boss.outerPhase = 2;
@@ -204,6 +255,8 @@ export function updateBoss(
 
   // Tells decay.
   if (boss.blockedFlash > 0) boss.blockedFlash = Math.max(0, boss.blockedFlash - dt);
+  // GIMMICK #3: the shield-down stagger window counts down (shield is down while > 0).
+  if (boss.staggerTimer > 0) boss.staggerTimer = Math.max(0, boss.staggerTimer - dt);
 
   // GIMMICK #1: rotate the vulnerable angle (faster in phase 2) so the player
   // must keep repositioning to the weak side.
@@ -231,6 +284,16 @@ export function updateBoss(
       break;
     }
     case 'telegraph':
+      // GIMMICK #3 INTERRUPT: a weak-side knockback hit during an INTERRUPTIBLE
+      // wind-up CANCELS the attack — skip 'strike' entirely (atk.run never fires ->
+      // no strike damage), drop straight to recover, and open the shield-down
+      // stagger. The cursor still advances on the recover->chase transition.
+      if (interrupted && atk.interruptible) {
+        e.phase = 'recover';
+        e.timer = atk.recover;
+        boss.staggerTimer = BOSS.interrupt.staggerDuration;
+        break;
+      }
       e.timer -= dt; // stand + wind up (the big, readable tell)
       if (e.timer <= 0) {
         e.phase = 'strike';

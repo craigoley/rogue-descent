@@ -42,6 +42,11 @@ export const PALETTE = {
   /** BOSS shield "blocked" flash — cold steel: a hit from the armored side did
    *  nothing (reposition to the weak-point). */
   enemyBossShield: 0x88aacc,
+  /** BOSS STAGGER tint (gimmick #3): a knockback hit CANCELLED its CLEAVE windup —
+   *  bright mint-cyan, distinct from the white hit-flash, amber telegraph, steel
+   *  shield and red body, so "you broke its attack / shield's down" reads at a
+   *  glance during the free-hit window. */
+  enemyBossStagger: 0x66ffd0,
   /** BOSS ADD body (Phase 8, gimmick #2) — ember orange: warm (reads "threat")
    *  but lighter/oranger than the chaser pink-red, ranged crimson, swarmer
    *  vermilion and boss maroon, so a summoned minion reads as its own weak,
@@ -1158,6 +1163,37 @@ export const BOSS = {
     /** Distance from the boss centre to the wave's near end, world units (just
      *  outside the boss body so adds don't spawn inside it). */
     lineOffset: 1.8,
+  },
+
+  /** GIMMICK #3 — CLEAVE: the signature heavy strike of the knockback-interrupt
+   *  boss. A LONGER, clearly-telegraphed wind-up (the interrupt WINDOW) hitting a
+   *  bigger AoE for more damage than the slam — the "punish the big windup" attack.
+   *  A weak-side knockback-track hit during the telegraph CANCELS it (see
+   *  BOSS.interrupt). DODGEABLE like the slam if you can't / don't interrupt. All
+   *  by-feel — tune on playtest (the telegraph length IS the interrupt window). */
+  cleave: {
+    /** Wind-up before the cleave lands, seconds — longer than the slam's 0.9 so the
+     *  tell (and the interrupt opportunity) is unmistakable. Phase 2 shrinks it via
+     *  phase2.telegraphMult (tighter window, no new knob). */
+    telegraph: 1.3,
+    /** Active strike window, seconds (matches the slam). */
+    strike: 0.2,
+    /** Recovery after the cleave before the next attack, seconds. */
+    recover: 0.9,
+    /** Reach multiplier on the slam's (attackReach + radius) — a bigger AoE so the
+     *  heavy attack feels heavy (still dash-dodgeable). */
+    reachMult: 1.25,
+    /** Damage multiplier on the depth-scaled boss attackDamage — hits harder than
+     *  the slam (the cost of eating a windup you could have read). */
+    damageMult: 1.5,
+  },
+
+  /** GIMMICK #3 — INTERRUPT reward. A successful cancel drops the boss into a
+   *  SHIELD-DOWN stagger: for this long (seconds) the vulnerable-arc check is
+   *  bypassed, so hits land from ANY angle — the free-hit payoff for reading the
+   *  tell. By-feel (rewarding but not a stun-lock). */
+  interrupt: {
+    staggerDuration: 1.2,
   },
 } as const;
 

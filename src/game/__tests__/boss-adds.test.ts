@@ -5,7 +5,7 @@
  *   - GATED re-summon: no new wave while one is alive (no instant respawn / drip).
  *   - Phase/depth gating: summon is phase-2-only, so single-phase (depth<3) adds
  *     bosses never summon; positioning bosses never summon; first summoning boss
- *     is depth 4.
+ *     is depth 5 (with the 3-gimmick roster: positioning / adds / knockback).
  *   - THE KEY GATING TEST: the boss's DEATH clears the room EVEN WITH adds alive
  *     (adds despawn) and opens descent — adds aren't a kill-everything grind, and
  *     despawned adds aren't counted as kills / don't roll drops.
@@ -156,7 +156,7 @@ describe('Phase / depth gating — shallow + positioning bosses never summon', (
   });
 
   it('a POSITIONING boss never summons (no SUMMON in its table)', () => {
-    const { s, e } = withBoss(3); // depth 3: positioning, two-phase
+    const { s, e } = withBoss(4); // depth 4: positioning, two-phase (depth 3 is now knockback)
     expect(s.boss!.gimmick).toBe('positioning');
     s.boss!.outerPhase = 2; // even in phase 2
     e.phase = 'strike';
@@ -170,17 +170,18 @@ describe('Phase / depth gating — shallow + positioning bosses never summon', (
     expect(addsOf(s)).toHaveLength(0);
   });
 
-  it('rotation cadence: first SUMMONING boss is depth 4', () => {
-    // depth 1 positioning; depth 2 adds-but-single-phase; depth 3 positioning(2ph);
-    // depth 4 adds + two-phase = the first boss that can summon.
+  it('rotation cadence: first SUMMONING boss is depth 5 (3-gimmick roster)', () => {
+    // depth 1 positioning; depth 2 adds-but-single-phase; depth 3 knockback(2ph);
+    // depth 4 positioning(2ph); depth 5 adds + two-phase = the first boss that summons.
     expect(bossGimmickForDepth(1)).toBe('positioning');
     expect(bossGimmickForDepth(2)).toBe('adds');
     expect(bossPhasesForDepth(2)).toBe(1); // single-phase -> never summons
-    expect(bossGimmickForDepth(3)).toBe('positioning');
-    expect(bossGimmickForDepth(4)).toBe('adds');
-    expect(bossPhasesForDepth(4)).toBe(2); // two-phase + adds -> SUMMONS
-    // No depth < 4 is both adds-gimmick AND two-phase.
-    for (let d = 1; d <= 3; d++) {
+    expect(bossGimmickForDepth(3)).toBe('knockback'); // gimmick #3 first appears here
+    expect(bossGimmickForDepth(4)).toBe('positioning');
+    expect(bossGimmickForDepth(5)).toBe('adds');
+    expect(bossPhasesForDepth(5)).toBe(2); // two-phase + adds -> SUMMONS
+    // No depth < 5 is both adds-gimmick AND two-phase.
+    for (let d = 1; d <= 4; d++) {
       expect(bossGimmickForDepth(d) === 'adds' && bossPhasesForDepth(d) === 2).toBe(false);
     }
   });

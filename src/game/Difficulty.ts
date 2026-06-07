@@ -82,16 +82,16 @@ export function bossPhasesForDepth(depth: number): 1 | 2 {
   return Math.max(1, depth) >= DIFFICULTY.bossTwoPhaseMinDepth ? 2 : 1;
 }
 
-/** The boss-gimmick rotation (Phase 8). #1 (positioning) + #2 (adds) are built;
- *  #3 (knockback-interrupt) appends here as it ships, and the rotation below picks
- *  it up with no other change.
+/** The boss-gimmick rotation (Phase 8). All three are built: #1 (positioning),
+ *  #2 (adds), #3 (knockback-interrupt). The rotation below picks each up by depth.
  *
  *  CADENCE with the modulo below + the phase-2-only summon: depth 1 positioning,
  *  depth 2 adds (single-phase -> NEVER summons, a plain slam fight), depth 3
- *  positioning (two-phase), depth 4 adds (two-phase -> the FIRST summoning boss),
- *  depth 5 positioning, depth 6 adds (summons), ... So adds first manifest at
- *  depth 4 (summon is gated to phase 2, which needs depth >= bossTwoPhaseMinDepth). */
-const BOSS_GIMMICKS = ['positioning', 'adds'] as const;
+ *  KNOCKBACK (the first interrupt boss; two-phase), depth 4 positioning, depth 5
+ *  adds (two-phase -> the FIRST summoning boss), depth 6 knockback, ... So adds
+ *  first manifest at depth 5 (summon is gated to phase 2, which needs depth >=
+ *  bossTwoPhaseMinDepth) and the knockback-interrupt boss first appears at depth 3. */
+const BOSS_GIMMICKS = ['positioning', 'adds', 'knockback'] as const;
 export type BossGimmickId = (typeof BOSS_GIMMICKS)[number];
 
 /** Which boss GIMMICK is active at `depth` (Phase 8): rotates through the roster

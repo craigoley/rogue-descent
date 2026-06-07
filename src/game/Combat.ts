@@ -38,7 +38,10 @@ export function aimDirection(player: PlayerState, intent: InputIntent, out: Vec2
 }
 
 /** Apply damage to an enemy with full hit feedback (flash, knockback, sparks,
- *  hit-stop). Kills + emits a death burst when health reaches zero. */
+ *  hit-stop). Kills + emits a death burst when health reaches zero. Returns true if
+ *  the hit LANDED (damage/force applied), false if a boss BLOCKED it on the armored
+ *  side — the caller (meleeAttack) uses this as the "weak-side hit" signal for the
+ *  gimmick-#3 interrupt. */
 export function damageEnemy(
   enemy: Enemy,
   amount: number,
@@ -46,14 +49,16 @@ export function damageEnemy(
   kbDirY: number,
   kbForce: number,
   state: GameState,
-): void {
+): boolean {
   // GIMMICK #1 (Phase 8): a boss only takes damage from its VULNERABLE side. A
   // hit from the armored side is BLOCKED — no health loss (blockedDamageMult 0),
   // no knockback, no hit-stop; it flashes the SHIELD tell instead. kbDir is the
   // attacker -> enemy direction, so boss -> attacker is its negation; the hit is
   // vulnerable when that lies within half the weak arc. Inlined (not imported
   // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
-  if (enemy.type === 'boss' && state.boss) {
+  // GIMMICK #3: while staggerTimer > 0 the shield is DOWN — skip this block so a
+  // successful interrupt lets hits land from ANY angle (the free-hit reward).
+  if (enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
     const len = Math.hypot(kbDirX, kbDirY) || 1;
     const dot =
       (-kbDirX / len) * Math.cos(state.boss.vulnerableAngle) +
@@ -66,7 +71,7 @@ export function damageEnemy(
         enemy.active = false;
         spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
       }
-      return;
+      return false; // BLOCKED — armored side (not a weak-side hit)
     }
   }
   enemy.health -= amount;
@@ -83,6 +88,7 @@ export function damageEnemy(
     enemy.active = false;
     spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
   }
+  return true; // LANDED (for a boss: a weak-side hit — the interrupt signal source)
 }
 
 /** Apply a knockback impulse ONLY — no damage, death, hit-stop or particles. Used
@@ -171,7 +177,16 @@ export function meleeAttack(state: GameState, aimX: number, aimY: number): void 
     // In the swing if within reach AND inside the arc (the damage zone).
     const inArc = d <= reachBase + er && ux * aimX + uy * aimY >= arcCos;
     if (inArc) {
-      damageEnemy(e, damage, ux, uy, kbForce, state); // damage + force
+      const landed = damageEnemy(e, damage, ux, uy, kbForce, state); // damage + force
+      // GIMMICK #3 INTERRUPT: a weak-side (landed) knockback-track hit on the boss
+      // signals updateBoss to CANCEL an interruptible telegraph. `landed` ⇒ the hit
+      // connected on the vulnerable side (the armored side returns false), so
+      // positioning is implicit. Gated on the knockback POWERUP (kbLevel >= 1) — base
+      // melee always carries force[0], so "has force" can't be the gate. Dash-strike
+      // routes through damageEnemy but never sets this (knockback-track exclusive).
+      if (landed && e.type === 'boss' && kbLevel >= 1 && state.boss) {
+        state.boss.interruptHit = true;
+      }
     } else if (aoe && d <= KNOCKBACK_LEVELS.aoeRadius + er) {
       applyKnockback(e, ux, uy, kbForce); // AoE: force only, no damage
     } else {
