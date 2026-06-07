@@ -31,6 +31,38 @@ if (!app) throw new Error('#app container not found');
 
 // --- State (pure) ---------------------------------------------------------
 const game = createGameState();
+
+// E2E / screenshot SEAM (entry-layer only — src/game/ stays pure). Deterministic
+// boot scenes from URL params so Playwright (L2) can baseline stable frames:
+//   ?seed=<n>     regenerate floor 1 from that seed (the sim already takes a seed;
+//                 we just pass the URL one — same as startNewRun does on restart).
+//   ?scene=boss   position the player on the boss room's body floor so the first
+//                 sim step activates it + spawns the boss (a stable boss baseline).
+//   ?still=1      freeze on the first painted frame (halt the rAF loop) so an
+//                 always-animating WebGL canvas yields a deterministic screenshot.
+// Reads/writes only `game` at boot (the orchestration layer already owns seed +
+// restart setup); no renderer mutates state in the loop.
+const bootParams = new URLSearchParams(window.location.search);
+const seedParam = bootParams.get('seed');
+if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0);
+if (bootParams.get('scene') === 'boss') {
+  const rect = game.rooms[game.bossRoom]?.rect;
+  if (rect) {
+    const room = game.room;
+    let placed = false;
+    for (let ty = rect.y; ty < rect.y + rect.h && !placed; ty++) {
+      for (let tx = rect.x; tx < rect.x + rect.w && !placed; tx++) {
+        if (room.corridor?.[ty * room.tilesX + tx]) continue; // body floor, not a corridor strip
+        game.player.x = (tx + 0.5) * room.tileSize;
+        game.player.y = (ty + 0.5) * room.tileSize;
+        placed = true;
+      }
+    }
+  }
+}
+const stillMode = bootParams.get('still') === '1';
+let firstFramePainted = false;
+
 const settings: Settings = loadSettings();
 
 // --- Adapters & rendering (impure; read state) ----------------------------
@@ -237,6 +269,15 @@ function frame(nowMs: number): void {
   hud.update(game, fps, steps, alpha, controls.intent, scene, controls);
   summary.update(game);
   if (debug) logEncounters();
+
+  // E2E readiness: flag the first painted frame so Playwright can wait on a
+  // deterministic state instead of a sleep. In ?still mode, halt here (one frame
+  // painted) so the WebGL canvas is frozen for a stable screenshot baseline.
+  if (!firstFramePainted) {
+    firstFramePainted = true;
+    document.body.dataset.ready = '1';
+    if (stillMode) return; // freeze on frame 1 — do not schedule the next frame
+  }
 
   requestAnimationFrame(frame);
 }
