@@ -38,8 +38,26 @@ function arena(): GameState {
   return s;
 }
 
-/** The kind-pick fraction that lands on POWERUP_KINDS index k (7 kinds). */
-const pickFor = (k: number) => (k + 0.5) / 7;
+/** The kind-pick fraction that lands on POWERUP_KINDS index k under the WEIGHTED
+ *  roll (synergy arc): stat-tracks (indices 0..6) weight DROP.trackWeight, the
+ *  effect axis 'lifesteal' (index 7) weight DROP.effectWeight. Mirrors rollDrop's
+ *  cumulative-weight walk; returns the midpoint fraction of index k's band. */
+const KIND_WEIGHTS = [
+  DROP.trackWeight, // melee
+  DROP.trackWeight, // ranged
+  DROP.trackWeight, // pierce
+  DROP.trackWeight, // knockback
+  DROP.trackWeight, // extraCharge
+  DROP.trackWeight, // fasterRecharge
+  DROP.trackWeight, // dashStrike
+  DROP.effectWeight, // lifesteal (the first uncommon effect axis)
+];
+const WEIGHT_TOTAL = KIND_WEIGHTS.reduce((a, b) => a + b, 0);
+const pickFor = (k: number): number => {
+  let cum = 0;
+  for (let i = 0; i < k; i++) cum += KIND_WEIGHTS[i];
+  return (cum + KIND_WEIGHTS[k] / 2) / WEIGHT_TOTAL;
+};
 
 describe('rollDrop stays pure (rng-only, unchanged)', () => {
   it('same rng sequence => same result, no player state involved', () => {

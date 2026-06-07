@@ -79,6 +79,9 @@ export const PALETTE = {
   // melee orange. Health keeps its own green (it isn't a verb).
   /** Health pickup (green = restore). */
   pickupHealth: 0x44ff88,
+  /** LIFESTEAL pickup/effect colour (synergy arc) — blood crimson; mirrors
+   *  CSS_PALETTE.lifesteal for the world drop glyph. */
+  lifesteal: 0xff4060,
   /** Locked-door barrier (accent red so "sealed, clear the room" reads). */
   barrier: 0xff3366,
   /** Descent stairs / floor EXIT — bright violet. A hue unused by any verb
@@ -103,6 +106,10 @@ export const CSS_PALETTE = {
    *  e.g. the active-powerup chips: knockback orange, pierce blue. */
   melee: '#ff7a1a',
   projectile: '#4488ff',
+  /** EFFECT-axis chip colour (synergy arc) — blood crimson for LIFESTEAL, a new hue
+   *  distinct from the orange/blue stat-tracks so on-hit EFFECTS read as their own
+   *  (uncommon) tier. Burn/chain/crit will get their own effect hues. */
+  lifesteal: '#ff4060',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -393,6 +400,22 @@ export const DASH_STRIKE = {
   radius: 0.7,
   /** Knockback impulse along the dash direction, world units/sec. */
   knockback: 8,
+} as const;
+
+/** SYNERGY ARC — PR1 LIFESTEAL (the first on-hit EFFECT axis). Heal a fraction of
+ *  DIRECT-hit damage dealt. Hooks the shared damageEnemy choke point, so it
+ *  auto-multiplies with melee-dmg / multishot (N hits) / pierce (N hits) /
+ *  dash-strike for free (the emergent-synergy spine — no combo code). Leveled like
+ *  the stat tracks. Bounds (decision E): DoT/tick damage is EXCLUDED (PR2 burn ticks
+ *  pass isDirect=false), and each hit's heal is capped (so a future crit×lifesteal
+ *  spike can't full-heal off one hit). All by-feel — tune on replay. */
+export const LIFESTEAL_LEVELS = {
+  /** Heal fraction of damage dealt, per level (0 = none). Modest = sustain, not
+   *  invincibility: I 4%, II 7%, III 10%. */
+  frac: [0, 0.04, 0.07, 0.1],
+  /** Hard cap on HP healed from a SINGLE hit — bounds the crit×lifesteal /
+   *  big-amount spike so lifesteal stays sustain, never a panic full-heal. */
+  maxPerHit: 12,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */
@@ -742,6 +765,16 @@ export const DROP = {
    *  repeat is rejected too. A reject = no spawn (post-roll filter beside the
    *  health suppression). Replaces the decay idea; by-feel. */
   powerupAcceptByLevel: [1.0, 0.6, 0.3, 0.0],
+  /** SYNERGY ARC — drop WEIGHTING (decision D). The powerup roll is no longer
+   *  uniform: each kind is picked in proportion to its weight. Stat-tracks (melee,
+   *  ranged, pierce, knockback, extraCharge, fasterRecharge, dashStrike) use
+   *  trackWeight; on-hit EFFECT axes (lifesteal, + future burn/chain/crit) use the
+   *  smaller effectWeight, so effects are UNCOMMON / build-defining rather than
+   *  common stat top-ups. ORTHOGONAL to powerupAcceptByLevel: weight = how often a
+   *  KIND is picked; acceptance = whether a top-up at the current level spawns.
+   *  By-feel — re-tune as more effects join the pool. */
+  trackWeight: 1,
+  effectWeight: 0.4,
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much

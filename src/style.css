@@ -269,6 +269,14 @@ body {
   background: currentColor;
 }
 
+/* LIFESTEAL (synergy arc): a heart — heal-on-hit / vampiric sustain. */
+.hud-chip.is-lifesteal::before {
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  clip-path: polygon(50% 100%, 0 35%, 25% 0, 50% 25%, 75% 0, 100% 35%);
+}
+
 /* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
    read: small dots after the label, lit at the chip's --chip-color. */
 .hud-chip-pips {

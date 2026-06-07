@@ -129,6 +129,21 @@ function drawCross(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.fillRect(m, s / 2 - t / 2, s - 2 * m, t); // horizontal
 }
 
+/** LIFESTEAL (synergy arc): a heart — two top lobes + a point (heal-on-hit). */
+function drawHeart(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const m = s * 0.18;
+  const w = s - 2 * m;
+  const top = m + w * 0.3; // y of the lobe centres
+  const r = w * 0.25; // lobe radius
+  g.fillStyle = color;
+  g.beginPath();
+  g.arc(m + r, top, r, Math.PI, 0); // left lobe
+  g.arc(s - m - r, top, r, Math.PI, 0); // right lobe
+  g.lineTo(s / 2, s - m); // down to the point
+  g.closePath();
+  g.fill();
+}
+
 /** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
  *  Long shaft + head reads as penetration, distinct from the burst silhouette. */
 function drawArrow(g: CanvasRenderingContext2D, s: number, color: string): void {
@@ -277,6 +292,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   extraCharge: PALETTE.dash,
   fasterRecharge: PALETTE.dash,
   dashStrike: PALETTE.dash,
+  lifesteal: PALETTE.lifesteal,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -287,6 +303,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   extraCharge: drawDoubleChevron,
   fasterRecharge: drawRecharge,
   dashStrike: drawBladeDash,
+  lifesteal: drawHeart,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -297,6 +314,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   extraCharge: 'EXTRA DASH',
   fasterRecharge: 'FAST DASH',
   dashStrike: 'DASH STRIKE',
+  lifesteal: 'LIFESTEAL',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -307,6 +325,7 @@ const DROP_KINDS: PickupKind[] = [
   'extraCharge',
   'fasterRecharge',
   'dashStrike',
+  'lifesteal',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
