@@ -64,6 +64,10 @@ export const PALETTE = {
   /** CHAIN arc bolt (synergy arc PR3) — electric blue-white: a lightning arc between
    *  chained enemies, distinct from the warm enemy/burn tones and the player teal. */
   chainArc: 0x9fe8ff,
+  /** CRIT (synergy arc PR4) — bright gold: the crit chip + world drop. A "jackpot"
+   *  hue distinct from every other effect (lifesteal crimson, burn ember, chain
+   *  blue) and the verb tracks. */
+  crit: 0xffd23f,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -123,6 +127,8 @@ export const CSS_PALETTE = {
   /** CHAIN effect-axis chip colour (synergy arc PR3) — electric blue-white (mirrors
    *  PALETTE.chainArc). */
   chain: '#9fe8ff',
+  /** CRIT effect-axis chip colour (synergy arc PR4) — bright gold (mirrors PALETTE.crit). */
+  crit: '#ffd23f',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -466,6 +472,31 @@ export const CHAIN_LEVELS = {
   /** Damage multiplier applied per jump (compounds): jump 1 = base×falloff, jump 2 =
    *  base×falloff², ... So chain is SPREAD/utility, not a single-target nuke. */
   falloff: 0.6,
+} as const;
+
+/** SYNERGY ARC — PR4 CRIT (the FINALE; the "multiplier glue"). A direct hit has a
+ *  per-level CHANCE to deal ×multiplier damage. Rolls inside damageEnemy on the
+ *  'direct' hit-kind (a seeded combatRng draw), multiplying the damage BEFORE
+ *  lifesteal + chain read it — so a crit spikes the heal AND the whole wildfire base
+ *  FREE (arcs falloff from the bigger base; no per-arc rolls). The burn DoT is
+ *  deliberately NOT pumped (it keys off level, preserving its spread-not-burst
+ *  identity + bounding the compound). CHANCE scales by level; the MULTIPLIER is fixed
+ *  (a growing multiplier would compound with everything → degenerate). By-feel. */
+export const CRIT_LEVELS = {
+  /** Crit CHANCE per level (0 = never): I 10% / II 20% / III 30%. */
+  chance: [0, 0.1, 0.2, 0.3],
+  /** Fixed damage multiplier on a crit. At max that's +30% average direct damage,
+   *  spiking to ×2 on the crit itself — a burst that uses the wildfire headroom
+   *  without trivializing (grants no i-frames/CC; the dodge core survives). */
+  multiplier: 2,
+} as const;
+
+/** SYNERGY ARC — PR4 CRIT feel (render-fed-by-sim, like the base hit-stop). A crit
+ *  gets a STRONGER, longer freeze than a normal hit (TUNING.hitstop 0.05) — the
+ *  time-dilation "crunch" is the cheapest, strongest crit feel. */
+export const CRIT = {
+  /** Hit-stop on a crit, seconds (> TUNING.hitstop). */
+  hitstop: 0.09,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */
@@ -942,6 +973,9 @@ export const PARTICLE = {
   drag: 0.9,
   /** Particles emitted per enemy hit. */
   hitCount: 7,
+  /** Particles emitted on a CRIT hit (synergy arc PR4) — a bigger burst (≈2× the
+   *  normal hit) so a crit READS as a crit, not just more damage. */
+  critCount: 16,
   /** Particles emitted on enemy death. */
   deathCount: 16,
   /** "Whiff" sparks emitted when a dash dodges a hit (the dodge burst). */

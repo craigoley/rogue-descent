@@ -177,6 +177,26 @@ function drawChain(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.stroke();
 }
 
+/** CRIT (synergy arc finale): a 4-point sparkle star — the "jackpot" crit hit. */
+function drawStar(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const cx = s / 2;
+  const cy = s / 2;
+  const o = s * 0.42; // outer radius
+  const i = s * 0.15; // inner waist
+  g.fillStyle = color;
+  g.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const ang = (k / 8) * Math.PI * 2 - Math.PI / 2;
+    const r = k % 2 === 0 ? o : i;
+    const x = cx + Math.cos(ang) * r;
+    const y = cy + Math.sin(ang) * r;
+    if (k === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+  g.closePath();
+  g.fill();
+}
+
 /** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
  *  Long shaft + head reads as penetration, distinct from the burst silhouette. */
 function drawArrow(g: CanvasRenderingContext2D, s: number, color: string): void {
@@ -328,6 +348,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   lifesteal: PALETTE.lifesteal,
   burn: PALETTE.enemyBurning,
   chain: PALETTE.chainArc,
+  crit: PALETTE.crit,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -341,6 +362,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   lifesteal: drawHeart,
   burn: drawFlame,
   chain: drawChain,
+  crit: drawStar,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -354,6 +376,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   lifesteal: 'LIFESTEAL',
   burn: 'BURN',
   chain: 'CHAIN',
+  crit: 'CRIT',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -367,6 +390,7 @@ const DROP_KINDS: PickupKind[] = [
   'lifesteal',
   'burn',
   'chain',
+  'crit',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */

@@ -293,6 +293,14 @@ body {
   clip-path: polygon(55% 0, 20% 55%, 45% 55%, 35% 100%, 80% 40%, 50% 40%);
 }
 
+/* CRIT (synergy arc finale): a 4-point sparkle star — the multiplier crit. */
+.hud-chip.is-crit::before {
+  width: 10px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+}
+
 /* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
    read: small dots after the label, lit at the chip's --chip-color. */
 .hud-chip-pips {

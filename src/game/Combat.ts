@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, BURN_LEVELS, CHAIN_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { spawnChainArc } from './ChainArc';
 import { isoRotate, type InputIntent } from './Input';
@@ -99,7 +99,22 @@ export function damageEnemy(
       return false; // BLOCKED — armored side (not a weak-side hit)
     }
   }
-  enemy.health -= amount;
+  // SYNERGY ARC PR4 — CRIT (the multiplier glue): a DIRECT hit has a per-level chance
+  // to deal ×multiplier. Rolled HERE (after the armor return, before health is dealt)
+  // so the boosted `dmg` flows into the health subtraction AND lifesteal + chainFrom
+  // below — a crit spikes the heal and the whole wildfire base for free. A seeded
+  // combatRng draw, ONLY when critLevel > 0 (so default runs / existing tests never
+  // draw → byte-identical) and ONLY for 'direct' (arcs + ticks never crit). The
+  // combatRng stream is independent of dropRng, so drop sequences are untouched.
+  let dmg = amount;
+  let crit = false;
+  if (kind === 'direct' && state.player.critLevel > 0) {
+    if (state.combatRng.next() < CRIT_LEVELS.chance[state.player.critLevel]) {
+      crit = true;
+      dmg = amount * CRIT_LEVELS.multiplier;
+    }
+  }
+  enemy.health -= dmg;
   // Hit feedback + on-hit EFFECTS. Gated by hit KIND (see HitKind): a burn 'tick'
   // gets NONE of this (it would white-flash over the burn tint, spam particles, and
   // micro-freeze via hit-stop every frame) — only direct + chain hits flash, ignite,
@@ -112,16 +127,19 @@ export function damageEnemy(
     const kb = kbForce * ENEMY_TYPES[enemy.type].knockbackMult;
     enemy.kbVx += kbDirX * kb;
     enemy.kbVy += kbDirY * kb;
-    spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
-    // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
-    if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;
-    // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt. DIRECT hits ONLY —
-    // a chain arc must NOT lifesteal per-jump (bound E: no degenerate sustain). One
-    // hook = auto-multiplies with melee / multishot / pierce / dash-strike.
-    if (kind === 'direct' && amount > 0) {
+    // CRIT tell (synergy arc PR4): a bigger spark burst + a stronger/longer hit-stop
+    // (the time-dilation "crunch") so a crit READS as a crit, not just more damage.
+    // Render-fed-by-sim, like the base feedback. Falls back to the normal hit feel.
+    spawnParticles(state.particles, enemy.x, enemy.y, crit ? PARTICLE.critCount : PARTICLE.hitCount);
+    const stop = crit ? CRIT.hitstop : TUNING.hitstop;
+    if (stop > state.hitstopTimer) state.hitstopTimer = stop;
+    // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt (the crit-boosted
+    // `dmg` → a crit heals bigger, free). DIRECT hits ONLY — a chain arc must NOT
+    // lifesteal per-jump (bound E). Auto-multiplies with melee/multishot/pierce/dash.
+    if (kind === 'direct' && dmg > 0) {
       const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
       if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
-        const heal = Math.min(amount * frac, LIFESTEAL_LEVELS.maxPerHit);
+        const heal = Math.min(dmg * frac, LIFESTEAL_LEVELS.maxPerHit);
         state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
       }
     }
@@ -136,7 +154,7 @@ export function damageEnemy(
     // 'direct' (a 'chain' arc can never re-trigger → the no-cascade bound is enforced
     // by the type). One hook here = melee / ranged / dash-strike all chain for free.
     if (kind === 'direct' && state.player.chainLevel > 0) {
-      chainFrom(state, enemy, amount, state.player.chainLevel);
+      chainFrom(state, enemy, dmg, state.player.chainLevel); // crit-boosted base → bigger wildfire
     }
   }
   if (enemy.health <= 0) {

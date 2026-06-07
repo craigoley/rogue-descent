@@ -104,6 +104,12 @@ export interface PlayerState {
    *  wildfire. Auto-multiplies with multishot/pierce/dash-strike via damageEnemy.
    *  Reset to 0 on death; carried across descent. */
   chainLevel: number;
+  /** CRIT powerup LEVEL (0..3, within-run; synergy arc PR4 — the FINALE multiplier).
+   *  0 = never crits; each level raises the crit CHANCE (CRIT_LEVELS.chance) for a
+   *  fixed ×multiplier hit. Rolled in damageEnemy on a direct hit (seeded combatRng)
+   *  BEFORE lifesteal/chain read the damage → a crit spikes both + the wildfire base
+   *  free. Reset to 0 on death; carried across descent. */
+  critLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -147,6 +153,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     lifestealLevel: 0,
     burnLevel: 0,
     chainLevel: 0,
+    critLevel: 0,
     dashHits: new Set<number>(),
   };
 }
