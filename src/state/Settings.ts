@@ -12,10 +12,14 @@ const STORAGE_KEY = 'rogue-descent:settings';
 export interface Settings {
   /** Master audio toggle. */
   muted: boolean;
+  /** Accessibility: reduce motion — zeroes camera shake and softens the damage
+   *  vignette (kept, as combat info). main.ts/render apply it; the sim is unaware. */
+  reduceMotion: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   muted: false,
+  reduceMotion: false,
 };
 
 export function loadSettings(): Settings {

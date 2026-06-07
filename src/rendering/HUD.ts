@@ -97,6 +97,10 @@ export class HUD {
   /** Full-screen damage vignette (juice): red edge-glow, opacity driven each frame
    *  from player.hitFlashTimer — the "I got hit" signal. Render-only. */
   private readonly damageVignette: HTMLDivElement;
+  /** Accessibility reduce-motion (set by main.ts from Settings). When on, the vignette
+   *  uses the softened peak (VIGNETTE.reducedOpacity) — it stays present as combat info,
+   *  while camera shake (handled in main.ts) goes to 0. Render-side only. */
+  private reduceMotion = false;
   // Boss HP bar (Phase 8): top-centre, shown only while a boss lives.
   private readonly bossWrap: HTMLDivElement;
   private readonly bossFill: HTMLDivElement;
@@ -472,6 +476,13 @@ export class HUD {
     this.softlockBannerEl.classList.add('is-visible');
   }
 
+  /** Accessibility reduce-motion toggle (driven by main.ts from Settings). Softens the
+   *  damage vignette to VIGNETTE.reducedOpacity (kept, as combat info) — shake zeroing is
+   *  handled separately in main.ts's render loop. */
+  setReduceMotion(on: boolean): void {
+    this.reduceMotion = on;
+  }
+
   /**
    * Refresh the live readout + the full input→screen TRACE. No-op when debug
    * off. The trace shows every stage of the transform for the CURRENT input so
@@ -500,7 +511,8 @@ export class HUD {
     // Damage vignette (juice): pulse the red edge-glow from the SAME timer the
     // cube-flash uses (player.hitFlashTimer, set by the sim on damage), so they
     // fade in lockstep. Ratio 1 at the instant of a hit -> 0 when the timer expires.
-    const dmg = p.hitFlashTimer > 0 ? (p.hitFlashTimer / PLAYER_COMBAT.hitFlash) * VIGNETTE.peakOpacity : 0;
+    const vignettePeak = this.reduceMotion ? VIGNETTE.reducedOpacity : VIGNETTE.peakOpacity;
+    const dmg = p.hitFlashTimer > 0 ? (p.hitFlashTimer / PLAYER_COMBAT.hitFlash) * vignettePeak : 0;
     this.damageVignette.style.opacity = dmg.toFixed(3);
 
     // Combat HUD (always): health fraction + dash charge pips.

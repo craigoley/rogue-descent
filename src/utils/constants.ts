@@ -362,6 +362,9 @@ export const PLAYER_COMBAT = {
 export const VIGNETTE = {
   /** Opacity at the instant of a hit (fades to 0 with hitFlashTimer). By-feel. */
   peakOpacity: 0.35,
+  /** Reduce-motion peak: the vignette is INFORMATION ("you got hit"), not motion, so
+   *  accessibility softens it but KEEPS it (vs camera shake, which goes to 0). By-feel. */
+  reducedOpacity: 0.15,
 } as const;
 
 /** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */

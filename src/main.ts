@@ -143,6 +143,27 @@ window.addEventListener('keydown', (e) => {
   toggleMute();
 });
 
+// Reduce-motion accessibility toggle: touch/click button mirroring the mute button.
+// ON => zero camera shake (applied in the render loop below) + soften the damage
+// vignette (the HUD keeps it as combat info). Render/settings only; the sim is unaware.
+const motionBtn = document.createElement('button');
+motionBtn.className = `hud-motion${settings.reduceMotion ? ' is-reduced' : ''}`;
+motionBtn.textContent = settings.reduceMotion ? 'MOTION OFF' : 'MOTION ON';
+app.appendChild(motionBtn);
+hud.setReduceMotion(settings.reduceMotion); // apply the persisted setting at startup
+
+const toggleReduceMotion = (): void => {
+  settings.reduceMotion = !settings.reduceMotion;
+  hud.setReduceMotion(settings.reduceMotion);
+  motionBtn.textContent = settings.reduceMotion ? 'MOTION OFF' : 'MOTION ON';
+  motionBtn.classList.toggle('is-reduced', settings.reduceMotion);
+  saveSettings(settings);
+};
+motionBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  toggleReduceMotion();
+});
+
 // Phase 5 funnel telemetry (?debug only): log room lifecycle + drop transitions.
 const debug = isDebugEnabled();
 const prevPhase: string[] = [];
@@ -260,7 +281,12 @@ function frame(nowMs: number): void {
   }
 
   // Render the interpolated state. Renderers read prev+current; never mutate.
-  const shake = game.shakeTimer > 0 ? (game.shakeTimer / SHAKE.duration) * TUNING.shake : 0;
+  // Reduce-motion zeroes camera shake (the motion/nausea source); the sim still
+  // sets shakeTimer as always — only the render interpretation changes.
+  const shake =
+    settings.reduceMotion || game.shakeTimer <= 0
+      ? 0
+      : (game.shakeTimer / SHAKE.duration) * TUNING.shake;
   scene.setShake(shake);
   entities.sync(game, alpha, controls.intent);
   audioMgr.sync(game); // diff state -> play combat SFX (side-effect only)
