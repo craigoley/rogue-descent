@@ -144,6 +144,19 @@ function drawHeart(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.fill();
 }
 
+/** BURN (synergy arc): a flame — a teardrop tip over a rounded base (DoT/on fire). */
+function drawFlame(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const m = s * 0.2;
+  const cx = s / 2;
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(cx, m); // top tip
+  g.quadraticCurveTo(s - m, s * 0.5, cx, s - m); // right side down to the base
+  g.quadraticCurveTo(m, s * 0.5, cx, m); // left side back to the tip
+  g.closePath();
+  g.fill();
+}
+
 /** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
  *  Long shaft + head reads as penetration, distinct from the burst silhouette. */
 function drawArrow(g: CanvasRenderingContext2D, s: number, color: string): void {
@@ -293,6 +306,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   fasterRecharge: PALETTE.dash,
   dashStrike: PALETTE.dash,
   lifesteal: PALETTE.lifesteal,
+  burn: PALETTE.enemyBurning,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -304,6 +318,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   fasterRecharge: drawRecharge,
   dashStrike: drawBladeDash,
   lifesteal: drawHeart,
+  burn: drawFlame,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -315,6 +330,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   fasterRecharge: 'FAST DASH',
   dashStrike: 'DASH STRIKE',
   lifesteal: 'LIFESTEAL',
+  burn: 'BURN',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -326,6 +342,7 @@ const DROP_KINDS: PickupKind[] = [
   'fasterRecharge',
   'dashStrike',
   'lifesteal',
+  'burn',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
@@ -886,8 +903,8 @@ export class EntityRenderer {
       if (dx * dx + dy * dy > 1e-6) fig.group.rotation.y = Math.atan2(-dy, dx);
 
       const mat = fig.bodyMat;
-      // Recolour priority: hit-flash > STUN > telegraph > resting. Sway is reset
-      // here and only re-applied by the stun branch (so a recovered enemy stops).
+      // Recolour priority: hit-flash > STUN > BURN > telegraph > resting. Sway is
+      // reset here and only re-applied by the stun branch (so a recovered enemy stops).
       fig.inner.rotation.z = 0;
       if (e.flashTimer > 0) {
         mat.color.setHex(PALETTE.hitFlash);
@@ -900,6 +917,12 @@ export class EntityRenderer {
         mat.emissiveIntensity = VFX.enemyEmissive;
         fig.group.scale.setScalar(1);
         fig.inner.rotation.z = Math.sin(now * VFX.stunSwayRate) * VFX.stunSwayAmp;
+      } else if (e.burnTimer > 0) {
+        // BURNING (synergy arc PR2): ember-orange DoT glow so "it's on fire" reads.
+        // Below stun (a stunned-and-burning enemy shows the CC) but above telegraph.
+        mat.color.setHex(PALETTE.enemyBurning);
+        mat.emissiveIntensity = VFX.invulnEmissive; // hotter glow than the resting tint
+        fig.group.scale.setScalar(1);
       } else if (e.phase === 'telegraph') {
         // Wind-up tell (shared across types): warning colour + grow toward the
         // strike. Scale uses the type's own telegraph duration.

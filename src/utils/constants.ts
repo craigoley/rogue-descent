@@ -57,6 +57,10 @@ export const PALETTE = {
    *  at a glance. Distinct from the white hit-flash, amber telegraph, and steel
    *  boss-shield. */
   enemyStunned: 0x6f8aa6,
+  /** BURNING enemy tint (synergy arc PR2) — ember orange: a hot DoT glow distinct
+   *  from the stun grey-blue, telegraph amber, and the enemy-threat reds, so "it's
+   *  on fire" reads at a glance. Hotter/brighter than the boss-add ember. */
+  enemyBurning: 0xff6620,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -110,6 +114,9 @@ export const CSS_PALETTE = {
    *  distinct from the orange/blue stat-tracks so on-hit EFFECTS read as their own
    *  (uncommon) tier. Burn/chain/crit will get their own effect hues. */
   lifesteal: '#ff4060',
+  /** BURN effect-axis chip colour (synergy arc PR2) — ember orange (mirrors
+   *  PALETTE.enemyBurning). */
+  burn: '#ff6620',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -416,6 +423,24 @@ export const LIFESTEAL_LEVELS = {
   /** Hard cap on HP healed from a SINGLE hit — bounds the crit×lifesteal /
    *  big-amount spike so lifesteal stays sustain, never a panic full-heal. */
   maxPerHit: 12,
+} as const;
+
+/** SYNERGY ARC — PR2 BURN (the marquee DoT effect axis). A DIRECT hit IGNITES the
+ *  enemy; burn then TICKS damage over time through the SAME damageEnemy choke point
+ *  with isDirect=false, so it (a) never lifesteals (#66 guard), (b) never re-ignites
+ *  itself, (c) never knocks back, and (d) hits the normal death / kill / drop path.
+ *  One apply hook in damageEnemy → auto-multiplies with multishot (N ignitions) /
+ *  pierce (ignite the line) / dash-strike. REFRESH-not-stack: re-igniting resets the
+ *  duration + sets dps-by-level (overwrite) — no infinite scaling. All by-feel. */
+export const BURN_LEVELS = {
+  /** Burn damage-per-second, per level (0 = none). Continuous (dps × dt per tick).
+   *  Modest: over `duration` a maxed burn ≈ one chaser's HP — strong but not an
+   *  instant delete; the SPREAD (many enemies lit) is the payoff, not single-target
+   *  burst (refresh caps single-target dps at the flat rate). I 6 / II 9 / III 12. */
+  dps: [0, 6, 9, 12],
+  /** How long one ignition burns, seconds (RESET on re-hit, never extended past
+   *  this). Long enough to matter while kiting, short enough to need re-applying. */
+  duration: 2.5,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */

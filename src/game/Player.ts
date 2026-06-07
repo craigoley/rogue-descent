@@ -92,6 +92,12 @@ export interface PlayerState {
    *  via the shared damageEnemy hook. DoT (PR2 burn) is excluded. Reset to 0 on
    *  death via createPlayer; carried across descent. */
   lifestealLevel: number;
+  /** BURN powerup LEVEL (0..3, within-run; synergy arc PR2 — the DoT effect axis).
+   *  0 = none; a direct hit IGNITES the enemy for BURN_LEVELS.dps[level] over
+   *  BURN_LEVELS.duration (refresh-not-stack). Auto-multiplies with multishot/pierce/
+   *  dash-strike via the shared damageEnemy hook. Reset to 0 on death; carried across
+   *  descent. */
+  burnLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -133,6 +139,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     fasterRecharge: false,
     dashStrike: false,
     lifestealLevel: 0,
+    burnLevel: 0,
     dashHits: new Set<number>(),
   };
 }
