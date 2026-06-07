@@ -21,10 +21,14 @@
 
 import {
   BoxGeometry,
+  BufferGeometry,
   CanvasTexture,
   CircleGeometry,
   CylinderGeometry,
+  Float32BufferAttribute,
   Group,
+  Line,
+  LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -41,6 +45,7 @@ import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
   BOSS_VFX,
+  CHAIN_ARC,
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
@@ -155,6 +160,21 @@ function drawFlame(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.quadraticCurveTo(m, s * 0.5, cx, m); // left side back to the tip
   g.closePath();
   g.fill();
+}
+
+/** CHAIN (synergy arc): a lightning bolt — a zig-zag stroke (arc-to-nearby). */
+function drawChain(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const m = s * 0.2;
+  g.strokeStyle = color;
+  g.lineWidth = Math.max(1, s * 0.12);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(s * 0.62, m);
+  g.lineTo(s * 0.4, s * 0.5);
+  g.lineTo(s * 0.58, s * 0.5);
+  g.lineTo(s * 0.36, s - m);
+  g.stroke();
 }
 
 /** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
@@ -307,6 +327,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   dashStrike: PALETTE.dash,
   lifesteal: PALETTE.lifesteal,
   burn: PALETTE.enemyBurning,
+  chain: PALETTE.chainArc,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -319,6 +340,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   dashStrike: drawBladeDash,
   lifesteal: drawHeart,
   burn: drawFlame,
+  chain: drawChain,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -331,6 +353,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   dashStrike: 'DASH STRIKE',
   lifesteal: 'LIFESTEAL',
   burn: 'BURN',
+  chain: 'CHAIN',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -343,6 +366,7 @@ const DROP_KINDS: PickupKind[] = [
   'dashStrike',
   'lifesteal',
   'burn',
+  'chain',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
@@ -401,6 +425,9 @@ export class EntityRenderer {
   /** Ranged-enemy bolts (scarlet spheres) — own pool, distinct from player shots. */
   private readonly enemyProjectiles: Mesh[] = [];
   private readonly particles: Mesh[] = [];
+  /** Chain-arc bolts (synergy arc PR3) — pooled 2-point lines, one per ChainArc slot;
+   *  each has its own material so it can fade independently. */
+  private readonly chainArcs: Line[] = [];
   private readonly trail: Mesh[] = [];
   private readonly trailX: number[] = [];
   private readonly trailY: number[] = [];
@@ -492,6 +519,18 @@ export class EntityRenderer {
       m.visible = false;
       this.particles.push(m);
       scene.add(m);
+    }
+
+    // --- Chain-arc bolts (pooled lines; synergy arc PR3). Each is a 2-vertex line
+    // with its own transparent material so it fades by life/maxLife independently. ---
+    for (let i = 0; i < POOL.chainArcs; i++) {
+      const geo = new BufferGeometry();
+      geo.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3));
+      const mat = new LineBasicMaterial({ color: PALETTE.chainArc, transparent: true, opacity: 0 });
+      const line = new Line(geo, mat);
+      line.visible = false;
+      this.chainArcs.push(line);
+      scene.add(line);
     }
 
     // --- Melee swing (flat sector, oriented via a parent group) ---
@@ -746,6 +785,7 @@ export class EntityRenderer {
     this.syncProjectiles(state, alpha);
     this.syncEnemyProjectiles(state, alpha);
     this.syncParticles(state);
+    this.syncChainArcs(state);
     this.syncMelee(p, px, py, aim.x, aim.y);
     this.syncPickups(state, now);
     this.syncToasts(frameDt);
@@ -1051,6 +1091,27 @@ export class EntityRenderer {
       m.visible = true;
       m.position.set(pa.x, VFX.particleHeight, pa.y);
       m.scale.setScalar(Math.max(0.001, pa.life / pa.maxLife));
+    }
+  }
+
+  /** Draw the pooled chain-arc bolts (synergy arc PR3): a line between each chained
+   *  pair, fading by life/maxLife. Game (x, y) -> three (x, z) at CHAIN_ARC.height. */
+  private syncChainArcs(state: GameState): void {
+    const list = state.chainArcs;
+    for (let i = 0; i < this.chainArcs.length; i++) {
+      const a = list[i];
+      const line = this.chainArcs[i];
+      const mat = line.material as LineBasicMaterial;
+      if (!a.active) {
+        line.visible = false;
+        continue;
+      }
+      line.visible = true;
+      const pos = line.geometry.getAttribute('position') as Float32BufferAttribute;
+      pos.setXYZ(0, a.x1, CHAIN_ARC.height, a.y1);
+      pos.setXYZ(1, a.x2, CHAIN_ARC.height, a.y2);
+      pos.needsUpdate = true;
+      mat.opacity = Math.max(0, a.life / a.maxLife); // fade out over its lifetime
     }
   }
 

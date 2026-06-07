@@ -91,12 +91,12 @@ describe('Lifesteal — direct-hit heal (the damageEnemy hook)', () => {
     expect(s.player.health).toBe(50);
   });
 
-  it('BOUND: a DoT/TICK hit (isDirect=false) does NOT lifesteal — pre-guards PR2 burn', () => {
+  it("BOUND: a DoT/TICK hit (kind='tick') does NOT lifesteal — pre-guards PR2 burn", () => {
     const s = arena();
     s.player.lifestealLevel = 3; // max — would heal a lot if it fired
     s.player.health = 50;
     const e = enemyAt(s, s.player.x + 1, s.player.y);
-    damageEnemy(e, 100, 1, 0, 0, s, false); // tick damage
+    damageEnemy(e, 100, 1, 0, 0, s, 'tick'); // tick damage
     expect(s.player.health).toBe(50); // no heal from over-time damage
   });
 });

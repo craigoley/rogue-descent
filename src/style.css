@@ -285,6 +285,14 @@ body {
   clip-path: polygon(50% 0, 90% 55%, 75% 100%, 25% 100%, 10% 55%);
 }
 
+/* CHAIN (synergy arc): a lightning bolt — a zig-zag (arc-to-nearby). */
+.hud-chip.is-chain::before {
+  width: 8px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(55% 0, 20% 55%, 45% 55%, 35% 100%, 80% 40%, 50% 40%);
+}
+
 /* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
    read: small dots after the label, lit at the chip's --chip-color. */
 .hud-chip-pips {

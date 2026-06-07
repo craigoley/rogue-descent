@@ -98,6 +98,12 @@ export interface PlayerState {
    *  dash-strike via the shared damageEnemy hook. Reset to 0 on death; carried across
    *  descent. */
   burnLevel: number;
+  /** CHAIN powerup LEVEL (0..3, within-run; synergy arc PR3 — the arc effect axis).
+   *  0 = none; a direct hit ARCS to up to CHAIN_LEVELS.maxJumps[level] nearby enemies
+   *  (falloff damage, dedup, no re-chain). Arcs carry burn-ignite → chain×burn =
+   *  wildfire. Auto-multiplies with multishot/pierce/dash-strike via damageEnemy.
+   *  Reset to 0 on death; carried across descent. */
+  chainLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -140,6 +146,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     dashStrike: false,
     lifestealLevel: 0,
     burnLevel: 0,
+    chainLevel: 0,
     dashHits: new Set<number>(),
   };
 }

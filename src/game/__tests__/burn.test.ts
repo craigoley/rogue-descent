@@ -65,12 +65,12 @@ describe('Burn — apply on a direct hit', () => {
     expect(e.burnTimer).toBe(0);
   });
 
-  it('a TICK (isDirect=false) does NOT re-ignite itself (no infinite refresh)', () => {
+  it("a TICK (kind='tick') does NOT re-ignite itself (no infinite refresh)", () => {
     const s = arena();
     s.player.burnLevel = 3;
     const e = enemyAt(s, s.player.x + 1, s.player.y);
     e.burnTimer = 0.1; // mid-burn, about to expire
-    damageEnemy(e, 5, 0, 0, 0, s, false); // the tick path
+    damageEnemy(e, 5, 0, 0, 0, s, 'tick'); // the tick path
     expect(e.burnTimer).toBe(0.1); // unchanged — the tick didn't refresh it
   });
 });
