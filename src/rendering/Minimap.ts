@@ -132,6 +132,17 @@ export class Minimap {
       ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
     }
 
+    // Boss room (crimson) while the boss LIVES — wayfinding to the floor's climax,
+    // shown from floor start (the destination, not a spoiler). Once the boss dies
+    // the stairs pin to this same room (#50) and the violet stairs mark below takes
+    // over, so the room reads boss-red -> violet automatically (the two gates are
+    // mutually exclusive: !bossDefeated here vs stairs.active below).
+    if (!state.bossDefeated && state.bossRoom >= 0 && state.bossRoom < state.rooms.length) {
+      const r = state.rooms[state.bossRoom].rect;
+      ctx.fillStyle = MINIMAP.colors.bossRoom;
+      ctx.fillRect(this.originX + r.x * s, this.originY + r.y * s, r.w * s, r.h * s);
+    }
+
     // Stairs room (violet) once the floor is cleared — the "where do I go" mark,
     // drawn over the cleared tint so the exit stands out on the overview.
     const stairs = state.stairs;

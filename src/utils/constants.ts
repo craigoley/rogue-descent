@@ -1013,6 +1013,12 @@ export const MINIMAP = {
     activeRoom: 'rgba(255, 204, 51, 0.28)',
     /** Stairs room once active (violet — "the way down", matches PALETTE.stairs). */
     stairsRoom: 'rgba(180, 100, 255, 0.55)',
+    /** BOSS room while the boss LIVES (warm crimson — "the climax / destination",
+     *  boss-family). Distinct from the amber active tint + the transient accent-red
+     *  current-room highlight, and bolder so the destination reads persistent. Once
+     *  the boss dies the stairs pin here (#50) and stairsRoom takes over — an
+     *  automatic boss-red -> violet handoff (see Minimap.draw). */
+    bossRoom: 'rgba(200, 40, 55, 0.5)',
   },
 } as const;
 
