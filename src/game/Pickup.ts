@@ -1,10 +1,12 @@
 /**
- * Within-run drops: health (restore HP) + SEVEN powerups. Five are LEVELED tracks
- * (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III via Phase 9);
- * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE).
- * Powerups last the rest of the run (carried across descent) and reset on
- * death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning
- * never grows it.
+ * Within-run drops: health (restore HP) + EIGHT powerups. Five are LEVELED stat
+ * tracks (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III);
+ * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE); one is
+ * a leveled on-hit EFFECT axis (LIFESTEAL — synergy arc). Stat tracks are COMMON
+ * (DROP.trackWeight); effect axes are UNCOMMON (DROP.effectWeight) so they read as
+ * build-defining. Powerups last the rest of the run (carried across descent) and
+ * reset on death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups);
+ * spawning never grows it.
  *
  * NOT an item system: no inventory, no rarity, no stacking — rolled by a seeded
  * RNG, applied immediately on touch.
@@ -95,9 +97,10 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, or one of the seven powerups. Deterministic
+/** Seeded drop roll: nothing, health, or one of the eight powerups. Deterministic
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
- *  second (only consumed for a powerup) picks uniformly among POWERUP_KINDS. */
+ *  second (only consumed for a powerup) picks via a WEIGHTED cumulative walk
+ *  (stat-tracks common, effect axes uncommon). */
 export function rollDrop(rng: Rng): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
   if (rng.next() < DROP.healthShare) return 'health';
