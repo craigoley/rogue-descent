@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -64,7 +64,10 @@ export function damageEnemy(
   // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
   // GIMMICK #3: while staggerTimer > 0 the shield is DOWN — skip this block so a
   // successful interrupt lets hits land from ANY angle (the free-hit reward).
-  if (enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
+  // Burn ticks (isDirect=false) bypass the armor check: the ignition was already
+  // validated by a weak-side direct hit, and the zero kbDir would always read as
+  // "armored side" (dot=0 < cos(arc/2)), blocking every tick for zero damage.
+  if (isDirect && enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
     const len = Math.hypot(kbDirX, kbDirY) || 1;
     const dot =
       (-kbDirX / len) * Math.cos(state.boss.vulnerableAngle) +
@@ -81,25 +84,39 @@ export function damageEnemy(
     }
   }
   enemy.health -= amount;
-  enemy.flashTimer = ENEMY_COMMON.flash;
-  // Per-type mass: light enemies (swarmers) get launched farther by the same
-  // impulse (chaser/ranged mult = 1, so this is identity for them).
-  const kb = kbForce * ENEMY_TYPES[enemy.type].knockbackMult;
-  enemy.kbVx += kbDirX * kb;
-  enemy.kbVy += kbDirY * kb;
-  spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
-  // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
-  if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;
-  // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of DIRECT-hit damage dealt (DoT
-  // ticks pass isDirect=false and never heal). One hook here = it auto-multiplies
-  // with melee / multishot / pierce / dash-strike (every one routes through this
-  // call). Capped per hit (maxPerHit) + clamped to max HP — sustain, not a heal
-  // button. No-op at level 0, when already at max HP, or for non-direct ticks.
-  if (isDirect && amount > 0) {
-    const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
-    if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
-      const heal = Math.min(amount * frac, LIFESTEAL_LEVELS.maxPerHit);
-      state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
+  // DIRECT-hit feedback + on-hit effects (flash, knockback, sparks, hit-stop,
+  // lifesteal, burn-ignite). ALL gated on isDirect so a burn TICK (isDirect=false,
+  // every frame) does NOT: white-flash over the burn tint, spam hit particles,
+  // micro-freeze via hit-stop, lifesteal, or re-ignite itself. A tick only subtracts
+  // health + falls through to the shared death path below.
+  if (isDirect) {
+    enemy.flashTimer = ENEMY_COMMON.flash;
+    // Per-type mass: light enemies (swarmers) get launched farther by the same
+    // impulse (chaser/ranged mult = 1, so this is identity for them).
+    const kb = kbForce * ENEMY_TYPES[enemy.type].knockbackMult;
+    enemy.kbVx += kbDirX * kb;
+    enemy.kbVy += kbDirY * kb;
+    spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
+    // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
+    if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;
+    // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt. One hook here =
+    // it auto-multiplies with melee / multishot / pierce / dash-strike (every direct
+    // hit routes through this call). Capped per hit + clamped to max HP — sustain,
+    // not a heal button. No-op at level 0 or when already at max HP.
+    if (amount > 0) {
+      const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
+      if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
+        const heal = Math.min(amount * frac, LIFESTEAL_LEVELS.maxPerHit);
+        state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
+      }
+    }
+    // SYNERGY ARC PR2 — BURN: a direct landed hit IGNITES (refresh-not-stack). Same
+    // one-hook auto-multiply (N shots / a pierced line all ignite). The isDirect gate
+    // means a tick never re-ignites itself (no infinite refresh); the armored-side
+    // block returned earlier (landed=false) so a blocked boss hit can't ignite.
+    if (state.player.burnLevel > 0) {
+      enemy.burnTimer = BURN_LEVELS.duration;
+      enemy.burnDps = BURN_LEVELS.dps[state.player.burnLevel];
     }
   }
   if (enemy.health <= 0) {

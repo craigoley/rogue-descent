@@ -19,7 +19,7 @@
 import { ENEMY_COMMON, ENEMY_TYPES, POOL, type EnemyType } from '../utils/constants';
 import { clamp } from '../utils/math';
 import { resolveX, resolveY } from './Collision';
-import { damagePlayer } from './Combat';
+import { damageEnemy, damagePlayer } from './Combat';
 import { fireEnemyProjectile } from './EnemyProjectile';
 import { damageMultForDepth, healthMultForDepth, speedMultForDepth } from './Difficulty';
 import { updateBoss } from './Boss';
@@ -65,6 +65,14 @@ export interface Enemy {
    *  so a stunned enemy is still shoved. Bosses are stun-immune (never set). 0 =
    *  not stunned. Reset on spawn so a recycled pool slot never inherits a stun. */
   stunTimer: number;
+  /** BURN countdown, seconds (synergy arc PR2). While > 0 the enemy takes burnDps ×
+   *  dt damage each step (a DoT tick routed through damageEnemy with isDirect=false).
+   *  Set/REFRESHED by a direct hit when the player owns burn; never stacks. Reset on
+   *  spawn so a recycled slot never inherits a burn. 0 = not burning. */
+  burnTimer: number;
+  /** Burn damage-per-second for the CURRENT ignition (BURN_LEVELS.dps[level],
+   *  overwritten on each re-ignite — refresh-not-stack). Unused while burnTimer 0. */
+  burnDps: number;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -86,6 +94,8 @@ export function createEnemyPool(): Enemy[] {
     struck: false,
     roomIndex: -1,
     stunTimer: 0,
+    burnTimer: 0,
+    burnDps: 0,
   }));
 }
 
@@ -125,6 +135,8 @@ export function spawnEnemy(
     e.struck = false;
     e.roomIndex = roomIndex;
     e.stunTimer = 0; // recycled slot never inherits a stun
+    e.burnTimer = 0; // ...nor a burn
+    e.burnDps = 0;
     return true;
   }
   return false;
@@ -381,6 +393,23 @@ export function updateEnemies(state: GameState, dt: number): void {
     e.prevX = e.x;
     e.prevY = e.y;
     if (e.flashTimer > 0) e.flashTimer = Math.max(0, e.flashTimer - dt);
+
+    // SYNERGY ARC PR2 — BURN tick (DoT). Continuous dps × dt, deterministic (fixed
+    // SIM_DT, no accumulator, no RNG). Ticks BEFORE the stun/AI branch so a stunned
+    // enemy still burns. Routed through damageEnemy with isDirect=FALSE so it (a)
+    // never lifesteals (#66 guard), (b) never re-ignites itself, (c) never knocks
+    // back (force 0), and (d) hits the SAME death/kill/drop path as a direct hit —
+    // a burn-tick kill is detected by GameState's post-updateEnemies death diff +
+    // counted by updateEncounterResolve exactly like a melee/projectile kill. The
+    // tick is clamped to the remaining timer so the final partial step never
+    // over-applies. Boss: burns only from landed weak-side hits (apply is gated on
+    // the landed boolean in damageEnemy), and its death routes the same way.
+    if (e.burnTimer > 0) {
+      const tick = Math.min(dt, e.burnTimer); // clamp the final partial step's damage
+      e.burnTimer = Math.max(0, e.burnTimer - dt); // clamp to 0 (mirrors stun/flash timers)
+      damageEnemy(e, e.burnDps * tick, 0, 0, 0, state, false);
+      if (!e.active) continue; // burned to death this step — slot freed, skip the rest
+    }
 
     const dx = player.x - e.x;
     const dy = player.y - e.y;

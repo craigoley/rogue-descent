@@ -78,8 +78,8 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     for (let k = 0; k < 30; k++) expect(rollDrop(a)).toBe(rollDrop(b));
   });
 
-  it('rollDrop yields only null | health | the eight powerups', () => {
-    const kinds = ['null', 'health', 'melee', 'ranged', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike', 'lifesteal'];
+  it('rollDrop yields only null | health | the nine powerups', () => {
+    const kinds = ['null', 'health', 'melee', 'ranged', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike', 'lifesteal', 'burn'];
     const allowed = new Set(kinds);
     const rng = createRng(99);
     const seen = new Set<string>();
