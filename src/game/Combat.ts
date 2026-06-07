@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
@@ -41,7 +41,12 @@ export function aimDirection(player: PlayerState, intent: InputIntent, out: Vec2
  *  hit-stop). Kills + emits a death burst when health reaches zero. Returns true if
  *  the hit LANDED (damage/force applied), false if a boss BLOCKED it on the armored
  *  side — the caller (meleeAttack) uses this as the "weak-side hit" signal for the
- *  gimmick-#3 interrupt. */
+ *  gimmick-#3 interrupt.
+ *
+ *  `isDirect` (default true) marks a DIRECT player hit (melee / ranged / dash-strike)
+ *  vs an over-time TICK (synergy arc PR2 burn, which will pass false). LIFESTEAL only
+ *  heals on direct hits — a DoT tick must NOT lifesteal (bound E: no passive infinite
+ *  sustain). Existing callers are all direct, so they keep the default. */
 export function damageEnemy(
   enemy: Enemy,
   amount: number,
@@ -49,6 +54,7 @@ export function damageEnemy(
   kbDirY: number,
   kbForce: number,
   state: GameState,
+  isDirect = true,
 ): boolean {
   // GIMMICK #1 (Phase 8): a boss only takes damage from its VULNERABLE side. A
   // hit from the armored side is BLOCKED — no health loss (blockedDamageMult 0),
@@ -84,6 +90,18 @@ export function damageEnemy(
   spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
   // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
   if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;
+  // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of DIRECT-hit damage dealt (DoT
+  // ticks pass isDirect=false and never heal). One hook here = it auto-multiplies
+  // with melee / multishot / pierce / dash-strike (every one routes through this
+  // call). Capped per hit (maxPerHit) + clamped to max HP — sustain, not a heal
+  // button. No-op at level 0, when already at max HP, or for non-direct ticks.
+  if (isDirect && amount > 0) {
+    const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
+    if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
+      const heal = Math.min(amount * frac, LIFESTEAL_LEVELS.maxPerHit);
+      state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
+    }
+  }
   if (enemy.health <= 0) {
     enemy.active = false;
     spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);

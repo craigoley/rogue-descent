@@ -114,6 +114,8 @@ export class HUD {
   private readonly rangedChip: LevelChip;
   private readonly pierceChip: LevelChip;
   private readonly knockbackChip: LevelChip;
+  /** Synergy arc PR1: the first on-hit EFFECT chip (crimson, distinct tier). */
+  private readonly lifestealChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -221,6 +223,10 @@ export class HUD {
     this.rangedChip = makeChip('RANGED', 'is-ranged', CSS_PALETTE.projectile);
     this.pierceChip = makeChip('PIERCE', 'is-pierce', CSS_PALETTE.projectile);
     this.knockbackChip = makeChip('KNOCKBACK', 'is-knockback', CSS_PALETTE.melee);
+    // Synergy arc PR1 — LIFESTEAL: the first EFFECT chip, crimson (its own tier vs
+    // the orange/blue stat-tracks). As burn/chain/crit join, this row may need a
+    // second line / stat-vs-effect grouping — defer that until it actually overflows.
+    this.lifestealChip = makeChip('LIFESTEAL', 'is-lifesteal', CSS_PALETTE.lifesteal);
     bars.appendChild(powersRow);
 
     container.appendChild(bars);
@@ -556,6 +562,7 @@ export class HUD {
     setChipLevel(this.rangedChip, state.player.rangedLevel);
     setChipLevel(this.pierceChip, state.player.pierceLevel);
     setChipLevel(this.knockbackChip, state.player.knockbackLevel);
+    setChipLevel(this.lifestealChip, state.player.lifestealLevel);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);

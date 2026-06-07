@@ -86,6 +86,12 @@ export interface PlayerState {
    *  for REDUCED i-frames (TUNING.dashStrikeIframes). Binary toggle; reset via
    *  createPlayer. */
   dashStrike: boolean;
+  /** LIFESTEAL powerup LEVEL (0..3, within-run; synergy arc PR1 — the first on-hit
+   *  EFFECT axis). 0 = none; each level heals a bigger fraction of DIRECT-hit damage
+   *  (LIFESTEAL_LEVELS.frac). Auto-multiplies with melee/multishot/pierce/dash-strike
+   *  via the shared damageEnemy hook. DoT (PR2 burn) is excluded. Reset to 0 on
+   *  death via createPlayer; carried across descent. */
+  lifestealLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -126,6 +132,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     extraChargeLevel: 0,
     fasterRecharge: false,
     dashStrike: false,
+    lifestealLevel: 0,
     dashHits: new Set<number>(),
   };
 }

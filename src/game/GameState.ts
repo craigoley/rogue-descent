@@ -135,6 +135,7 @@ export interface GameState {
     extraCharge: number;
     fasterRecharge: number;
     dashStrike: number;
+    lifesteal: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -175,7 +176,7 @@ export function createGameState(): GameState {
     bossDefeated: false,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -222,6 +223,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.extraCharge = 0;
   state.dropCounts.fasterRecharge = 0;
   state.dropCounts.dashStrike = 0;
+  state.dropCounts.lifesteal = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -315,6 +317,7 @@ function descendIfReady(state: GameState): boolean {
     extraChargeLevel: p.extraChargeLevel,
     fasterRecharge: p.fasterRecharge,
     dashStrike: p.dashStrike,
+    lifestealLevel: p.lifestealLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -325,6 +328,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.extraChargeLevel = carried.extraChargeLevel;
   state.player.fasterRecharge = carried.fasterRecharge;
   state.player.dashStrike = carried.dashStrike;
+  state.player.lifestealLevel = carried.lifestealLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);

@@ -1,10 +1,12 @@
 /**
- * Within-run drops: health (restore HP) + SEVEN powerups. Five are LEVELED tracks
- * (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III via Phase 9);
- * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE).
- * Powerups last the rest of the run (carried across descent) and reset on
- * death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups); spawning
- * never grows it.
+ * Within-run drops: health (restore HP) + EIGHT powerups. Five are LEVELED stat
+ * tracks (MELEE, RANGED, PIERCE, KNOCKBACK, EXTRA-CHARGE — stack to tier III);
+ * two upgrade the DASH as binary toggles (FASTER-RECHARGE, DASH-STRIKE); one is
+ * a leveled on-hit EFFECT axis (LIFESTEAL — synergy arc). Stat tracks are COMMON
+ * (DROP.trackWeight); effect axes are UNCOMMON (DROP.effectWeight) so they read as
+ * build-defining. Powerups last the rest of the run (carried across descent) and
+ * reset on death/new-run. Pure: ZERO three/DOM. FIXED-SIZE pool (POOL.pickups);
+ * spawning never grows it.
  *
  * NOT an item system: no inventory, no rarity, no stacking — rolled by a seeded
  * RNG, applied immediately on touch.
@@ -23,7 +25,8 @@ export type PickupKind =
   | 'knockback'
   | 'extraCharge'
   | 'fasterRecharge'
-  | 'dashStrike';
+  | 'dashStrike'
+  | 'lifesteal';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
@@ -37,7 +40,18 @@ const POWERUP_KINDS: readonly PickupKind[] = [
   'extraCharge',
   'fasterRecharge',
   'dashStrike',
+  'lifesteal', // APPEND new kinds — existing indices stay stable (tests pin them)
 ];
+
+/** On-hit EFFECT axes (synergy arc) — picked UNCOMMONLY (DROP.effectWeight) vs the
+ *  stat-tracks (DROP.trackWeight) so effects read as build-defining, not common
+ *  top-ups. Grows with burn/chain/crit. Drives the weighted roll in rollDrop. */
+const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal']);
+
+/** Roll weight for a powerup kind: effect axes are uncommon, stat-tracks common. */
+function powerupWeight(kind: PickupKind): number {
+  return EFFECT_KINDS.has(kind) ? DROP.effectWeight : DROP.trackWeight;
+}
 
 export interface Pickup {
   active: boolean;
@@ -83,14 +97,24 @@ export function activePickupCount(pool: Pickup[]): number {
   return n;
 }
 
-/** Seeded drop roll: nothing, health, or one of the seven powerups. Deterministic
+/** Seeded drop roll: nothing, health, or one of the eight powerups. Deterministic
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
- *  second (only consumed for a powerup) picks uniformly among POWERUP_KINDS. */
+ *  second (only consumed for a powerup) picks via a WEIGHTED cumulative walk
+ *  (stat-tracks common, effect axes uncommon). */
 export function rollDrop(rng: Rng): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
   if (rng.next() < DROP.healthShare) return 'health';
-  const i = Math.min(POWERUP_KINDS.length - 1, Math.floor(rng.next() * POWERUP_KINDS.length));
-  return POWERUP_KINDS[i];
+  // WEIGHTED powerup pick (synergy arc): effect axes are rarer than stat-tracks.
+  // One draw, cumulative-weight walk — same draw COUNT as the old uniform pick (so
+  // downstream roll sequences / the scarcity acceptDraw stay positionally stable).
+  let total = 0;
+  for (const k of POWERUP_KINDS) total += powerupWeight(k);
+  let r = rng.next() * total;
+  for (const k of POWERUP_KINDS) {
+    r -= powerupWeight(k);
+    if (r < 0) return k;
+  }
+  return POWERUP_KINDS[POWERUP_KINDS.length - 1]; // floating-point safety net
 }
 
 /** Increment a leveled powerup, capped at POWERUP_MAX_LEVEL (Phase 9): picking up
@@ -116,6 +140,8 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
       return player.knockbackLevel;
     case 'extraCharge':
       return player.extraChargeLevel;
+    case 'lifesteal':
+      return player.lifestealLevel;
     case 'fasterRecharge':
       return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
     case 'dashStrike':
@@ -142,6 +168,8 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     // pickup (the original "grant immediately" pop).
     player.extraChargeLevel = levelUp(player.extraChargeLevel);
     player.dashCharges = dashMaxCharges(player);
+  } else if (kind === 'lifesteal') {
+    player.lifestealLevel = levelUp(player.lifestealLevel);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {
