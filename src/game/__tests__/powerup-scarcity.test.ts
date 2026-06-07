@@ -52,6 +52,7 @@ const KIND_WEIGHTS = [
   DROP.trackWeight, // dashStrike
   DROP.effectWeight, // lifesteal (effect axis)
   DROP.effectWeight, // burn (effect axis)
+  DROP.effectWeight, // chain (effect axis)
 ];
 const WEIGHT_TOTAL = KIND_WEIGHTS.reduce((a, b) => a + b, 0);
 const pickFor = (k: number): number => {

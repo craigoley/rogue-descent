@@ -61,6 +61,9 @@ export const PALETTE = {
    *  from the stun grey-blue, telegraph amber, and the enemy-threat reds, so "it's
    *  on fire" reads at a glance. Hotter/brighter than the boss-add ember. */
   enemyBurning: 0xff6620,
+  /** CHAIN arc bolt (synergy arc PR3) — electric blue-white: a lightning arc between
+   *  chained enemies, distinct from the warm enemy/burn tones and the player teal. */
+  chainArc: 0x9fe8ff,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -117,6 +120,9 @@ export const CSS_PALETTE = {
   /** BURN effect-axis chip colour (synergy arc PR2) — ember orange (mirrors
    *  PALETTE.enemyBurning). */
   burn: '#ff6620',
+  /** CHAIN effect-axis chip colour (synergy arc PR3) — electric blue-white (mirrors
+   *  PALETTE.chainArc). */
+  chain: '#9fe8ff',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -443,6 +449,25 @@ export const BURN_LEVELS = {
   duration: 2.5,
 } as const;
 
+/** SYNERGY ARC — PR3 CHAIN (a direct hit ARCS to nearby enemies). The headline
+ *  cross-axis combo: chain × burn = WILDFIRE (each arc carries burn-ignite → the
+ *  pack catches fire). The MOST degenerate-prone axis, so its bounds are baked in:
+ *  a hard JUMP CAP, per-jump damage FALLOFF, dedupe (no A→B→A), and NO re-chain
+ *  (type-enforced — only a 'direct' hit triggers chain; arcs are 'chain' hits). The
+ *  arc routes through damageEnemy('chain') so it inherits burn + the death/kill/drop
+ *  path, but NOT lifesteal and NOT another chain. All by-feel — tune on replay. */
+export const CHAIN_LEVELS = {
+  /** Extra enemies an arc hits, per level (0 = none; III = 3 jumps). The chain loop
+   *  runs at MOST maxJumps[level] times — never unbounded. */
+  maxJumps: [0, 1, 2, 3],
+  /** Max distance (world units) from the current link to the next un-hit enemy.
+   *  Keeps the arc local (a pack), not a screen-wide teleport. */
+  range: 4,
+  /** Damage multiplier applied per jump (compounds): jump 1 = base×falloff, jump 2 =
+   *  base×falloff², ... So chain is SPREAD/utility, not a single-target nuke. */
+  falloff: 0.6,
+} as const;
+
 /** Melee swing. Damage is in TUNING. */
 export const MELEE = {
   /** Reach from the player centre, world units. */
@@ -663,6 +688,9 @@ export const POOL = {
   enemyProjectiles: 24,
   particles: 96,
   pickups: 16,
+  /** Chain-arc bolts visible at once (synergy arc PR3). A maxed chain is ≤3 jumps;
+   *  with multishot several can fire in a frame, so a small pool covers a volley. */
+  chainArcs: 24,
 } as const;
 
 // ============================================================================
@@ -918,6 +946,15 @@ export const PARTICLE = {
   deathCount: 16,
   /** "Whiff" sparks emitted when a dash dodges a hit (the dodge burst). */
   dodgeCount: 12,
+} as const;
+
+/** CHAIN-arc bolt render (synergy arc PR3). Cosmetic-in-sim like particles: the sim
+ *  spawns an arc segment (endpoints + a timer), the renderer draws + fades a line. */
+export const CHAIN_ARC = {
+  /** How long an arc bolt stays visible, seconds (a brief flash). */
+  lifetime: 0.18,
+  /** Y height the line is drawn at (world units), so it reads above the floor. */
+  height: 0.6,
 } as const;
 
 /** Screen shake decay window, seconds (magnitude is TUNING.shake). */

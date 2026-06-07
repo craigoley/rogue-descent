@@ -37,6 +37,7 @@ import {
   updateParticles,
   type Particle,
 } from './Particle';
+import { createChainArcPool, updateChainArcs, type ChainArc } from './ChainArc';
 import { createPickupPool, updatePickups, type Pickup } from './Pickup';
 import {
   buildEncounters,
@@ -102,6 +103,9 @@ export interface GameState {
   /** Ranged-enemy bolts in flight (separate pool from the player's projectiles). */
   enemyProjectiles: EnemyProjectile[];
   particles: Particle[];
+  /** Chain-arc bolts (synergy arc PR3) — cosmetic-in-sim like particles; the chain
+   *  loop records segments, the renderer draws + fades them. */
+  chainArcs: ChainArc[];
   pickups: Pickup[];
   /** Per-room encounter table (DFS order; index 0 = spawn room). */
   rooms: RoomEncounter[];
@@ -137,6 +141,7 @@ export interface GameState {
     dashStrike: number;
     lifesteal: number;
     burn: number;
+    chain: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -169,6 +174,7 @@ export function createGameState(): GameState {
     enemies: createEnemyPool(),
     enemyProjectiles: createEnemyProjectilePool(),
     particles: createParticlePool(),
+    chainArcs: createChainArcPool(),
     pickups: createPickupPool(),
     rooms: [],
     activeRoom: -1,
@@ -177,7 +183,7 @@ export function createGameState(): GameState {
     bossDefeated: false,
     prevEnemyActive: [],
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -201,6 +207,7 @@ function loadFloor(state: GameState, seed: number): void {
   for (const p of state.projectiles) p.active = false;
   for (const p of state.enemyProjectiles) p.active = false;
   for (const p of state.particles) p.active = false;
+  for (const a of state.chainArcs) a.active = false;
   for (const pk of state.pickups) pk.active = false;
   state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
   state.activeRoom = -1;
@@ -226,6 +233,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.dashStrike = 0;
   state.dropCounts.lifesteal = 0;
   state.dropCounts.burn = 0;
+  state.dropCounts.chain = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -321,6 +329,7 @@ function descendIfReady(state: GameState): boolean {
     dashStrike: p.dashStrike,
     lifestealLevel: p.lifestealLevel,
     burnLevel: p.burnLevel,
+    chainLevel: p.chainLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -333,6 +342,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.dashStrike = carried.dashStrike;
   state.player.lifestealLevel = carried.lifestealLevel;
   state.player.burnLevel = carried.burnLevel;
+  state.player.chainLevel = carried.chainLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);
@@ -444,6 +454,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   if (descendIfReady(state)) return;
 
   updateParticles(state.particles, dt);
+  updateChainArcs(state.chainArcs, dt); // fade chain-arc bolts (cosmetic)
 
   if (state.shakeTimer > 0) state.shakeTimer -= dt;
 

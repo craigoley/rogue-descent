@@ -407,7 +407,7 @@ export function updateEnemies(state: GameState, dt: number): void {
     if (e.burnTimer > 0) {
       const tick = Math.min(dt, e.burnTimer); // clamp the final partial step's damage
       e.burnTimer = Math.max(0, e.burnTimer - dt); // clamp to 0 (mirrors stun/flash timers)
-      damageEnemy(e, e.burnDps * tick, 0, 0, 0, state, false);
+      damageEnemy(e, e.burnDps * tick, 0, 0, 0, state, 'tick');
       if (!e.active) continue; // burned to death this step — slot freed, skip the rest
     }
 

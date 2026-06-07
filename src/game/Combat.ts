@@ -8,13 +8,32 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, BURN_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, CHAIN_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
+import { spawnChainArc } from './ChainArc';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
 import type { PlayerState } from './Player';
 import type { GameState } from './GameState';
 import type { Vec2 } from '../utils/math';
+
+/** The KIND of a damageEnemy call — the synergy arc's hit taxonomy (replaces the old
+ *  isDirect boolean, which couldn't express chain's "ignite + count as a kill, but do
+ *  NOT lifesteal or re-chain" semantics):
+ *   - 'direct' — a player hit (melee / ranged / dash-strike): full feedback, lifesteal,
+ *     burn-ignite, AND it can TRIGGER a chain.
+ *   - 'chain'  — a CHAIN arc (PR3): feedback + burn-ignite + the death path, but NO
+ *     lifesteal and — crucially — it can NEVER trigger another chain (only 'direct'
+ *     does), so the no-cascade bound is enforced by the type, not a runtime guard.
+ *   - 'tick'   — a burn DoT tick (PR2): damage + death path ONLY; no feedback, no
+ *     lifesteal, no ignite (so it can't re-ignite itself), and it bypasses the boss
+ *     armor check (the ignition was already validated by a weak-side direct hit). */
+export type HitKind = 'direct' | 'chain' | 'tick';
+
+/** Module scratch for the chain dedupe Set — chains complete SYNCHRONOUSLY and never
+ *  nest ('chain' hits don't re-chain), so one reusable Set avoids per-hit allocation
+ *  (mirrors the _aim-style scratch pattern). Cleared at the start of every chainFrom. */
+const _chainSet = new Set<Enemy>();
 
 /**
  * Resolve the attack aim direction into a WORLD unit vector, written into `out`
@@ -43,10 +62,7 @@ export function aimDirection(player: PlayerState, intent: InputIntent, out: Vec2
  *  side — the caller (meleeAttack) uses this as the "weak-side hit" signal for the
  *  gimmick-#3 interrupt.
  *
- *  `isDirect` (default true) marks a DIRECT player hit (melee / ranged / dash-strike)
- *  vs an over-time TICK (synergy arc PR2 burn, which will pass false). LIFESTEAL only
- *  heals on direct hits — a DoT tick must NOT lifesteal (bound E: no passive infinite
- *  sustain). Existing callers are all direct, so they keep the default. */
+ *  `kind` (default 'direct') is the hit taxonomy — see HitKind. */
 export function damageEnemy(
   enemy: Enemy,
   amount: number,
@@ -54,7 +70,7 @@ export function damageEnemy(
   kbDirY: number,
   kbForce: number,
   state: GameState,
-  isDirect = true,
+  kind: HitKind = 'direct',
 ): boolean {
   // GIMMICK #1 (Phase 8): a boss only takes damage from its VULNERABLE side. A
   // hit from the armored side is BLOCKED — no health loss (blockedDamageMult 0),
@@ -64,10 +80,10 @@ export function damageEnemy(
   // from Boss) to avoid a Combat<->Boss import cycle; mirrors bossVulnerable().
   // GIMMICK #3: while staggerTimer > 0 the shield is DOWN — skip this block so a
   // successful interrupt lets hits land from ANY angle (the free-hit reward).
-  // Burn ticks (isDirect=false) bypass the armor check: the ignition was already
+  // Burn ticks (kind='tick') bypass the armor check: the ignition was already
   // validated by a weak-side direct hit, and the zero kbDir would always read as
   // "armored side" (dot=0 < cos(arc/2)), blocking every tick for zero damage.
-  if (isDirect && enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
+  if (kind !== 'tick' && enemy.type === 'boss' && state.boss && state.boss.staggerTimer <= 0) {
     const len = Math.hypot(kbDirX, kbDirY) || 1;
     const dot =
       (-kbDirX / len) * Math.cos(state.boss.vulnerableAngle) +
@@ -84,39 +100,43 @@ export function damageEnemy(
     }
   }
   enemy.health -= amount;
-  // DIRECT-hit feedback + on-hit effects (flash, knockback, sparks, hit-stop,
-  // lifesteal, burn-ignite). ALL gated on isDirect so a burn TICK (isDirect=false,
-  // every frame) does NOT: white-flash over the burn tint, spam hit particles,
-  // micro-freeze via hit-stop, lifesteal, or re-ignite itself. A tick only subtracts
-  // health + falls through to the shared death path below.
-  if (isDirect) {
+  // Hit feedback + on-hit EFFECTS. Gated by hit KIND (see HitKind): a burn 'tick'
+  // gets NONE of this (it would white-flash over the burn tint, spam particles, and
+  // micro-freeze via hit-stop every frame) — only direct + chain hits flash, ignite,
+  // etc. A tick only subtracts health + falls through to the shared death path below.
+  if (kind !== 'tick') {
     enemy.flashTimer = ENEMY_COMMON.flash;
     // Per-type mass: light enemies (swarmers) get launched farther by the same
-    // impulse (chaser/ranged mult = 1, so this is identity for them).
+    // impulse (chaser/ranged mult = 1, so this is identity for them). Chain arcs pass
+    // force 0, so they flash but don't shove.
     const kb = kbForce * ENEMY_TYPES[enemy.type].knockbackMult;
     enemy.kbVx += kbDirX * kb;
     enemy.kbVy += kbDirY * kb;
     spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.hitCount);
     // Hit-stop sells the impact: freeze briefly (take the strongest pending stop).
     if (TUNING.hitstop > state.hitstopTimer) state.hitstopTimer = TUNING.hitstop;
-    // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt. One hook here =
-    // it auto-multiplies with melee / multishot / pierce / dash-strike (every direct
-    // hit routes through this call). Capped per hit + clamped to max HP — sustain,
-    // not a heal button. No-op at level 0 or when already at max HP.
-    if (amount > 0) {
+    // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt. DIRECT hits ONLY —
+    // a chain arc must NOT lifesteal per-jump (bound E: no degenerate sustain). One
+    // hook = auto-multiplies with melee / multishot / pierce / dash-strike.
+    if (kind === 'direct' && amount > 0) {
       const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
       if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
         const heal = Math.min(amount * frac, LIFESTEAL_LEVELS.maxPerHit);
         state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
       }
     }
-    // SYNERGY ARC PR2 — BURN: a direct landed hit IGNITES (refresh-not-stack). Same
-    // one-hook auto-multiply (N shots / a pierced line all ignite). The isDirect gate
-    // means a tick never re-ignites itself (no infinite refresh); the armored-side
-    // block returned earlier (landed=false) so a blocked boss hit can't ignite.
+    // SYNERGY ARC PR2 — BURN: IGNITE (refresh-not-stack). Direct AND chain hits ignite
+    // → chain × burn = WILDFIRE (each arc carries fire to the pack). The 'tick' kind is
+    // excluded above so a burn tick can't re-ignite itself.
     if (state.player.burnLevel > 0) {
       enemy.burnTimer = BURN_LEVELS.duration;
       enemy.burnDps = BURN_LEVELS.dps[state.player.burnLevel];
+    }
+    // SYNERGY ARC PR3 — CHAIN: a DIRECT hit arcs to nearby enemies. Triggered ONLY by
+    // 'direct' (a 'chain' arc can never re-trigger → the no-cascade bound is enforced
+    // by the type). One hook here = melee / ranged / dash-strike all chain for free.
+    if (kind === 'direct' && state.player.chainLevel > 0) {
+      chainFrom(state, enemy, amount, state.player.chainLevel);
     }
   }
   if (enemy.health <= 0) {
@@ -124,6 +144,55 @@ export function damageEnemy(
     spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
   }
   return true; // LANDED (for a boss: a weak-side hit — the interrupt signal source)
+}
+
+/**
+ * SYNERGY ARC PR3 — CHAIN. From a just-hit enemy, ARC to up to maxJumps[level] nearby
+ * enemies, dealing falloff-reduced damage to each via damageEnemy('chain') — so each
+ * arc inherits burn-ignite (wildfire) + the death/kill/drop path, but NOT lifesteal
+ * and NOT another chain (the 'chain' kind can't re-trigger this). BOUNDS, all here:
+ *   - JUMP CAP: the loop runs at most maxJumps[level] times (never unbounded).
+ *   - DEDUPE: a Set seeded with the origin → never re-hits a chained enemy (no A→B→A).
+ *   - FALLOFF: damage compounds ×falloff each jump → spread/utility, not a nuke.
+ * Deterministic: nearest-search is pure geometry over the ≤8 pool, ties broken by the
+ * LOWER pool index (strict-less replace), no RNG. Uses a module-scratch Set (chains
+ * never nest) so there's zero per-hit allocation.
+ */
+function chainFrom(state: GameState, origin: Enemy, baseDamage: number, level: number): void {
+  const maxJumps = CHAIN_LEVELS.maxJumps[level];
+  if (maxJumps <= 0) return;
+  const set = _chainSet;
+  set.clear();
+  set.add(origin); // the source is never a chain target
+  const range2 = CHAIN_LEVELS.range * CHAIN_LEVELS.range;
+  let from = origin;
+  let dmg = baseDamage;
+  for (let j = 0; j < maxJumps; j++) {
+    dmg *= CHAIN_LEVELS.falloff;
+    // Nearest ACTIVE, un-chained enemy within range. Strict-less replace → on a tie
+    // the lower pool index wins (deterministic).
+    let next: Enemy | null = null;
+    let best = Infinity;
+    for (const e of state.enemies) {
+      if (!e.active || set.has(e)) continue;
+      const dx = e.x - from.x;
+      const dy = e.y - from.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= range2 && d2 < best) {
+        best = d2;
+        next = e;
+      }
+    }
+    if (!next) break; // no target in range — the chain ends
+    set.add(next);
+    const dx = next.x - from.x;
+    const dy = next.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    spawnChainArc(state.chainArcs, from.x, from.y, next.x, next.y); // render tell
+    // force 0 — an arc, not a shove; 'chain' inherits burn + death, not lifesteal/re-chain.
+    damageEnemy(next, dmg, dx / len, dy / len, 0, state, 'chain');
+    from = next;
+  }
 }
 
 /** Apply a knockback impulse ONLY — no damage, death, hit-stop or particles. Used
