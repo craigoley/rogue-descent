@@ -355,6 +355,12 @@ export class EntityRenderer {
   private readonly bossWeak: Mesh;
   private readonly bossWeakMat: MeshStandardMaterial;
   private readonly bossWeakOrbit: number;
+  /** Telegraph-tell tracking: the active attack's FULL telegraph duration, captured
+   *  on entry so the wind-up scale ramp is correct for any attack (slam vs the
+   *  longer cleave) AND phase 2's shortened wind-up. e.timer is monotonic, so its
+   *  first value on entering 'telegraph' IS the max; reset when the phase leaves. */
+  private bossPrevPhase = '';
+  private bossTeleMax = 0;
   private readonly projectiles: Mesh[] = [];
   /** Ranged-enemy bolts (scarlet spheres) — own pool, distinct from player shots. */
   private readonly enemyProjectiles: Mesh[] = [];
@@ -924,15 +930,26 @@ export class EntityRenderer {
     const phase2 = boss.outerPhase === 2;
     const baseColor = phase2 ? PALETTE.enemyBossPhase2 : PALETTE.enemyBoss;
     const mat = this.bossBodyMat;
-    // Body recolour priority: weak-side hit flash > slam telegraph > resting tint.
+    // Capture the active attack's full telegraph duration on ENTRY (slam vs the
+    // longer cleave, and phase 2's shortened wind-up all differ) so the scale ramp
+    // below is correct for every attack. e.timer is monotonic within a telegraph.
+    if (e.phase === 'telegraph' && this.bossPrevPhase !== 'telegraph') this.bossTeleMax = e.timer;
+    this.bossPrevPhase = e.phase;
+    // Body recolour priority: hit flash > STAGGER (interrupt payoff) > telegraph >
+    // resting tint. Stagger outranks telegraph so a successful interrupt reads as
+    // "you broke its attack / shield's down" the instant it lands.
     if (e.flashTimer > 0) {
       mat.color.setHex(PALETTE.hitFlash);
+      mat.emissiveIntensity = VFX.invulnEmissive;
+      this.bossGroup.scale.setScalar(1);
+    } else if (boss.staggerTimer > 0) {
+      mat.color.setHex(PALETTE.enemyBossStagger);
       mat.emissiveIntensity = VFX.invulnEmissive;
       this.bossGroup.scale.setScalar(1);
     } else if (e.phase === 'telegraph') {
       mat.color.setHex(PALETTE.enemyTelegraph);
       mat.emissiveIntensity = VFX.enemyEmissive;
-      const t = 1 - e.timer / ENEMY_TYPES.boss.telegraph; // 0 -> 1 across wind-up
+      const t = this.bossTeleMax > 0 ? 1 - e.timer / this.bossTeleMax : 0; // 0 -> 1 across wind-up
       this.bossGroup.scale.setScalar(1 + BOSS_VFX.telegraphScale * t);
     } else {
       mat.color.setHex(baseColor);
