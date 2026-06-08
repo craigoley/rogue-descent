@@ -20,7 +20,11 @@ function formatTime(totalSec: number): string {
 }
 
 /** Human-readable labels for unlock ids (the run-end toast). */
-const UNLOCK_LABELS: Record<string, string> = { freeze: 'Freeze' };
+const UNLOCK_LABELS: Record<string, string> = {
+  freeze: 'Freeze',
+  'armored-chaser': 'Armored Chaser',
+  fireRate: 'Fire Rate',
+};
 const labelFor = (id: string): string => UNLOCK_LABELS[id] ?? id.toUpperCase();
 
 export class RunSummary {
@@ -121,6 +125,7 @@ export class RunSummary {
       const after = applyRunResult(before, {
         depth: state.run.depth,
         bossDefeated: state.run.floorsCleared >= 1 || state.bossDefeated,
+        wildfireKills: state.run.wildfireKills, // META PR2 — cumulative skill milestone
       });
       saveMeta(after);
       const gained = newlyUnlocked(before, after);

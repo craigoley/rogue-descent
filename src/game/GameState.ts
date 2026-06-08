@@ -10,7 +10,7 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { BOSS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
+import { BOSS, FIRE_RATE_LEVELS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
 import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
@@ -70,6 +70,11 @@ export interface RunState {
   kills: number;
   /** Wall-clock survived this run, seconds. */
   timeSec: number;
+  /** META PR2 — WILDFIRE kills this run: burn-TICK kills on CHAIN-spread enemies (the
+   *  chain×burn synergy finishing the pack). Incremented at the Combat death choke;
+   *  surfaced to the app-layer milestone via RunSummary (cumulative → unlocks fireRate).
+   *  Deterministic (a pure fn of seed+config); reset per run like kills/timeSec. */
+  wildfireKills: number;
 }
 
 /** Descent stairs for the CURRENT floor (per-floor; RESET unplaced by loadFloor,
@@ -173,6 +178,7 @@ export interface GameState {
     chain: number;
     crit: number;
     freeze: number;
+    fireRate: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -203,7 +209,7 @@ export function createGameState(config?: RunConfig): GameState {
     room: { tilesX: 0, tilesY: 0, tileSize: 1, walls: [], solid: [] },
     config: config ?? BASE_RUN_CONFIG,
     // Run state starts a fresh run; loadFloor below does NOT reset this.
-    run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0 },
+    run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0, wildfireKills: 0 },
     stairs: { x: 0, y: 0, roomIndex: -1, active: false },
     spawn: { x: 0, y: 0 },
     seed: DUNGEON.defaultSeed,
@@ -224,7 +230,7 @@ export function createGameState(config?: RunConfig): GameState {
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     combatRng: createRng(combatSeed(DUNGEON.defaultSeed)),
     chestRng: createRng(chestSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0, freeze: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0, freeze: 0, fireRate: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -250,7 +256,7 @@ function loadFloor(state: GameState, seed: number): void {
   for (const p of state.particles) p.active = false;
   for (const a of state.chainArcs) a.active = false;
   for (const pk of state.pickups) pk.active = false;
-  state.rooms = buildEncounters(floor, state.run.depth); // Phase 7c: depth-scaled spawns
+  state.rooms = buildEncounters(floor, state.run.depth, state.config.unlocked); // Phase 7c: depth-scaled spawns; meta PR2: armored gating
   state.activeRoom = -1;
   state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
   // GOLDEN CHESTS: place a chest at each chest room's centre (additive — chestRooms
@@ -295,6 +301,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.chain = 0;
   state.dropCounts.crit = 0;
   state.dropCounts.freeze = 0;
+  state.dropCounts.fireRate = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -318,6 +325,7 @@ export function startNewRun(state: GameState, seed: number, config?: RunConfig):
   state.run.floorsCleared = 0;
   state.run.kills = 0;
   state.run.timeSec = 0;
+  state.run.wildfireKills = 0;
   state.runOver = false;
   loadFloor(state, seed);
 }
@@ -396,6 +404,7 @@ function descendIfReady(state: GameState): boolean {
     chainLevel: p.chainLevel,
     critLevel: p.critLevel,
     freezeLevel: p.freezeLevel,
+    fireRateLevel: p.fireRateLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -411,6 +420,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.chainLevel = carried.chainLevel;
   state.player.critLevel = carried.critLevel;
   state.player.freezeLevel = carried.freezeLevel;
+  state.player.fireRateLevel = carried.fireRateLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);
@@ -472,12 +482,13 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
     }
   }
 
-  // Ranged — held; fires at the weapon cooldown. (The PIERCE powerup changes
-  // what a shot DOES, not how fast it fires — fire rate is fixed.)
+  // Ranged — held; fires at the weapon cooldown. PIERCE changes what a shot DOES;
+  // RANGED level changes the COUNT; the FIRE-RATE track (meta PR2, unlockable) shortens
+  // the interval (cooldownMult, ×1 at level 0 → base unchanged).
   if (intent.ranged && p.rangedCdTimer <= 0) {
     const aim = aimDirection(p, intent, _aim);
     fireProjectile(state.projectiles, p.x, p.y, aim.x, aim.y, p.rangedLevel); // Phase 9: multishot by level
-    p.rangedCdTimer = RANGED.cooldown;
+    p.rangedCdTimer = RANGED.cooldown * FIRE_RATE_LEVELS.cooldownMult[p.fireRateLevel];
   }
 
   updateProjectiles(state, dt);

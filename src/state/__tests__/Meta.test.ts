@@ -32,18 +32,18 @@ describe('Meta — persistence', () => {
     installStorage();
     const m = loadMeta();
     expect(m.unlocked).toEqual([]);
-    expect(m.stats).toEqual({ deepestDepth: 0, bossKills: 0 });
+    expect(m.stats).toEqual({ deepestDepth: 0, bossKills: 0, wildfireKills: 0 });
     expect(m.runStart).toBeNull();
     expect(m.heat).toBe(0);
   });
 
   it('round-trips save → load', () => {
     installStorage();
-    const m = { ...defaultMeta(), unlocked: ['freeze'], stats: { deepestDepth: 5, bossKills: 2 } };
+    const m = { ...defaultMeta(), unlocked: ['freeze'], stats: { deepestDepth: 5, bossKills: 2, wildfireKills: 12 } };
     saveMeta(m);
     const back = loadMeta();
     expect(back.unlocked).toEqual(['freeze']);
-    expect(back.stats).toEqual({ deepestDepth: 5, bossKills: 2 });
+    expect(back.stats).toEqual({ deepestDepth: 5, bossKills: 2, wildfireKills: 12 });
   });
 
   it('corrupt JSON → base default (never throws)', () => {
@@ -68,31 +68,68 @@ describe('Meta — persistence', () => {
 });
 
 describe('Meta — unlock rules (pure, no I/O)', () => {
+  // Depths are kept BELOW the armored-chaser threshold (3) where a test isolates the
+  // boss→freeze rule, so the depth-3 milestone doesn't muddy the assertion.
   it('beating the boss unlocks freeze + counts the kill; depth tracks the max', () => {
-    const after = applyRunResult(defaultMeta(), { depth: 4, bossDefeated: true });
+    const after = applyRunResult(defaultMeta(), { depth: 1, bossDefeated: true, wildfireKills: 0 });
     expect(after.unlocked).toContain('freeze');
+    expect(after.unlocked).not.toContain('armored-chaser'); // depth 1 < 3
     expect(after.stats.bossKills).toBe(1);
-    expect(after.stats.deepestDepth).toBe(4);
+    expect(after.stats.deepestDepth).toBe(1);
   });
 
-  it('a run with NO boss kill unlocks nothing (but still tracks deepest depth)', () => {
-    const after = applyRunResult(defaultMeta(), { depth: 2, bossDefeated: false });
+  it('a run with NO boss kill (shallow, no wildfire) unlocks nothing', () => {
+    const after = applyRunResult(defaultMeta(), { depth: 2, bossDefeated: false, wildfireKills: 0 });
     expect(after.unlocked).toEqual([]);
     expect(after.stats.deepestDepth).toBe(2);
   });
 
   it('is idempotent — re-beating the boss keeps freeze unlocked once', () => {
-    const a = applyRunResult(defaultMeta(), { depth: 3, bossDefeated: true });
-    const b = applyRunResult(a, { depth: 1, bossDefeated: true });
+    const a = applyRunResult(defaultMeta(), { depth: 1, bossDefeated: true, wildfireKills: 0 });
+    const b = applyRunResult(a, { depth: 1, bossDefeated: true, wildfireKills: 0 });
     expect(b.unlocked).toEqual(['freeze']); // not duplicated
-    expect(b.stats.deepestDepth).toBe(3); // max preserved (didn't drop to 1)
+    expect(b.stats.bossKills).toBe(2); // still counted
   });
 
   it('newlyUnlocked reports the diff (for the run-end toast)', () => {
     const before = defaultMeta();
-    const after = applyRunResult(before, { depth: 3, bossDefeated: true });
+    const after = applyRunResult(before, { depth: 1, bossDefeated: true, wildfireKills: 0 });
     expect(newlyUnlocked(before, after)).toEqual(['freeze']);
     // No new unlock the second time → empty diff.
-    expect(newlyUnlocked(after, applyRunResult(after, { depth: 3, bossDefeated: true }))).toEqual([]);
+    expect(newlyUnlocked(after, applyRunResult(after, { depth: 1, bossDefeated: true, wildfireKills: 0 }))).toEqual([]);
+  });
+});
+
+describe('Meta — PR2 milestones (enemy + track dimensions)', () => {
+  it('⭐ reaching depth 3 (cumulative) unlocks the ARMORED CHASER; depth 2 does not', () => {
+    expect(applyRunResult(defaultMeta(), { depth: 2, bossDefeated: false, wildfireKills: 0 }).unlocked).not.toContain(
+      'armored-chaser',
+    );
+    expect(applyRunResult(defaultMeta(), { depth: 3, bossDefeated: false, wildfireKills: 0 }).unlocked).toContain(
+      'armored-chaser',
+    );
+    // Cumulative: a later SHALLOW run keeps it (deepestDepth is the max).
+    const deep = applyRunResult(defaultMeta(), { depth: 3, bossDefeated: false, wildfireKills: 0 });
+    expect(applyRunResult(deep, { depth: 1, bossDefeated: false, wildfireKills: 0 }).unlocked).toContain('armored-chaser');
+  });
+
+  it('⭐ 30 CUMULATIVE wildfire kills unlocks FIRE RATE — accrued across runs, not one lucky run', () => {
+    // 29 in a single run → not yet.
+    const r1 = applyRunResult(defaultMeta(), { depth: 1, bossDefeated: false, wildfireKills: 29 });
+    expect(r1.stats.wildfireKills).toBe(29);
+    expect(r1.unlocked).not.toContain('fireRate');
+    // +1 next run → crosses 30 cumulatively → unlocked.
+    const r2 = applyRunResult(r1, { depth: 1, bossDefeated: false, wildfireKills: 1 });
+    expect(r2.stats.wildfireKills).toBe(30);
+    expect(r2.unlocked).toContain('fireRate');
+  });
+
+  it('the milestone fn maps a full stats set → the correct unlock set', () => {
+    // Boss + depth 5 + 40 wildfire → all three dimensions unlocked.
+    const all = applyRunResult(defaultMeta(), { depth: 5, bossDefeated: true, wildfireKills: 40 });
+    expect([...all.unlocked].sort()).toEqual(['armored-chaser', 'fireRate', 'freeze']);
+    // Nothing achieved → empty.
+    const none = applyRunResult(defaultMeta(), { depth: 1, bossDefeated: false, wildfireKills: 0 });
+    expect(none.unlocked).toEqual([]);
   });
 });

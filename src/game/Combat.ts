@@ -149,6 +149,10 @@ export function damageEnemy(
     if (state.player.burnLevel > 0) {
       enemy.burnTimer = BURN_LEVELS.duration;
       enemy.burnDps = BURN_LEVELS.dps[state.player.burnLevel];
+      // META PR2 — WILDFIRE attribution: record whether THIS ignition was SPREAD by a
+      // chain arc (kind==='chain') or lit directly (kind==='direct'). A later burn-TICK
+      // kill on a chain-ignited enemy is a wildfire kill (the death choke below).
+      enemy.ignitedByChain = kind === 'chain';
     }
     // META PR1 — FREEZE: a DIRECT hit SLOWS the enemy's movement (refresh-not-stack).
     // DIRECT only (like lifesteal) — not chain/tick — so it stays a positioning tool,
@@ -168,6 +172,11 @@ export function damageEnemy(
   if (enemy.health <= 0) {
     enemy.active = false;
     spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
+    // META PR2 — WILDFIRE counter (Def C): a burn-TICK kill on a CHAIN-spread enemy =
+    // the fire the chain carried finished it. The single, exhaustive death choke (direct/
+    // chain/tick all reach here), so this counts every wildfire kill exactly once. A
+    // direct/chain killing blow, or a tick kill on a directly-lit enemy, does NOT count.
+    if (kind === 'tick' && enemy.ignitedByChain) state.run.wildfireKills += 1;
   }
   return true; // LANDED (for a boss: a weak-side hit — the interrupt signal source)
 }

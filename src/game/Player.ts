@@ -115,6 +115,12 @@ export interface PlayerState {
    *  window — distinct from stun (the enemy still acts). Only appears in the drop pool
    *  once 'freeze' is in the run config's unlocked set. Reset to 0 on death; carried. */
   freezeLevel: number;
+  /** FIRE-RATE powerup LEVEL (0..3, within-run; meta PR2 — the track-dimension UNLOCKABLE).
+   *  0 = base ranged cooldown (unchanged); higher levels shorten the shot interval
+   *  (FIRE_RATE_LEVELS.cooldownMult). Only appears in the drop pool once 'fireRate' is in
+   *  the run config's unlocked set. Power-neutral re: meta (an in-run track). Reset to 0
+   *  on death; carried across descent. */
+  fireRateLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -160,6 +166,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     chainLevel: 0,
     critLevel: 0,
     freezeLevel: 0,
+    fireRateLevel: 0,
     dashHits: new Set<number>(),
   };
 }

@@ -68,6 +68,7 @@ import { lerp, type Vec2 } from '../utils/math';
  *  type = one entry here (mirrors the ENEMY_TYPES sim table). */
 const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
   chaser: FIGURE.chaser,
+  armored: FIGURE.armored,
   ranged: FIGURE.ranged,
   swarmer: FIGURE.swarmer,
   // The boss is a BESPOKE single mesh (see makeBoss / syncBoss), NOT a pooled
@@ -78,6 +79,7 @@ const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
 };
 const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
   chaser: PALETTE.enemy,
+  armored: PALETTE.enemyArmored,
   ranged: PALETTE.enemyRanged,
   swarmer: PALETTE.enemySwarmer,
   boss: PALETTE.enemyBoss,
@@ -85,7 +87,7 @@ const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
 };
 /** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled);
  *  the boss-add (gimmick #2) IS pooled like the base enemies. */
-const ENEMY_KINDS: EnemyType[] = ['chaser', 'ranged', 'swarmer', 'bossadd'];
+const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bossadd'];
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -362,6 +364,25 @@ function drawMultishot(g: CanvasRenderingContext2D, s: number, color: string): v
   }
 }
 
+/** FIRE-RATE (meta PR2): staggered horizontal speed-streaks → reads "rapid / faster",
+ *  distinct from the multishot arrows + the dash chevrons. */
+function drawFireRate(g: CanvasRenderingContext2D, s: number, color: string): void {
+  g.strokeStyle = color;
+  g.lineWidth = s * 0.12;
+  g.lineCap = 'round';
+  const streaks: [number, number, number][] = [
+    [0.46, 0.3, 0.84], // [x0, cy(frac), x1] — top streak, shorter
+    [0.2, 0.5, 0.84], // middle, longest
+    [0.38, 0.7, 0.84], // bottom, medium
+  ];
+  for (const [x0, cyf, x1] of streaks) {
+    g.beginPath();
+    g.moveTo(s * x0, s * cyf);
+    g.lineTo(s * x1, s * cyf);
+    g.stroke();
+  }
+}
+
 /** Per-drop-kind presentation: VERB/system colour + glyph + toast label. The
  *  verb powerups borrow their verb colour (pierce = ranged blue, knockback =
  *  melee orange); the three DASH powerups share the dash magenta and differ by
@@ -380,6 +401,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   chain: PALETTE.chainArc,
   crit: PALETTE.crit,
   freeze: PALETTE.enemyFrozen,
+  fireRate: PALETTE.fireRate,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -395,6 +417,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   chain: drawChain,
   crit: drawStar,
   freeze: drawSnowflake,
+  fireRate: drawFireRate,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -410,6 +433,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   chain: 'CHAIN',
   crit: 'CRIT',
   freeze: 'FREEZE',
+  fireRate: 'FIRE RATE',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -425,6 +449,7 @@ const DROP_KINDS: PickupKind[] = [
   'chain',
   'crit',
   'freeze',
+  'fireRate',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
@@ -464,7 +489,7 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], ranged: [], swarmer: [], boss: [], bossadd: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], boss: [], bossadd: [] };
   /** Bespoke single boss mesh (Phase 8): a large armored body + head, an orbiting
    *  bright WEAK-POINT marker (gimmick #1 tell) and a floor ring. Not pooled. */
   private readonly bossGroup: Group;
