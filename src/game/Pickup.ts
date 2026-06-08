@@ -70,7 +70,14 @@ export interface Pickup {
    *  deactivates its sibling(s) with the same pairId (the spatial 1-of-2 choice:
    *  exactly one is taken). -1 = a normal, un-paired drop. */
   pairId: number;
+  /** Monotonic spawn order — the OLDEST active floor drop (lowest seq) is evicted
+   *  first when a chest reward needs room in a full pool (spawnGuaranteedPickup).
+   *  Deterministic (a counter, no rng); mirrors Particle.ts's burstSeed. */
+  seq: number;
 }
+
+/** Monotonic spawn counter (deterministic, like Particle.burstSeed) for eviction age. */
+let spawnSeq = 0;
 
 export function createPickupPool(): Pickup[] {
   return Array.from({ length: POOL.pickups }, () => ({
@@ -80,6 +87,7 @@ export function createPickupPool(): Pickup[] {
     kind: 'health' as PickupKind,
     room: -1,
     pairId: -1,
+    seq: 0,
   }));
 }
 
@@ -99,9 +107,34 @@ export function spawnPickup(
     pk.kind = kind;
     pk.room = room;
     pk.pairId = pairId;
+    pk.seq = spawnSeq++;
     return true;
   }
   return false;
+}
+
+/** Spawn a pickup that MUST appear — a GOLDEN-CHEST reward, which is guaranteed loot.
+ *  If the pool is full, evict the OLDEST active FLOOR drop (pairId < 0 — never another
+ *  chest's pick) to make room, so a chest's loot is never silently lost to pool
+ *  pressure. Oldest by spawn `seq` (deterministic, no rng → the L1 fuzz stays clean).
+ *  No-op only in the unreachable case that every slot is already a chest pick. */
+export function spawnGuaranteedPickup(
+  pool: Pickup[],
+  x: number,
+  y: number,
+  kind: PickupKind,
+  room: number,
+  pairId: number,
+): void {
+  if (spawnPickup(pool, x, y, kind, room, pairId)) return;
+  let victim: Pickup | null = null;
+  for (const pk of pool) {
+    if (pk.active && pk.pairId < 0 && (victim === null || pk.seq < victim.seq)) victim = pk;
+  }
+  if (victim) {
+    victim.active = false;
+    spawnPickup(pool, x, y, kind, room, pairId);
+  }
 }
 
 export function activePickupCount(pool: Pickup[]): number {

@@ -23,7 +23,7 @@
 
 import { CHEST, PLAYER, POOL } from '../utils/constants';
 import { spawnParticles } from './Particle';
-import { chooseChestPicks, spawnPickup } from './Pickup';
+import { chooseChestPicks, spawnGuaranteedPickup } from './Pickup';
 import { spawnEnemy, roomEnemyCount } from './Enemy';
 import { reactivateRoom } from './Encounter';
 import type { GameState } from './GameState';
@@ -122,8 +122,11 @@ function popLoot(state: GameState, c: Chest, ci: number): void {
   // pairId = the chest's pool slot + 1 (>= 1, unique per chest) so the two pickups
   // link only to each other — collecting one despawns its sibling (exactly one taken).
   const pairId = ci + 1;
-  spawnPickup(state.pickups, c.x - CHEST.pickupOffset, c.y, a, c.roomIndex, pairId);
-  spawnPickup(state.pickups, c.x + CHEST.pickupOffset, c.y, b, c.roomIndex, pairId);
+  // GUARANTEED: a chest's reward is never lost to a full pickup pool — evict the
+  // oldest stale FLOOR drop if needed so both picks always appear (the chest's
+  // "reliable reward" identity; a stale uncollected drop is what yields).
+  spawnGuaranteedPickup(state.pickups, c.x - CHEST.pickupOffset, c.y, a, c.roomIndex, pairId);
+  spawnGuaranteedPickup(state.pickups, c.x + CHEST.pickupOffset, c.y, b, c.roomIndex, pairId);
 }
 
 /** Count of live chests — for tests / pool-reuse guards. */
