@@ -30,7 +30,8 @@ export type PickupKind =
   | 'burn'
   | 'chain'
   | 'crit'
-  | 'freeze';
+  | 'freeze'
+  | 'fireRate';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
@@ -49,6 +50,7 @@ const POWERUP_KINDS: readonly PickupKind[] = [
   'chain',
   'crit',
   'freeze', // meta PR1 — LOCKABLE: only enters the pool when unlocked (see LOCKABLE_KINDS)
+  'fireRate', // meta PR2 — LOCKABLE track: enters the pool only when 'fireRate' is unlocked
 ];
 
 /** On-hit EFFECT axes (synergy arc) — picked UNCOMMONLY (DROP.effectWeight) vs the
@@ -60,7 +62,7 @@ const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal', 
  *  UNLESS the run config's `unlocked` set lists them. Base/default config unlocks none
  *  of these, so a clean save plays EXACTLY like today (the regression guard). Grows as
  *  more unlockables land. */
-const LOCKABLE_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['freeze']);
+const LOCKABLE_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['freeze', 'fireRate']);
 
 /** Empty unlocked-set default (= base config: no lockables available). Shared, frozen. */
 const NO_UNLOCKS: ReadonlySet<string> = new Set<string>();
@@ -233,6 +235,8 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
       return player.critLevel;
     case 'freeze':
       return player.freezeLevel;
+    case 'fireRate':
+      return player.fireRateLevel;
     case 'fasterRecharge':
       return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
     case 'dashStrike':
@@ -269,6 +273,8 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     player.critLevel = levelUp(player.critLevel);
   } else if (kind === 'freeze') {
     player.freezeLevel = levelUp(player.freezeLevel);
+  } else if (kind === 'fireRate') {
+    player.fireRateLevel = levelUp(player.fireRateLevel);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {

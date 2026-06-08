@@ -65,19 +65,34 @@ function computeDoorCells(room: RoomState, rect: Rect): { tx: number; ty: number
  *  always chasers (keeps difficulty assertions on live[0] valid) and there's
  *  always >= 1 chaser. Deterministic by index — no RNG, same seed+depth => same
  *  mix. */
-function computeSpawns(rect: Rect, depth: number): { x: number; y: number; type: EnemyType }[] {
+const NO_UNLOCKS: ReadonlySet<string> = new Set<string>();
+
+function computeSpawns(
+  rect: Rect,
+  depth: number,
+  unlocked: ReadonlySet<string> = NO_UNLOCKS,
+): { x: number; y: number; type: EnemyType }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
   const n = enemiesPerRoomForDepth(depth); // depth-scaled count (Phase 7c)
   const ranged = rangedCountForDepth(depth); // SUBSTITUTE for chasers (7.5)
   const swarmer = swarmerCountForDepth(depth); // SUBSTITUTE for chasers (7.6)
   const chasers = n - ranged - swarmer; // >= 1 by the count clamps
+  // META PR2: when unlocked + deep enough, substitute armored variants for chasers —
+  // but NEVER the leading slot, so >= 1 plain chaser remains (the live[0] invariant) and
+  // difficulty assertions stay valid. Locked / shallow → 0 → spawns identical to today.
+  const armored =
+    unlocked.has('armored-chaser') && depth >= ENCOUNTER.armoredMinDepth
+      ? Math.min(ENCOUNTER.armoredPerRoom, Math.max(0, chasers - 1))
+      : 0;
+  const plainChasers = chasers - armored;
   const spread = ENCOUNTER.spawnSpread;
   const out: { x: number; y: number; type: EnemyType }[] = [];
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2;
     let type: EnemyType;
-    if (k < chasers) type = 'chaser';
+    if (k < plainChasers) type = 'chaser';
+    else if (k < chasers) type = 'armored'; // tail of the chaser block (never slot 0)
     else if (k < chasers + ranged) type = 'ranged';
     else type = 'swarmer';
     out.push({ x: cx + Math.cos(ang) * spread, y: cy + Math.sin(ang) * spread, type });
@@ -87,12 +102,13 @@ function computeSpawns(rect: Rect, depth: number): { x: number; y: number; type:
 
 /** Build the encounter table for a floor. Room 0 (spawn) starts cleared (safe).
  *  The BOSS room (Phase 8) gets NO normal spawns — it's boss-alone; the single
- *  boss is spawned on activation in updateEncounterEntry. */
-export function buildEncounters(floor: Floor, depth = 1): RoomEncounter[] {
+ *  boss is spawned on activation in updateEncounterEntry. `unlocked` (meta PR2) gates
+ *  content additions like the armored chaser; defaults to base (none). */
+export function buildEncounters(floor: Floor, depth = 1, unlocked: ReadonlySet<string> = NO_UNLOCKS): RoomEncounter[] {
   return floor.rooms.map((rect, i) => ({
     rect,
     phase: i === 0 ? ('cleared' as RoomPhase) : ('idle' as RoomPhase),
-    spawns: i === floor.bossRoom ? [] : computeSpawns(rect, depth),
+    spawns: i === floor.bossRoom ? [] : computeSpawns(rect, depth, unlocked),
     doorCells: computeDoorCells(floor.room, rect),
     dropsSpawned: 0,
     dropsCollected: 0,

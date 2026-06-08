@@ -323,6 +323,14 @@ body {
   );
 }
 
+/* FIRE RATE (meta PR2): a right-pointing double-chevron — "faster / rapid". */
+.hud-chip.is-fire-rate::before {
+  width: 10px;
+  height: 9px;
+  background: currentColor;
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+}
+
 /* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
    read: small dots after the label, lit at the chip's --chip-color. */
 .hud-chip-pips {

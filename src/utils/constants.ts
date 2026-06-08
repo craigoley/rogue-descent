@@ -57,6 +57,10 @@ export const PALETTE = {
    *  at a glance. Distinct from the white hit-flash, amber telegraph, and steel
    *  boss-shield. */
   enemyStunned: 0x6f8aa6,
+  /** ARMORED chaser tint (meta PR2 — the enemy-dimension unlock) — cold steel grey: a
+   *  plated, metallic read distinct from the warm chaser reds, so "this one's armored,
+   *  it'll take more" parses on sight. Brighter than the boss maroon. */
+  enemyArmored: 0x9aa6b8,
   /** FROZEN/SLOWED enemy tint (meta PR1 — the FREEZE effect axis) — icy cyan: a cold
    *  "slowed" read, distinct from the stun grey-blue (a frozen enemy still ACTS, just
    *  moves slower) and the warm burn/enemy tones. */
@@ -72,6 +76,10 @@ export const PALETTE = {
    *  hue distinct from every other effect (lifesteal crimson, burn ember, chain
    *  blue) and the verb tracks. */
   crit: 0xffd23f,
+  /** FIRE-RATE (meta PR2 — the track-dimension unlock) — bright lime: the fire-rate
+   *  chip + world drop. A "rapid / fast" hue distinct from the projectile blue (ranged/
+   *  pierce), the verb oranges, and every effect colour. */
+  fireRate: 0xb6ff4d,
   /** GOLDEN CHEST body (golden chests) — warm amber-gold, distinct from the brighter
    *  crit gold, so a chest reads as "treasure" from across the room. */
   chest: 0xffb300,
@@ -146,6 +154,8 @@ export const CSS_PALETTE = {
   crit: '#ffd23f',
   /** FREEZE effect-axis chip colour (meta PR1) — icy cyan (mirrors PALETTE.enemyFrozen). */
   freeze: '#66ccff',
+  /** FIRE-RATE track chip colour (meta PR2) — bright lime (mirrors PALETTE.fireRate). */
+  fireRate: '#b6ff4d',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -575,7 +585,7 @@ export const ENEMY_PROJ = {
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
-export type EnemyType = 'chaser' | 'ranged' | 'swarmer' | 'boss' | 'bossadd';
+export type EnemyType = 'chaser' | 'armored' | 'ranged' | 'swarmer' | 'boss' | 'bossadd';
 
 /** Shared across ALL enemy types (not per-type tuning). */
 export const ENEMY_COMMON = {
@@ -612,6 +622,36 @@ export const ENEMY_TYPES = {
     radius: 0.4,
     /** Knockback impulse multiplier (1 = normal mass). */
     knockbackMult: 1,
+  },
+  /** META PR2 (enemy-dimension UNLOCK): an ARMORED chaser variant. Reuses the chaser
+   *  AI verbatim (no switch case → falls through to updateChaser); the variant is
+   *  durability + read, NOT new behaviour: ~2.25× HP, a bigger/heavier silhouette
+   *  (larger radius, resists knockback), and a metal tint + armored telegraph tell in
+   *  the renderer. NOT a directional shield (that's the boss gimmick). Joins the spawn
+   *  mix only when config.unlocked has 'armored-chaser' AND depth >= 3 (substitutes a
+   *  chaser slot; total count unchanged). All by-feel, playtest-tunable. */
+  armored: {
+    /** TANKY — ~2.25× the chaser (40) so it eats hits + rewards sustained DPS/burn. */
+    maxHealth: 90,
+    /** Slightly slower than the chaser (heavy plate); still kiteable. */
+    moveSpeed: 3,
+    /** Same engagement distance as the chaser. */
+    attackRange: 1.3,
+    /** Wind-up before the strike, seconds (same readable tell as the chaser). */
+    telegraph: 0.55,
+    /** Strike active window, seconds. */
+    strike: 0.12,
+    /** Post-strike pause before chasing again, seconds. */
+    recover: 0.45,
+    /** Damage dealt by a connecting strike (same as the chaser — armor is DURABILITY,
+     *  not more hurt). */
+    attackDamage: 18,
+    /** A strike connects if the player is within this distance at strike time. */
+    attackReach: 1.7,
+    /** Bigger silhouette than the chaser (reads heavier). */
+    radius: 0.48,
+    /** HEAVY — resists knockback (0.6 < 1) so it isn't shoved like a base chaser. */
+    knockbackMult: 0.6,
   },
   /** Phase 7.5 ranged sniper: kite to range -> telegraph -> fire a slow bolt ->
    *  cooldown. FRAGILE (low HP) so closing in / sniping kills it fast — the
@@ -769,6 +809,12 @@ export const ENCOUNTER = {
   enemiesPerRoom: 3,
   /** Radius (world units) of the spawn ring around a room's centre. */
   spawnSpread: 1.5,
+  /** META PR2 — ARMORED-chaser gating. When 'armored-chaser' is UNLOCKED, substitute up
+   *  to `armoredPerRoom` chaser slots for the armored variant from depth `armoredMinDepth`
+   *  onward (never the leading slot — >= 1 plain chaser always remains; total count
+   *  unchanged). Locked / shallower depth → 0 armored → spawns identical to today. */
+  armoredMinDepth: 3,
+  armoredPerRoom: 1,
 } as const;
 
 /**
@@ -1016,6 +1062,16 @@ export const RANGED_LEVELS = {
   spreadAngle: 0.35,
 } as const;
 
+/** META PR2 (track-dimension UNLOCK): FIRE-RATE level → ranged shot-cooldown multiplier.
+ *  Level 0 = ×1 (RANGED.cooldown unchanged — base runs fire exactly as today); higher
+ *  levels shorten the interval (III ≈ 40% faster). A genuinely NEW axis: fire rate was
+ *  fixed (only RANGED_LEVELS' shot COUNT scaled). POWER-NEUTRAL re: meta — meta only
+ *  UNLOCKS the option; it's an in-run track re-earned via pickups, reset on death, capped
+ *  III, exactly like the others. By-feel, playtest-tunable. */
+export const FIRE_RATE_LEVELS = {
+  cooldownMult: [1, 0.85, 0.72, 0.6],
+} as const;
+
 /** PIERCE level → MAX DISTINCT ENEMIES a bolt damages before it despawns. Level 0
  *  = 1 (first-hit-stops, no pierce — unchanged); I = 2, II = 3, III = Infinity
  *  (the pre-Phase-9 infinite pass-through, now the cap). The reframing of "more
@@ -1215,6 +1271,16 @@ export const FIGURE = {
     bodyHeight: 0.72,
     headRadius: 0.3,
     visorSize: 0.18,
+  },
+  /** Armored silhouette (meta PR2) — a HEAVIER, bulkier chaser: wider body + bigger
+   *  head so "tanky / plated" reads at a glance (paired with the steel tint). Same
+   *  squat-brute family as the chaser, scaled up. */
+  armored: {
+    bodyRadiusTop: 0.5,
+    bodyRadiusBottom: 0.5,
+    bodyHeight: 0.82,
+    headRadius: 0.34,
+    visorSize: 0.2,
   },
   /** Ranged silhouette — TALL + thin with a big head/eye (a sniper). Instantly
    *  distinct from the squat chaser at a glance, NOT a recolour. */

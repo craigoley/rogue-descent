@@ -124,6 +124,8 @@ export class HUD {
   private readonly critChip: LevelChip;
   /** Meta PR1: the FREEZE effect chip (icy cyan; unlockable — dimmed until earned). */
   private readonly freezeChip: LevelChip;
+  /** Meta PR2: the FIRE-RATE track chip (lime; unlockable — dimmed until earned). */
+  private readonly fireRateChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -239,6 +241,7 @@ export class HUD {
     this.chainChip = makeChip('CHAIN', 'is-chain', CSS_PALETTE.chain);
     this.critChip = makeChip('CRIT', 'is-crit', CSS_PALETTE.crit);
     this.freezeChip = makeChip('FREEZE', 'is-freeze', CSS_PALETTE.freeze);
+    this.fireRateChip = makeChip('FIRE RATE', 'is-fire-rate', CSS_PALETTE.fireRate);
     bars.appendChild(powersRow);
 
     container.appendChild(bars);
@@ -579,6 +582,7 @@ export class HUD {
     setChipLevel(this.chainChip, state.player.chainLevel);
     setChipLevel(this.critChip, state.player.critLevel);
     setChipLevel(this.freezeChip, state.player.freezeLevel);
+    setChipLevel(this.fireRateChip, state.player.fireRateLevel);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);

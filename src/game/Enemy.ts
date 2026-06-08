@@ -82,6 +82,12 @@ export interface Enemy {
   /** Movement multiplier for the CURRENT slow (FREEZE_LEVELS.slowMult[level],
    *  overwritten on re-apply). Unused while slowTimer 0. */
   slowFactor: number;
+  /** META PR2 — WILDFIRE attribution: was this enemy's burn IGNITED by a CHAIN arc
+   *  (the fire SPREAD to it) rather than a direct hit (you lit it yourself)? Set true
+   *  when a 'chain' hit ignites, false when a 'direct' hit ignites; reset on spawn. A
+   *  burn-TICK kill on an enemy with this set is a WILDFIRE kill (Combat death choke).
+   *  Pure feedback/attribution — never read by AI/movement. */
+  ignitedByChain: boolean;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -107,6 +113,7 @@ export function createEnemyPool(): Enemy[] {
     burnDps: 0,
     slowTimer: 0,
     slowFactor: 1,
+    ignitedByChain: false,
   }));
 }
 
@@ -150,6 +157,7 @@ export function spawnEnemy(
     e.burnDps = 0;
     e.slowTimer = 0; // ...nor a freeze/slow
     e.slowFactor = 1;
+    e.ignitedByChain = false; // ...nor a stale wildfire-attribution flag
     return true;
   }
   return false;

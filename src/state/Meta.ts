@@ -18,6 +18,11 @@
 const STORAGE_KEY = 'rogue-descent:meta';
 const VERSION = 1;
 
+/** Milestone thresholds (meta arc). All by-feel; each unlock is power-NEUTRAL (variety,
+ *  never raw power) and flows from PLAYING — no currency, no grind. */
+const ARMORED_UNLOCK_DEPTH = 3; // reach depth 3 (cumulative deepestDepth) → armored chaser
+const WILDFIRE_UNLOCK_KILLS = 30; // cumulative wildfire kills → fire-rate track
+
 export interface MetaState {
   version: number;
   /** Layer 1 — unlocked content ids (e.g. 'freeze'). Drives the run's available pool. */
@@ -28,6 +33,10 @@ export interface MetaState {
     deepestDepth: number;
     /** Total bosses defeated across all runs. */
     bossKills: number;
+    /** META PR2 — cumulative WILDFIRE kills across all runs (burn-tick kills on
+     *  chain-spread enemies). The first SKILL-attributed milestone source: sustained
+     *  chain×burn play unlocks the fire-rate track. */
+    wildfireKills: number;
   };
   /** Layer 2 (later) — chosen run-start direction. Present now, unused → no migration. */
   runStart: string | null;
@@ -38,31 +47,35 @@ export interface MetaState {
 /** A clean-slate meta: nothing unlocked, zeroed stats. The graceful fallback for an
  *  absent/corrupt/Safari-private save — the game is fully playable from this. */
 export function defaultMeta(): MetaState {
-  return { version: VERSION, unlocked: [], stats: { deepestDepth: 0, bossKills: 0 }, runStart: null, heat: 0 };
+  return { version: VERSION, unlocked: [], stats: { deepestDepth: 0, bossKills: 0, wildfireKills: 0 }, runStart: null, heat: 0 };
 }
 
 /** Layer-1 unlock rules — PURE (run outcome + current meta → updated meta). No I/O, so
  *  it's unit-testable like betterBest. Milestones flow from PLAYING WELL (no grind, no
  *  currency); each unlock is power-NEUTRAL (more variety, never more raw power).
  *
- *  Triggers (PR1): defeat the first boss → unlock 'freeze'. (More land in PR2; the
- *  effect-attributed ones that need new run-stat counters come later.) Returns the
- *  same object identity-wise only when nothing changed callers can compare/skip-save. */
+ *  Triggers span all three lockable DIMENSIONS:
+ *    - EFFECT  (PR1): defeat the first boss            → 'freeze'
+ *    - ENEMY   (PR2): reach depth 3 (cumulative)       → 'armored-chaser'
+ *    - TRACK   (PR2): 30 cumulative WILDFIRE kills     → 'fireRate' (skill-attributed)
+ *  Each unlock is power-NEUTRAL (more variety, never more raw power). Pure (run outcome +
+ *  meta → meta), so it's unit-testable; persisted unlocked order is sorted/stable. */
 export function applyRunResult(
   meta: MetaState,
-  outcome: { depth: number; bossDefeated: boolean },
+  outcome: { depth: number; bossDefeated: boolean; wildfireKills: number },
 ): MetaState {
   const unlocked = new Set(meta.unlocked);
   const bossKills = meta.stats.bossKills + (outcome.bossDefeated ? 1 : 0);
-  // MILESTONE: beat the boss at least once → FREEZE joins the pool.
-  if (bossKills > 0) unlocked.add('freeze');
+  const deepestDepth = Math.max(meta.stats.deepestDepth, outcome.depth);
+  const wildfireKills = meta.stats.wildfireKills + outcome.wildfireKills;
+  // MILESTONES (each fires once its cumulative threshold is met; idempotent via the Set).
+  if (bossKills > 0) unlocked.add('freeze'); // EFFECT — beat the boss
+  if (deepestDepth >= ARMORED_UNLOCK_DEPTH) unlocked.add('armored-chaser'); // ENEMY — reach depth 3
+  if (wildfireKills >= WILDFIRE_UNLOCK_KILLS) unlocked.add('fireRate'); // TRACK — chain×burn skill
   return {
     version: VERSION,
     unlocked: [...unlocked].sort(), // sorted → stable/deterministic persisted order
-    stats: {
-      deepestDepth: Math.max(meta.stats.deepestDepth, outcome.depth),
-      bossKills,
-    },
+    stats: { deepestDepth, bossKills, wildfireKills },
     runStart: meta.runStart,
     heat: meta.heat,
   };
@@ -87,6 +100,7 @@ export function loadMeta(): MetaState {
       stats: {
         deepestDepth: numberOr(parsed.stats?.deepestDepth, 0),
         bossKills: numberOr(parsed.stats?.bossKills, 0),
+        wildfireKills: numberOr(parsed.stats?.wildfireKills, 0),
       },
       runStart: typeof parsed.runStart === 'string' ? parsed.runStart : null,
       heat: numberOr(parsed.heat, 0),
