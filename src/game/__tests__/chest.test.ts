@@ -14,9 +14,9 @@ import { createGameState, startNewRun, update, type GameState } from '../GameSta
 import { createIntent } from '../Input';
 import { spawnEnemy, roomEnemyCount } from '../Enemy';
 import { updateEncounterResolve } from '../Encounter';
-import { chooseChestPicks, currentPowerupLevel, rollDrop, activePickupCount, type PickupKind } from '../Pickup';
+import { chooseChestPicks, currentPowerupLevel, rollDrop, activePickupCount, spawnPickup, type PickupKind } from '../Pickup';
 import { createRng } from '../../utils/rng';
-import { POWERUP_MAX_LEVEL, SIM_DT } from '../../utils/constants';
+import { POOL, POWERUP_MAX_LEVEL, SIM_DT } from '../../utils/constants';
 
 const DT = SIM_DT;
 const EFFECTS = new Set<PickupKind>(['lifesteal', 'burn', 'chain', 'crit']);
@@ -162,5 +162,26 @@ describe('Chest — chestRng is independent of drop + combat streams', () => {
     const dropsB = Array.from({ length: 20 }, () => rollDrop(b.dropRng));
 
     expect(dropsB).toEqual(dropsA);
+  });
+});
+
+describe('Chest — loot is GUARANTEED even when the pickup pool is full (B2)', () => {
+  it('opening a chest at a full pool evicts stale floor drops so BOTH picks spawn', () => {
+    const { s, cx, cy } = withChest(1);
+    s.rooms[1].phase = 'cleared';
+    s.player.x = cx;
+    s.player.y = cy;
+    s.chestRng = { next: () => 0.99, int: () => 0 }; // >= mimicChance → forced LOOT
+    // FILL the pickup pool with stale FLOOR drops (pairId -1), far from the player so
+    // they aren't collected this frame.
+    for (let i = 0; i < POOL.pickups; i++) spawnPickup(s.pickups, 0, 0, 'health', -1);
+    expect(activePickupCount(s.pickups)).toBe(POOL.pickups); // full
+
+    update(s, createIntent(), DT); // open → popLoot must make room for the 2 picks
+
+    // Both chest picks (pairId = chest slot 0 + 1 = 1) spawned despite the full pool.
+    const chestPicks = s.pickups.filter((pk) => pk.active && pk.pairId === 1);
+    expect(chestPicks).toHaveLength(2);
+    expect(activePickupCount(s.pickups)).toBe(POOL.pickups); // still capped (2 stale evicted)
   });
 });

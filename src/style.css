@@ -28,6 +28,12 @@
      centred, full-width DEPTH counter (which caused the "PTH 1" overlap when
      DEPTH was on the old --hud-title-clear row with the left bars). */
   --hud-band-clear: 84px;
+  /* Width the top-right minimap + its insets + a gap reserve on the right, so the
+     left-anchored powers (chip) row caps its width here and WRAPS within the left
+     region instead of underlapping the minimap at narrow widths. Sized for the
+     128px minimap + 10px inset + the bars' 10px left + a ~22px gap; future-proof —
+     more chips just add wrap rows, never reach the minimap. */
+  --hud-minimap-reserve: 170px;
   --touch-btn-size: 76px; /* DASH / MELEE diameter */
   --touch-btn-bottom: 28px; /* gap from the safe-area to the button row */
   --touch-btn-edge: 24px; /* MELEE inset from the right edge */
@@ -208,6 +214,11 @@ body {
    it can never bleed into the right-anchored minimap on a very narrow screen. */
 .hud-powers {
   flex-wrap: wrap;
+  /* Cap the row so the chips wrap within the left region and never underlap the
+     top-right minimap (the ≤768px overlap bug). The bars sit at left:10px, so the
+     reserve also accounts for that. Desktop is wide enough that the chips still fit
+     one row; tablet/portrait wrap cleanly clear of the minimap. */
+  max-width: calc(100vw - var(--hud-minimap-reserve) - var(--safe-right));
 }
 
 .hud-chip {
