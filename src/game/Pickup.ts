@@ -29,7 +29,8 @@ export type PickupKind =
   | 'lifesteal'
   | 'burn'
   | 'chain'
-  | 'crit';
+  | 'crit'
+  | 'freeze';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
@@ -47,12 +48,28 @@ const POWERUP_KINDS: readonly PickupKind[] = [
   'burn',
   'chain',
   'crit',
+  'freeze', // meta PR1 — LOCKABLE: only enters the pool when unlocked (see LOCKABLE_KINDS)
 ];
 
 /** On-hit EFFECT axes (synergy arc) — picked UNCOMMONLY (DROP.effectWeight) vs the
  *  stat-tracks (DROP.trackWeight) so effects read as build-defining, not common
  *  top-ups. Grows with burn/chain/crit. Drives the weighted roll in rollDrop. */
-const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal', 'burn', 'chain', 'crit']);
+const EFFECT_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['lifesteal', 'burn', 'chain', 'crit', 'freeze']);
+
+/** META PR1 — LOCKABLE kinds: present in POWERUP_KINDS but absent from a run's pool
+ *  UNLESS the run config's `unlocked` set lists them. Base/default config unlocks none
+ *  of these, so a clean save plays EXACTLY like today (the regression guard). Grows as
+ *  more unlockables land. */
+const LOCKABLE_KINDS: ReadonlySet<PickupKind> = new Set<PickupKind>(['freeze']);
+
+/** Empty unlocked-set default (= base config: no lockables available). Shared, frozen. */
+const NO_UNLOCKS: ReadonlySet<string> = new Set<string>();
+
+/** The powerup kinds AVAILABLE this run: every kind except lockables the run hasn't
+ *  unlocked. Pure (config in → pool out); the run config is a pure input, no storage. */
+function availableKinds(unlocked: ReadonlySet<string>): readonly PickupKind[] {
+  return POWERUP_KINDS.filter((k) => !LOCKABLE_KINDS.has(k) || unlocked.has(k));
+}
 
 /** Roll weight for a powerup kind: effect axes are uncommon, stat-tracks common. */
 function powerupWeight(kind: PickupKind): number {
@@ -147,20 +164,23 @@ export function activePickupCount(pool: Pickup[]): number {
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
  *  second (only consumed for a powerup) picks via a WEIGHTED cumulative walk
  *  (stat-tracks common, effect axes uncommon). */
-export function rollDrop(rng: Rng): PickupKind | null {
+export function rollDrop(rng: Rng, unlocked: ReadonlySet<string> = NO_UNLOCKS): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
   if (rng.next() < DROP.healthShare) return 'health';
   // WEIGHTED powerup pick (synergy arc): effect axes are rarer than stat-tracks.
   // One draw, cumulative-weight walk — same draw COUNT as the old uniform pick (so
   // downstream roll sequences / the scarcity acceptDraw stay positionally stable).
+  // META PR1: the pool is the run's AVAILABLE kinds (lockables filtered unless
+  // unlocked) — base config = today's kinds exactly, so the draw stream is unchanged.
+  const pool = availableKinds(unlocked);
   let total = 0;
-  for (const k of POWERUP_KINDS) total += powerupWeight(k);
+  for (const k of pool) total += powerupWeight(k);
   let r = rng.next() * total;
-  for (const k of POWERUP_KINDS) {
+  for (const k of pool) {
     r -= powerupWeight(k);
     if (r < 0) return k;
   }
-  return POWERUP_KINDS[POWERUP_KINDS.length - 1]; // floating-point safety net
+  return pool[pool.length - 1]; // floating-point safety net
 }
 
 /** Increment a leveled powerup, capped at POWERUP_MAX_LEVEL (Phase 9): picking up
@@ -194,6 +214,8 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
       return player.chainLevel;
     case 'crit':
       return player.critLevel;
+    case 'freeze':
+      return player.freezeLevel;
     case 'fasterRecharge':
       return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
     case 'dashStrike':
@@ -228,6 +250,8 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     player.chainLevel = levelUp(player.chainLevel);
   } else if (kind === 'crit') {
     player.critLevel = levelUp(player.critLevel);
+  } else if (kind === 'freeze') {
+    player.freezeLevel = levelUp(player.freezeLevel);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {
@@ -267,10 +291,16 @@ export function updatePickups(state: GameState): void {
  *  two LIVE options: no effect available (all maxed) -> two distinct stats/health;
  *  the fully-degenerate all-maxed case -> health + health (both heal). Deterministic
  *  via the passed rng (state.chestRng). */
-export function chooseChestPicks(player: PlayerState, rng: Rng): [PickupKind, PickupKind] {
+export function chooseChestPicks(
+  player: PlayerState,
+  rng: Rng,
+  unlocked: ReadonlySet<string> = NO_UNLOCKS,
+): [PickupKind, PickupKind] {
   const open = (k: PickupKind): boolean => currentPowerupLevel(player, k) < POWERUP_MAX_LEVEL;
-  const effects = POWERUP_KINDS.filter((k) => EFFECT_KINDS.has(k) && open(k));
-  const stats = POWERUP_KINDS.filter((k) => !EFFECT_KINDS.has(k) && open(k));
+  // META PR1: only offer AVAILABLE kinds (lockables filtered unless unlocked).
+  const pool = availableKinds(unlocked);
+  const effects = pool.filter((k) => EFFECT_KINDS.has(k) && open(k));
+  const stats = pool.filter((k) => !EFFECT_KINDS.has(k) && open(k));
   // Health is always a valid "stat-side" pick (it's not a leveled track).
   const statPool: PickupKind[] = [...stats, 'health'];
   const pick = (arr: PickupKind[]): PickupKind => arr[rng.int(0, arr.length - 1)];

@@ -86,9 +86,25 @@ export interface Stairs {
   active: boolean;
 }
 
+/** META PR1 — per-run CONFIG fed in from the app/meta layer (the unlocked-content set,
+ *  later run-start choice + Heat). The crux of the meta boundary: src/game/ receives
+ *  this as a PURE INPUT (data in), and NEVER reads localStorage — the app layer
+ *  (src/state/Meta + main.ts) owns the I/O and builds this. A run is deterministic
+ *  given (seed, config). Extensible: runStart (L2) / heat (L3) join here without rework. */
+export interface RunConfig {
+  /** Unlocked content ids (e.g. 'freeze') — gates LOCKABLE drop kinds into the pool. */
+  unlocked: ReadonlySet<string>;
+}
+
+/** Base config: nothing unlocked → a clean save plays EXACTLY like today. The default
+ *  for createGameState + the graceful fallback when meta is absent/corrupt. */
+export const BASE_RUN_CONFIG: RunConfig = { unlocked: new Set<string>() };
+
 export interface GameState {
   player: PlayerState;
   room: RoomState;
+  /** META PR1 — the unlocked-content (+ later run-start/Heat) config for this run. */
+  config: RunConfig;
   /** Run-level state — PERSISTS across descents (see RunState). */
   run: RunState;
   /** Current floor's descent stairs (per-floor; see Stairs). */
@@ -156,6 +172,7 @@ export interface GameState {
     burn: number;
     chain: number;
     crit: number;
+    freeze: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -180,10 +197,11 @@ const combatSeed = (seed: number): number => (seed + 0x85ebca6b) >>> 0;
  *  so chest content rolls are independent of both the drop + crit streams. */
 const chestSeed = (seed: number): number => (seed + 0xc2b2ae35) >>> 0;
 
-export function createGameState(): GameState {
+export function createGameState(config?: RunConfig): GameState {
   const state: GameState = {
     player: createPlayer(0, 0),
     room: { tilesX: 0, tilesY: 0, tileSize: 1, walls: [], solid: [] },
+    config: config ?? BASE_RUN_CONFIG,
     // Run state starts a fresh run; loadFloor below does NOT reset this.
     run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0 },
     stairs: { x: 0, y: 0, roomIndex: -1, active: false },
@@ -206,7 +224,7 @@ export function createGameState(): GameState {
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     combatRng: createRng(combatSeed(DUNGEON.defaultSeed)),
     chestRng: createRng(chestSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0, freeze: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -276,6 +294,7 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.burn = 0;
   state.dropCounts.chain = 0;
   state.dropCounts.crit = 0;
+  state.dropCounts.freeze = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -291,7 +310,10 @@ function loadFloor(state: GameState, seed: number): void {
  * the `run` reset + clear runOver that loadFloor deliberately leaves alone. The
  * seed is caller-provided (impure layer) so the sim stays pure/deterministic.
  */
-export function startNewRun(state: GameState, seed: number): void {
+export function startNewRun(state: GameState, seed: number, config?: RunConfig): void {
+  // META PR1: the app layer passes the meta-derived config for THIS run (unlocked
+  // content). Omitted (tests / no-meta) → keep the existing config (base by default).
+  if (config) state.config = config;
   state.run.depth = 1;
   state.run.floorsCleared = 0;
   state.run.kills = 0;
@@ -373,6 +395,7 @@ function descendIfReady(state: GameState): boolean {
     burnLevel: p.burnLevel,
     chainLevel: p.chainLevel,
     critLevel: p.critLevel,
+    freezeLevel: p.freezeLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -387,6 +410,7 @@ function descendIfReady(state: GameState): boolean {
   state.player.burnLevel = carried.burnLevel;
   state.player.chainLevel = carried.chainLevel;
   state.player.critLevel = carried.critLevel;
+  state.player.freezeLevel = carried.freezeLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);

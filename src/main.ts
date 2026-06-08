@@ -12,7 +12,7 @@
  */
 
 import './style.css';
-import { createGameState, regenerate, startNewRun, update } from './game/GameState';
+import { createGameState, regenerate, startNewRun, update, type RunConfig } from './game/GameState';
 import { generateDungeon, isConnected } from './game/Dungeon';
 import { playerRoomIndex } from './game/Encounter';
 import { Controls } from './input/Controls';
@@ -24,13 +24,18 @@ import { RunSummary } from './rendering/RunSummary';
 import { AudioEngine } from './audio/AudioEngine';
 import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
+import { loadMeta } from './state/Meta';
 import { DASH, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
 
 // --- State (pure) ---------------------------------------------------------
-const game = createGameState();
+// META: read the unlock set from localStorage (app layer) → build the run CONFIG that
+// feeds the pure sim. Re-read per run-start so a just-earned unlock applies next run.
+// loadMeta() degrades to base (nothing unlocked) on absent/corrupt storage.
+const runConfig = (): RunConfig => ({ unlocked: new Set(loadMeta().unlocked) });
+const game = createGameState(runConfig());
 
 // E2E / screenshot SEAM (entry-layer only — src/game/ stays pure). Deterministic
 // boot scenes from URL params so Playwright (L2) can baseline stable frames:
@@ -44,7 +49,7 @@ const game = createGameState();
 // restart setup); no renderer mutates state in the loop.
 const bootParams = new URLSearchParams(window.location.search);
 const seedParam = bootParams.get('seed');
-if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0);
+if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0, runConfig());
 if (bootParams.get('scene') === 'boss') {
   const rect = game.rooms[game.bossRoom]?.rect;
   if (rect) {
@@ -80,7 +85,7 @@ const freshRunSeed = (): number => (Date.now() + Math.imul(++runSeedCounter, 0x9
 
 // Run-over overlay: one-tap/-click/-key RESTART starts a FRESH run. The loop's
 // seed-change rebuild (below) picks up the new floor; we just mutate state here.
-const summary = new RunSummary(app, () => startNewRun(game, freshRunSeed()));
+const summary = new RunSummary(app, () => startNewRun(game, freshRunSeed(), runConfig()));
 
 // Start the camera framed on the player's spawn — no slide-in on frame 1.
 scene.snapFocus(game.spawn.x, game.spawn.y);

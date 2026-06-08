@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, FREEZE_LEVELS, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { spawnChainArc } from './ChainArc';
 import { isoRotate, type InputIntent } from './Input';
@@ -149,6 +149,14 @@ export function damageEnemy(
     if (state.player.burnLevel > 0) {
       enemy.burnTimer = BURN_LEVELS.duration;
       enemy.burnDps = BURN_LEVELS.dps[state.player.burnLevel];
+    }
+    // META PR1 — FREEZE: a DIRECT hit SLOWS the enemy's movement (refresh-not-stack).
+    // DIRECT only (like lifesteal) — not chain/tick — so it stays a positioning tool,
+    // not a spreadable lockdown. Distinct from stun: the enemy still ACTS (the slow is
+    // applied to its movement in updateEnemies, not an AI freeze).
+    if (kind === 'direct' && state.player.freezeLevel > 0) {
+      enemy.slowTimer = FREEZE_LEVELS.duration;
+      enemy.slowFactor = FREEZE_LEVELS.slowMult[state.player.freezeLevel];
     }
     // SYNERGY ARC PR3 — CHAIN: a DIRECT hit arcs to nearby enemies. Triggered ONLY by
     // 'direct' (a 'chain' arc can never re-trigger → the no-cascade bound is enforced

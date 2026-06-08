@@ -73,6 +73,15 @@ export interface Enemy {
   /** Burn damage-per-second for the CURRENT ignition (BURN_LEVELS.dps[level],
    *  overwritten on each re-ignite — refresh-not-stack). Unused while burnTimer 0. */
   burnDps: number;
+  /** FREEZE/SLOW countdown, seconds (meta PR1). While > 0 the enemy's MOVEMENT is
+   *  multiplied by slowFactor — but its AI still runs (DISTINCT from stunTimer, which
+   *  freezes decisions): a frozen enemy still chases/telegraphs/attacks, just moves
+   *  slower. Set/REFRESHED by a direct hit when the player owns freeze; never stacks.
+   *  Reset on spawn. 0 = not slowed. */
+  slowTimer: number;
+  /** Movement multiplier for the CURRENT slow (FREEZE_LEVELS.slowMult[level],
+   *  overwritten on re-apply). Unused while slowTimer 0. */
+  slowFactor: number;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -96,6 +105,8 @@ export function createEnemyPool(): Enemy[] {
     stunTimer: 0,
     burnTimer: 0,
     burnDps: 0,
+    slowTimer: 0,
+    slowFactor: 1,
   }));
 }
 
@@ -137,6 +148,8 @@ export function spawnEnemy(
     e.stunTimer = 0; // recycled slot never inherits a stun
     e.burnTimer = 0; // ...nor a burn
     e.burnDps = 0;
+    e.slowTimer = 0; // ...nor a freeze/slow
+    e.slowFactor = 1;
     return true;
   }
   return false;
@@ -393,6 +406,9 @@ export function updateEnemies(state: GameState, dt: number): void {
     e.prevX = e.x;
     e.prevY = e.y;
     if (e.flashTimer > 0) e.flashTimer = Math.max(0, e.flashTimer - dt);
+    // FREEZE/SLOW tick (meta PR1): count down, but do NOT touch the AI — a slowed
+    // enemy still decides + acts; only its movement is scaled (in the integrate tail).
+    if (e.slowTimer > 0) e.slowTimer = Math.max(0, e.slowTimer - dt);
 
     // SYNERGY ARC PR2 — BURN tick (DoT). Continuous dps × dt, deterministic (fixed
     // SIM_DT, no accumulator, no RNG). Ticks BEFORE the stun/AI branch so a stunned
@@ -453,9 +469,13 @@ export function updateEnemies(state: GameState, dt: number): void {
     // tile in a single step). This preserves resolveX/resolveY's single-resolve
     // no-tunnel guarantee for ANY knockback velocity (incl. boss-scale).
     const maxStep = ENEMY_COMMON.maxStepTiles * room.tileSize;
-    const moveX = clampAbs((_vel.x + e.kbVx) * dt, maxStep);
+    // FREEZE/SLOW (meta PR1): scale the AI-chosen velocity (NOT knockback — a shove
+    // still lands at full force) so a slowed enemy crawls in its chosen direction but
+    // still acts. slowFactor 1 when not slowed.
+    const slow = e.slowTimer > 0 ? e.slowFactor : 1;
+    const moveX = clampAbs((_vel.x * slow + e.kbVx) * dt, maxStep);
     e.x = resolveX(e.x, e.y, moveX, radius, room);
-    const moveY = clampAbs((_vel.y + e.kbVy) * dt, maxStep);
+    const moveY = clampAbs((_vel.y * slow + e.kbVy) * dt, maxStep);
     e.y = resolveY(e.x, e.y, moveY, radius, room);
 
     // Belt-and-suspenders: keep every active enemy INSIDE its room's rect (the

@@ -10,6 +10,7 @@
 
 import type { GameState } from '../game/GameState';
 import { recordRunDepth } from '../state/Best';
+import { applyRunResult, loadMeta, newlyUnlocked, saveMeta } from '../state/Meta';
 import { CSS_PALETTE } from '../utils/constants';
 
 /** Seconds -> "m:ss". */
@@ -18,10 +19,16 @@ function formatTime(totalSec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** Human-readable labels for unlock ids (the run-end toast). */
+const UNLOCK_LABELS: Record<string, string> = { freeze: 'Freeze' };
+const labelFor = (id: string): string => UNLOCK_LABELS[id] ?? id.toUpperCase();
+
 export class RunSummary {
   private readonly root: HTMLDivElement;
   private readonly values: Record<string, HTMLSpanElement> = {};
   private readonly bestEl: HTMLDivElement;
+  /** Meta unlock line ("🔓 UNLOCKED: Freeze") — shown only when a run earns one. */
+  private readonly unlockEl: HTMLDivElement;
   private shown = false;
   private readonly onRestart: () => void;
 
@@ -63,6 +70,11 @@ export class RunSummary {
     this.bestEl = document.createElement('div');
     this.bestEl.className = 'run-summary-best';
 
+    // Meta unlock line — empty (no visible space) unless this run earned an unlock.
+    this.unlockEl = document.createElement('div');
+    this.unlockEl.className = 'run-summary-best';
+    this.unlockEl.style.color = CSS_PALETTE.freeze;
+
     const btn = document.createElement('button');
     btn.className = 'run-summary-restart';
     btn.textContent = 'RESTART';
@@ -75,7 +87,7 @@ export class RunSummary {
     btn.addEventListener('click', fire);
     btn.addEventListener('touchstart', fire, { passive: false });
 
-    this.root.append(title, stats, this.bestEl, btn);
+    this.root.append(title, stats, this.bestEl, this.unlockEl, btn);
     container.appendChild(this.root);
 
     window.addEventListener('keydown', this.onKey);
@@ -101,6 +113,18 @@ export class RunSummary {
       // Record + display the personal best (DISPLAY ONLY — never fed to the sim).
       const best = recordRunDepth(state.run.depth);
       this.bestEl.textContent = `BEST: DEPTH ${best.depth}`;
+      // META: apply this run's outcome to the unlock state + show any new unlock. The
+      // "beat a boss" signal without new sim state: floorsCleared >= 1 (descent gates
+      // on the boss being dead) OR the current floor's boss is dead (killed-but-died-
+      // before-descending). The unlock applies to the NEXT run (restart re-reads meta).
+      const before = loadMeta();
+      const after = applyRunResult(before, {
+        depth: state.run.depth,
+        bossDefeated: state.run.floorsCleared >= 1 || state.bossDefeated,
+      });
+      saveMeta(after);
+      const gained = newlyUnlocked(before, after);
+      this.unlockEl.textContent = gained.length > 0 ? `🔓 UNLOCKED: ${gained.map(labelFor).join(', ')}` : '';
       this.root.classList.add('is-visible');
       this.shown = true;
     } else if (!state.runOver && this.shown) {

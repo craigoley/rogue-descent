@@ -118,7 +118,7 @@ function openChest(state: GameState, c: Chest, ci: number): void {
 /** Pop the two linked pickups (the 1-of-2 choice) at the chest position. Shared by
  *  the loot roll AND the mimic-killed reward. */
 function popLoot(state: GameState, c: Chest, ci: number): void {
-  const [a, b] = chooseChestPicks(state.player, state.chestRng);
+  const [a, b] = chooseChestPicks(state.player, state.chestRng, state.config.unlocked); // META PR1: unlocked pool
   // pairId = the chest's pool slot + 1 (>= 1, unique per chest) so the two pickups
   // link only to each other — collecting one despawns its sibling (exactly one taken).
   const pairId = ci + 1;
