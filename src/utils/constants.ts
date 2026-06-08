@@ -74,6 +74,9 @@ export const PALETTE = {
   /** GOLDEN CHEST trim/clasp — dark bronze: the band + lock accent that make the gold
    *  box read as a chest, not a cube. */
   chestTrim: 0x6e4a12,
+  /** GOLDEN CHEST dark METAL (v2) — near-black iron-bronze for the banding/straps/
+   *  lock: a strong two-tone contrast against the gold body (mono-gold flattens it). */
+  chestMetal: 0x2a2114,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -866,9 +869,18 @@ export const CHEST = {
   //     + a front clasp, gold with an emissive "treasure" glow. ---
   /** Footprint (width/depth) of the chest body, world units. */
   bodySize: 0.7,
-  /** Base box height + lid box height, world units. */
+  /** Base box height, world units. */
   baseHeight: 0.42,
-  lidHeight: 0.22,
+  /** v2 DOMED lid: a faceted half-barrel (a cylinder laid on its side along the chest
+   *  width) — the curved silhouette is the #1 chest cue. radius = how tall the dome
+   *  rises above the seam; segments = facet count (low-poly, matches the iso look). */
+  lidRadius: 0.26,
+  lidSegments: 12,
+  /** v2 dark-METAL banding/lock (two-tone): vertical front STRAPS (width, x-inset from
+   *  centre, how far they stand proud of the face) + the seam band + a front LOCK. */
+  strapWidth: 0.1,
+  strapInset: 0.22,
+  strapProud: 0.04,
   /** Hover baseline (chest centre height above the floor) + bob amplitude/rate. */
   bodyHeight: 0.35,
   bobAmp: 0.05,

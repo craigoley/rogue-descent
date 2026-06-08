@@ -572,45 +572,58 @@ export class EntityRenderer {
       scene.add(line);
     }
 
-    // --- Golden chests (PR-B): a proper 3D beveled chest matching the world's box
-    // idiom — a BASE box + a hinged LID (rotates open) + a dark trim band + a front
-    // clasp. Gold with an emissive "treasure" glow (shared material, pulsed in sync);
-    // the lid sits in a pivot at the BACK-top edge so it flings open around the hinge.
-    // Geometries shared across the pool; one Group per chest. ---
+    // --- Golden chests (v2): the ICONOGRAPHIC chest — a BASE box + a DOMED lid (a
+    // faceted barrel/half-cylinder, the #1 chest cue) + dark-METAL two-tone banding
+    // (a seam band + two vertical front straps) + a front LOCK. Gold body with the
+    // emissive "treasure" glow (on the gold, not the metal); dark iron-bronze metal
+    // for contrast. The domed lid is a cylinder laid on its side inside the hinge
+    // PIVOT (back-top edge) so the existing open-fling + mimic-wobble animate it
+    // unchanged. Geometries shared across the pool; one Group per chest. ---
     const bs = CHEST.bodySize;
     const baseGeo = new BoxGeometry(bs, CHEST.baseHeight, bs);
-    const lidGeo = new BoxGeometry(bs, CHEST.lidHeight, bs);
-    const bandGeo = new BoxGeometry(bs * 1.04, CHEST.baseHeight * 0.18, bs * 1.04);
-    const claspGeo = new BoxGeometry(bs * 0.18, CHEST.baseHeight * 0.34, bs * 0.08);
+    // Domed lid: a cylinder (axis laid along the chest WIDTH via rotation.z) so the top
+    // curves — the lower half tucks into the base, the upper half is the visible dome.
+    const lidGeo = new CylinderGeometry(CHEST.lidRadius, CHEST.lidRadius, bs, CHEST.lidSegments);
+    // Dark-metal detail (shared): seam band, a vertical strap, the lock.
+    const seamGeo = new BoxGeometry(bs * 1.06, CHEST.baseHeight * 0.16, bs * 1.06);
+    const strapGeo = new BoxGeometry(CHEST.strapWidth, CHEST.baseHeight, CHEST.strapProud);
+    const lockGeo = new BoxGeometry(bs * 0.2, CHEST.baseHeight * 0.5, CHEST.strapProud * 1.6);
     this.chestGoldMat = new MeshStandardMaterial({
       color: PALETTE.chest,
       emissive: PALETTE.chest,
       emissiveIntensity: CHEST.emissive,
     });
-    const trimMat = new MeshStandardMaterial({
-      color: PALETTE.chestTrim,
-      emissive: PALETTE.chestTrim,
+    const metalMat = new MeshStandardMaterial({
+      color: PALETTE.chestMetal,
+      emissive: PALETTE.chestMetal,
       emissiveIntensity: CHEST.trimEmissive,
     });
+    const frontZ = -bs / 2 - CHEST.strapProud / 2; // proud of the front face (z = -bs/2)
     for (let i = 0; i < POOL.chests; i++) {
       const group = new Group();
-      // Base box, sitting on the group floor (origin y = 0).
+      // Gold base box, sitting on the group floor (origin y = 0).
       const base = new Mesh(baseGeo, this.chestGoldMat);
       base.position.y = CHEST.baseHeight / 2;
-      // Trim band around the top seam of the base.
-      const band = new Mesh(bandGeo, trimMat);
-      band.position.y = CHEST.baseHeight * 0.9;
-      // Front clasp (z = -bodySize/2 is the "front" face).
-      const clasp = new Mesh(claspGeo, trimMat);
-      clasp.position.set(0, CHEST.baseHeight * 0.92, -bs / 2);
-      // Lid pivot at the BACK-top edge (z = +bs/2); the lid mesh sits forward of it so
-      // rotating the pivot about x swings the lid up + back (the open fling).
+      // Dark seam band at the lid/base join.
+      const seam = new Mesh(seamGeo, metalMat);
+      seam.position.y = CHEST.baseHeight;
+      // Two vertical straps down the front face.
+      const strapL = new Mesh(strapGeo, metalMat);
+      strapL.position.set(-CHEST.strapInset, CHEST.baseHeight / 2, frontZ);
+      const strapR = new Mesh(strapGeo, metalMat);
+      strapR.position.set(CHEST.strapInset, CHEST.baseHeight / 2, frontZ);
+      // Front LOCK, centred on the seam — the cue that kills "is it a chest?".
+      const lock = new Mesh(lockGeo, metalMat);
+      lock.position.set(0, CHEST.baseHeight, -bs / 2 - CHEST.strapProud * 0.8);
+      // Hinge pivot at the BACK-top edge; the domed lid sits forward of it (cylinder
+      // on its side: rotation.z puts the axis along X = the chest width).
       const lidPivot = new Group();
       lidPivot.position.set(0, CHEST.baseHeight, bs / 2);
       const lid = new Mesh(lidGeo, this.chestGoldMat);
-      lid.position.set(0, CHEST.lidHeight / 2, -bs / 2);
+      lid.rotation.z = Math.PI / 2;
+      lid.position.set(0, 0, -bs / 2);
       lidPivot.add(lid);
-      group.add(base, band, clasp, lidPivot);
+      group.add(base, seam, strapL, strapR, lock, lidPivot);
       group.visible = false;
       this.chests.push(group);
       this.chestLids.push(lidPivot);
