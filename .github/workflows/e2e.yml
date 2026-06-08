@@ -68,7 +68,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Generate the -linux HUD baselines
-        run: npx playwright test hud-baselines --update-snapshots
+        # `=all` FORCES a rewrite of every baseline. Bare `--update-snapshots`
+        # defaults to mode `changed`, which only rewrites when the new render
+        # differs from the old baseline by MORE than maxDiffPixelRatio (0.005).
+        # A small HUD addition (e.g. one new dim power chip) lands UNDER that
+        # threshold, so `changed` would silently keep the stale baseline. `all`
+        # captures the current HUD verbatim regardless of the compare tolerance.
+        run: npx playwright test hud-baselines --update-snapshots=all
       - name: Sanity — the fresh baselines compare GREEN
         run: npx playwright test hud-baselines
       - name: Commit + push the baselines

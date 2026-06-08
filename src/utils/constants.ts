@@ -57,6 +57,10 @@ export const PALETTE = {
    *  at a glance. Distinct from the white hit-flash, amber telegraph, and steel
    *  boss-shield. */
   enemyStunned: 0x6f8aa6,
+  /** FROZEN/SLOWED enemy tint (meta PR1 — the FREEZE effect axis) — icy cyan: a cold
+   *  "slowed" read, distinct from the stun grey-blue (a frozen enemy still ACTS, just
+   *  moves slower) and the warm burn/enemy tones. */
+  enemyFrozen: 0x66ccff,
   /** BURNING enemy tint (synergy arc PR2) — ember orange: a hot DoT glow distinct
    *  from the stun grey-blue, telegraph amber, and the enemy-threat reds, so "it's
    *  on fire" reads at a glance. Hotter/brighter than the boss-add ember. */
@@ -135,6 +139,8 @@ export const CSS_PALETTE = {
   chain: '#9fe8ff',
   /** CRIT effect-axis chip colour (synergy arc PR4) — bright gold (mirrors PALETTE.crit). */
   crit: '#ffd23f',
+  /** FREEZE effect-axis chip colour (meta PR1) — icy cyan (mirrors PALETTE.enemyFrozen). */
+  freeze: '#66ccff',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -459,6 +465,20 @@ export const BURN_LEVELS = {
   /** How long one ignition burns, seconds (RESET on re-hit, never extended past
    *  this). Long enough to matter while kiting, short enough to need re-applying. */
   duration: 2.5,
+} as const;
+
+/** META PR1 — FREEZE (the 5th effect axis; UNLOCKABLE — gated behind beating the
+ *  boss). A DIRECT hit SLOWS the enemy's movement for `duration`. DISTINCT from the
+ *  knockback STUN: a frozen enemy still ACTS (chases/telegraphs/attacks) — only its
+ *  movement speed is multiplied down — so it synergizes via kiting + keeping burners
+ *  in range, not by disabling the foe. Refresh-not-stack (overwrite). Direct hits
+ *  only (like lifesteal) — not chain/tick. All by-feel. */
+export const FREEZE_LEVELS = {
+  /** Movement-speed multiplier while slowed, per level (1 = no slow at level 0).
+   *  I 0.7 / II 0.55 / III 0.4 — slower, never a full stop (it's a slow, not a stun). */
+  slowMult: [1, 0.7, 0.55, 0.4],
+  /** How long one application slows, seconds (RESET on re-hit). */
+  duration: 2,
 } as const;
 
 /** SYNERGY ARC — PR3 CHAIN (a direct hit ARCS to nearby enemies). The headline

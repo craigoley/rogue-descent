@@ -198,6 +198,34 @@ function drawStar(g: CanvasRenderingContext2D, s: number, color: string): void {
   g.fill();
 }
 
+/** FREEZE (meta PR1): a 6-spoke snowflake — the icy slow effect. */
+function drawSnowflake(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const cx = s / 2;
+  const cy = s / 2;
+  const r = s * 0.4;
+  g.strokeStyle = color;
+  g.lineWidth = Math.max(1, s * 0.1);
+  g.lineCap = 'round';
+  for (let k = 0; k < 6; k++) {
+    const ang = (k / 6) * Math.PI * 2;
+    const ex = cx + Math.cos(ang) * r;
+    const ey = cy + Math.sin(ang) * r;
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(ex, ey);
+    g.stroke();
+    // little barbs near the tip
+    const bx = cx + Math.cos(ang) * r * 0.6;
+    const by = cy + Math.sin(ang) * r * 0.6;
+    for (const da of [-0.5, 0.5]) {
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(bx + Math.cos(ang + da) * r * 0.25, by + Math.sin(ang + da) * r * 0.25);
+      g.stroke();
+    }
+  }
+}
+
 /** A right-pointing arrow filling the icon canvas (PIERCE — shots pass THROUGH).
  *  Long shaft + head reads as penetration, distinct from the burst silhouette. */
 function drawArrow(g: CanvasRenderingContext2D, s: number, color: string): void {
@@ -350,6 +378,7 @@ const DROP_COLOR: Record<PickupKind, number> = {
   burn: PALETTE.enemyBurning,
   chain: PALETTE.chainArc,
   crit: PALETTE.crit,
+  freeze: PALETTE.enemyFrozen,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -364,6 +393,7 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   burn: drawFlame,
   chain: drawChain,
   crit: drawStar,
+  freeze: drawSnowflake,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -378,6 +408,7 @@ const DROP_LABEL: Record<PickupKind, string> = {
   burn: 'BURN',
   chain: 'CHAIN',
   crit: 'CRIT',
+  freeze: 'FREEZE',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -392,6 +423,7 @@ const DROP_KINDS: PickupKind[] = [
   'burn',
   'chain',
   'crit',
+  'freeze',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
@@ -1043,8 +1075,8 @@ export class EntityRenderer {
       if (dx * dx + dy * dy > 1e-6) fig.group.rotation.y = Math.atan2(-dy, dx);
 
       const mat = fig.bodyMat;
-      // Recolour priority: hit-flash > STUN > BURN > telegraph > resting. Sway is
-      // reset here and only re-applied by the stun branch (so a recovered enemy stops).
+      // Recolour priority: hit-flash > STUN > BURN > FROZEN > telegraph > resting. Sway
+      // is reset here and only re-applied by the stun branch (so a recovered enemy stops).
       fig.inner.rotation.z = 0;
       if (e.flashTimer > 0) {
         mat.color.setHex(PALETTE.hitFlash);
@@ -1062,6 +1094,13 @@ export class EntityRenderer {
         // Below stun (a stunned-and-burning enemy shows the CC) but above telegraph.
         mat.color.setHex(PALETTE.enemyBurning);
         mat.emissiveIntensity = VFX.invulnEmissive; // hotter glow than the resting tint
+        fig.group.scale.setScalar(1);
+      } else if (e.slowTimer > 0) {
+        // FROZEN/SLOWED (meta PR1): icy cyan so "I slowed it" reads. Below burn (a
+        // burning-and-slowed enemy shows the DoT); the enemy still acts (telegraph can
+        // still grow next frame once the slow expires).
+        mat.color.setHex(PALETTE.enemyFrozen);
+        mat.emissiveIntensity = VFX.enemyEmissive;
         fig.group.scale.setScalar(1);
       } else if (e.phase === 'telegraph') {
         // Wind-up tell (shared across types): warning colour + grow toward the

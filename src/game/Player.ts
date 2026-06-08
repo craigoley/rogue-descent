@@ -110,6 +110,11 @@ export interface PlayerState {
    *  BEFORE lifesteal/chain read the damage → a crit spikes both + the wildfire base
    *  free. Reset to 0 on death; carried across descent. */
   critLevel: number;
+  /** FREEZE powerup LEVEL (0..3, within-run; meta PR1 — the 5th effect axis, UNLOCKABLE).
+   *  0 = none; a direct hit SLOWS the enemy's movement (FREEZE_LEVELS.slowMult) for a
+   *  window — distinct from stun (the enemy still acts). Only appears in the drop pool
+   *  once 'freeze' is in the run config's unlocked set. Reset to 0 on death; carried. */
+  freezeLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -154,6 +159,7 @@ export function createPlayer(x: number, y: number): PlayerState {
     burnLevel: 0,
     chainLevel: 0,
     critLevel: 0,
+    freezeLevel: 0,
     dashHits: new Set<number>(),
   };
 }

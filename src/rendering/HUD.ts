@@ -122,6 +122,8 @@ export class HUD {
   private readonly chainChip: LevelChip;
   /** Synergy arc PR4 (finale): the CRIT effect chip (gold). */
   private readonly critChip: LevelChip;
+  /** Meta PR1: the FREEZE effect chip (icy cyan; unlockable — dimmed until earned). */
+  private readonly freezeChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -236,6 +238,7 @@ export class HUD {
     this.burnChip = makeChip('BURN', 'is-burn', CSS_PALETTE.burn);
     this.chainChip = makeChip('CHAIN', 'is-chain', CSS_PALETTE.chain);
     this.critChip = makeChip('CRIT', 'is-crit', CSS_PALETTE.crit);
+    this.freezeChip = makeChip('FREEZE', 'is-freeze', CSS_PALETTE.freeze);
     bars.appendChild(powersRow);
 
     container.appendChild(bars);
@@ -575,6 +578,7 @@ export class HUD {
     setChipLevel(this.burnChip, state.player.burnLevel);
     setChipLevel(this.chainChip, state.player.chainLevel);
     setChipLevel(this.critChip, state.player.critLevel);
+    setChipLevel(this.freezeChip, state.player.freezeLevel);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);

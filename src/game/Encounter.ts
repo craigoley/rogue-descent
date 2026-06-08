@@ -251,7 +251,7 @@ export function reactivateRoom(state: GameState, roomIndex: number): void {
 
 /** Roll a drop at a slain enemy's position, attributing it to the active room. */
 export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rng): void {
-  const kind = rollDrop(rng);
+  const kind = rollDrop(rng, state.config.unlocked); // META PR1: the run's unlocked pool
   if (!kind) return;
   // Suppress a HEALTH drop at/above near-full HP — it would just clamp to max, so
   // spawning it is useless litter (drop spam). The roll already happened above

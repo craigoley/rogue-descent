@@ -312,6 +312,17 @@ body {
   clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
 }
 
+/* FREEZE (meta PR1): a 6-point snowflake/asterisk — the icy slow effect. */
+.hud-chip.is-freeze::before {
+  width: 10px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(
+    47% 0, 53% 0, 53% 38%, 86% 19%, 89% 24%, 56% 44%, 56% 50%, 89% 70%, 86% 75%, 53% 56%,
+    53% 100%, 47% 100%, 47% 56%, 14% 75%, 11% 70%, 44% 50%, 44% 44%, 11% 24%, 14% 19%, 47% 38%
+  );
+}
+
 /* Phase 9 — leveled-powerup chip pips (filled = current tier). Reuses the dash-pip
    read: small dots after the label, lit at the chip's --chip-color. */
 .hud-chip-pips {
