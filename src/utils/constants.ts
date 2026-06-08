@@ -71,6 +71,9 @@ export const PALETTE = {
   /** GOLDEN CHEST body (golden chests) — warm amber-gold, distinct from the brighter
    *  crit gold, so a chest reads as "treasure" from across the room. */
   chest: 0xffb300,
+  /** GOLDEN CHEST trim/clasp — dark bronze: the band + lock accent that make the gold
+   *  box read as a chest, not a cube. */
+  chestTrim: 0x6e4a12,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -844,17 +847,36 @@ export const CHEST = {
   pickupOffset: 1.2,
   /** Spark burst emitted on opening (the lid-pop tell). */
   openBurst: 18,
-  /** RENDER: chest body box size + height above the floor (render-only). */
+  // --- RENDER (render-only): a beveled chest = a BASE box + a hinged LID + trim band
+  //     + a front clasp, gold with an emissive "treasure" glow. ---
+  /** Footprint (width/depth) of the chest body, world units. */
   bodySize: 0.7,
+  /** Base box height + lid box height, world units. */
+  baseHeight: 0.42,
+  lidHeight: 0.22,
+  /** Hover baseline (chest centre height above the floor) + bob amplitude/rate. */
   bodyHeight: 0.35,
-  /** Hover bob amplitude, world units (render-only). */
   bobAmp: 0.05,
-  /** Hover bob rate multiplier (used as now * 0.001 * bobRate; render-only). */
   bobRate: 3,
-  /** Y-axis spin speed (radians per ms), render-only. */
-  spinRate: 0.0008,
-  /** Emissive glow intensity (render-only). */
-  emissive: 0.35,
+  /** Gentle idle SWAY (rotation oscillation, radians + rate) — reads as a chest
+   *  beckoning, not a spinning coin. Stilled when reduce-motion is on. */
+  swayAmp: 0.12,
+  swayRate: 1.6,
+  /** Emissive glow: base intensity + an idle PULSE (amplitude/rate) so the unopened
+   *  chest says "valuable, come get me". The pulse stills on reduce-motion; the base
+   *  glow stays (it's not motion). */
+  emissive: 0.4,
+  trimEmissive: 0.12,
+  glowPulseAmp: 0.22,
+  glowPulseRate: 2.2,
+  /** THE OPEN MOMENT (render-only, frame-diffed off the sim `opened`): the lid flings
+   *  open over `openDuration` seconds to `lidOpenAngle` radians, with a brief scale
+   *  POP — anticipation (closed+glowing) -> pop (lid+burst) -> reveal (the 2 picks).
+   *  MIMIC-READY: PR-C adds a sim wobble signal that the renderer plays here BEFORE
+   *  the lid opens (the structure — group + hinged lid pivot — already supports it). */
+  openDuration: 0.45,
+  lidOpenAngle: 2.2,
+  openPopScale: 0.15,
 } as const;
 
 /** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:

@@ -453,8 +453,20 @@ export class EntityRenderer {
   /** Chain-arc bolts (synergy arc PR3) — pooled 2-point lines, one per ChainArc slot;
    *  each has its own material so it can fade independently. */
   private readonly chainArcs: Line[] = [];
-  /** Golden chests (PR1) — pooled gold boxes, shown while active && !opened. */
-  private readonly chests: Mesh[] = [];
+  /** Golden chests (PR-B) — pooled 3D chests (base + hinged lid + trim + clasp). The
+   *  group bobs/sways/glows while closed; on open (frame-diffed) the lid flings open. */
+  private readonly chests: Group[] = [];
+  /** Per-chest lid PIVOT groups (rotate to fling the lid open). */
+  private readonly chestLids: Group[] = [];
+  /** Shared gold material (its emissive pulses globally for the idle glow). */
+  private chestGoldMat!: MeshStandardMaterial;
+  /** Frame-diff state for the open animation (render-only — the sim has no timer):
+   *  previous `opened` flag + the wall-clock ms the open began (-1 = not opening). */
+  private readonly chestPrevOpened: boolean[] = [];
+  private readonly chestOpenStart: number[] = [];
+  /** Accessibility reduce-motion (set by main.ts from Settings, like HUD): stills the
+   *  idle bob/sway/glow-pulse. The brief open-reveal stays (discrete feedback). */
+  private chestReduceMotion = false;
   private readonly trail: Mesh[] = [];
   private readonly trailX: number[] = [];
   private readonly trailY: number[] = [];
@@ -560,19 +572,51 @@ export class EntityRenderer {
       scene.add(line);
     }
 
-    // --- Golden chests (PR1): pooled gold boxes, shown while active && !opened. The
-    // shared gold material reads as "treasure"; a subtle idle bob is applied in sync. ---
-    const chestGeo = new BoxGeometry(CHEST.bodySize, CHEST.bodySize * 0.7, CHEST.bodySize);
-    const chestMat = new MeshStandardMaterial({
+    // --- Golden chests (PR-B): a proper 3D beveled chest matching the world's box
+    // idiom — a BASE box + a hinged LID (rotates open) + a dark trim band + a front
+    // clasp. Gold with an emissive "treasure" glow (shared material, pulsed in sync);
+    // the lid sits in a pivot at the BACK-top edge so it flings open around the hinge.
+    // Geometries shared across the pool; one Group per chest. ---
+    const bs = CHEST.bodySize;
+    const baseGeo = new BoxGeometry(bs, CHEST.baseHeight, bs);
+    const lidGeo = new BoxGeometry(bs, CHEST.lidHeight, bs);
+    const bandGeo = new BoxGeometry(bs * 1.04, CHEST.baseHeight * 0.18, bs * 1.04);
+    const claspGeo = new BoxGeometry(bs * 0.18, CHEST.baseHeight * 0.34, bs * 0.08);
+    this.chestGoldMat = new MeshStandardMaterial({
       color: PALETTE.chest,
       emissive: PALETTE.chest,
       emissiveIntensity: CHEST.emissive,
     });
+    const trimMat = new MeshStandardMaterial({
+      color: PALETTE.chestTrim,
+      emissive: PALETTE.chestTrim,
+      emissiveIntensity: CHEST.trimEmissive,
+    });
     for (let i = 0; i < POOL.chests; i++) {
-      const m = new Mesh(chestGeo, chestMat);
-      m.visible = false;
-      this.chests.push(m);
-      scene.add(m);
+      const group = new Group();
+      // Base box, sitting on the group floor (origin y = 0).
+      const base = new Mesh(baseGeo, this.chestGoldMat);
+      base.position.y = CHEST.baseHeight / 2;
+      // Trim band around the top seam of the base.
+      const band = new Mesh(bandGeo, trimMat);
+      band.position.y = CHEST.baseHeight * 0.9;
+      // Front clasp (z = -bodySize/2 is the "front" face).
+      const clasp = new Mesh(claspGeo, trimMat);
+      clasp.position.set(0, CHEST.baseHeight * 0.92, -bs / 2);
+      // Lid pivot at the BACK-top edge (z = +bs/2); the lid mesh sits forward of it so
+      // rotating the pivot about x swings the lid up + back (the open fling).
+      const lidPivot = new Group();
+      lidPivot.position.set(0, CHEST.baseHeight, bs / 2);
+      const lid = new Mesh(lidGeo, this.chestGoldMat);
+      lid.position.set(0, CHEST.lidHeight / 2, -bs / 2);
+      lidPivot.add(lid);
+      group.add(base, band, clasp, lidPivot);
+      group.visible = false;
+      this.chests.push(group);
+      this.chestLids.push(lidPivot);
+      this.chestPrevOpened.push(false);
+      this.chestOpenStart.push(-1);
+      scene.add(group);
     }
 
     // --- Melee swing (flat sector, oriented via a parent group) ---
@@ -1158,22 +1202,65 @@ export class EntityRenderer {
     }
   }
 
-  /** Draw the golden chests (PR1): a gold box at each active, unopened chest, with a
-   *  subtle idle bob so the treasure draws the eye. Hidden once opened (the popped
-   *  pickups render via the normal pickup path). */
+  /** Accessibility reduce-motion (set by main.ts from Settings, mirroring HUD). Stills
+   *  the chest idle bob/sway/glow-pulse; the brief open-reveal stays (discrete feedback). */
+  setReduceMotion(on: boolean): void {
+    this.chestReduceMotion = on;
+  }
+
+  /** Draw the golden chests (PR-B): a glowing 3D chest while closed (bob + sway +
+   *  emissive pulse — the "treasure, come get me" beckon), then a lid-fling reveal on
+   *  open. The open is frame-diffed off the sim `opened` flag (render-only — no sim
+   *  timer), so src/game stays untouched. Reduce-motion stills the idle motion. */
   private syncChests(state: GameState, now: number): void {
     const list = state.chests;
+    const rm = this.chestReduceMotion;
+    // Idle emissive PULSE (shared material → all chests glow together). Base glow
+    // stays under reduce-motion (it's light, not motion); only the pulse is stilled.
+    this.chestGoldMat.emissiveIntensity = rm
+      ? CHEST.emissive
+      : CHEST.emissive + CHEST.glowPulseAmp * (0.5 + 0.5 * Math.sin(now * 0.001 * CHEST.glowPulseRate));
     for (let i = 0; i < this.chests.length; i++) {
       const c = list[i];
-      const m = this.chests[i];
-      if (!c.active || c.opened) {
-        m.visible = false;
+      const g = this.chests[i];
+      const lid = this.chestLids[i];
+      if (!c.active) {
+        g.visible = false;
+        this.chestPrevOpened[i] = false;
+        this.chestOpenStart[i] = -1;
         continue;
       }
-      m.visible = true;
-      const bob = CHEST.bodyHeight + CHEST.bobAmp * (0.5 + 0.5 * Math.sin(now * 0.001 * CHEST.bobRate));
-      m.position.set(c.x, bob, c.y);
-      m.rotation.y = now * CHEST.spinRate;
+      // Frame-diff: mark the wall-clock ms the chest opened (start of the reveal).
+      if (c.opened && !this.chestPrevOpened[i]) this.chestOpenStart[i] = now;
+      this.chestPrevOpened[i] = c.opened;
+
+      if (!c.opened) {
+        // CLOSED — idle beckon: bob + gentle sway + (global) glow pulse. Lid shut.
+        g.visible = true;
+        const bob = rm ? CHEST.bodyHeight : CHEST.bodyHeight + CHEST.bobAmp * (0.5 + 0.5 * Math.sin(now * 0.001 * CHEST.bobRate));
+        g.position.set(c.x, bob, c.y);
+        g.rotation.y = rm ? 0 : CHEST.swayAmp * Math.sin(now * 0.001 * CHEST.swayRate);
+        g.scale.setScalar(1);
+        lid.rotation.x = 0;
+        // MIMIC-READY (PR-C): a sim wobble/mimic-pending signal would play a shake
+        // here (offset g.position / jitter g.rotation) BEFORE the open below.
+        continue;
+      }
+
+      // OPENED — the lid-fling reveal, then hide. Plays even under reduce-motion (a
+      // short, informative one-shot, not continuous motion).
+      const elapsed = (now - this.chestOpenStart[i]) * 0.001; // seconds
+      if (elapsed >= CHEST.openDuration) {
+        g.visible = false; // reveal done; the popped pickups carry on via the pickup path
+        continue;
+      }
+      g.visible = true;
+      g.position.set(c.x, CHEST.bodyHeight, c.y);
+      g.rotation.y = 0;
+      const t = elapsed / CHEST.openDuration; // 0..1
+      const ease = 1 - (1 - t) * (1 - t); // ease-out: snappy fling, soft settle
+      lid.rotation.x = -CHEST.lidOpenAngle * ease;
+      g.scale.setScalar(1 + CHEST.openPopScale * Math.sin(Math.PI * t)); // brief swell
     }
   }
 
