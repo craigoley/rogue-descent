@@ -78,6 +78,11 @@ export const PALETTE = {
   /** GOLDEN CHEST dark METAL — near-black iron-bronze for the banding/straps/
    *  lock: a strong two-tone contrast against the gold body (mono-gold flattens it). */
   chestMetal: 0x2a2114,
+  /** CHEST CHOICE "pick 1-of-2" pair LINK + "CHOOSE ONE" label — warm chest-gold so
+   *  the tether reads as "these two are one reward, take one", tied to the chest. A
+   *  deliberately WARM hue, far from the cyan CHAIN bolt (0x9fe8ff) so it never reads
+   *  as combat. */
+  pairLink: 0xffce6b,
   /**
    * VERB COLOUR PAIR (Phase 6a). Melee and ranged are pushed to opposite
    * temperature poles so they read as distinct verbs — and both stay clear of
@@ -1117,6 +1122,27 @@ export const CHAIN_ARC = {
   lifetime: 0.18,
   /** Y height the line is drawn at (world units), so it reads above the floor. */
   height: 0.6,
+} as const;
+
+/** CHEST CHOICE legibility (render-only): a tether LINE between the two paired picks
+ *  + a "CHOOSE ONE" billboard above their midpoint, so the pick-1-of-2 reads
+ *  UNMISTAKABLY as a choice (not "collect both"). Driven purely by existing sim state
+ *  (two active pickups sharing a pairId); when the choice resolves the pair is gone and
+ *  these vanish automatically. NO sim coupling. */
+export const CHEST_CHOICE = {
+  /** Y height the tether line is drawn at (world units) — at the pickups' hover band. */
+  linkHeight: 0.5,
+  /** Base opacity of the tether line. */
+  linkOpacity: 0.7,
+  /** The in-world prompt. The game mostly avoids text; this is the justified exception. */
+  labelText: 'CHOOSE ONE',
+  /** Billboard label height (world units) and its lift above the pair midpoint. */
+  labelSize: 0.55,
+  labelHeight: 1.35,
+  /** Opacity pulse (rad/ms) + floor — a gentle breathe drawing the eye to the choice.
+   *  STILLED under reduce-motion (held at full opacity, no pulse). */
+  labelPulseRate: 0.005,
+  labelPulseMin: 0.6,
 } as const;
 
 /** Screen shake decay window, seconds (magnitude is TUNING.shake). */

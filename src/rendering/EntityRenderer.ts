@@ -47,6 +47,7 @@ import {
   BOSS_VFX,
   CHAIN_ARC,
   CHEST,
+  CHEST_CHOICE,
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
@@ -523,6 +524,14 @@ export class EntityRenderer {
   /** One shared toast texture per drop kind. */
   private toastTex!: Record<PickupKind, CanvasTexture>;
   private toastAspect = 4;
+  // CHEST CHOICE legibility (#chest-clarity): per-pair tether LINE + "CHOOSE ONE"
+  // billboard, keyed off two active pickups sharing a pairId. Pooled to the max
+  // simultaneous pairs (floor(POOL.pickups / 2)). Driven purely by sim state — when
+  // the choice resolves the pair is gone and these hide automatically.
+  private readonly pairLinks: Line[] = [];
+  private readonly pairLabels: Sprite[] = [];
+  /** Shared "CHOOSE ONE" label material (one prompt, pulsed together). */
+  private pairLabelMat!: SpriteMaterial;
 
   /** Reused scratch for the resolved aim direction — no per-frame allocation. */
   private readonly aim: Vec2 = { x: 0, y: 0 };
@@ -602,6 +611,28 @@ export class EntityRenderer {
       line.visible = false;
       this.chainArcs.push(line);
       scene.add(line);
+    }
+
+    // --- CHEST CHOICE legibility: a warm-gold tether LINE + a shared "CHOOSE ONE"
+    // billboard per paired set. Pooled to the max concurrent pairs. The line color is
+    // chest-gold (NOT the cyan chain bolt) so it never reads as combat. ---
+    const pairSlots = Math.floor(POOL.pickups / 2);
+    const chooseLabel = textTexture(CHEST_CHOICE.labelText, cssHex(PALETTE.pairLink));
+    this.pairLabelMat = new SpriteMaterial({ map: chooseLabel.tex, transparent: true, depthTest: false });
+    for (let i = 0; i < pairSlots; i++) {
+      const geo = new BufferGeometry();
+      geo.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3));
+      const mat = new LineBasicMaterial({ color: PALETTE.pairLink, transparent: true, opacity: CHEST_CHOICE.linkOpacity });
+      const line = new Line(geo, mat);
+      line.visible = false;
+      this.pairLinks.push(line);
+      scene.add(line);
+
+      const label = new Sprite(this.pairLabelMat);
+      label.scale.set(CHEST_CHOICE.labelSize * chooseLabel.aspect, CHEST_CHOICE.labelSize, 1);
+      label.visible = false;
+      this.pairLabels.push(label);
+      scene.add(label);
     }
 
     // --- Golden chests (v2): the ICONOGRAPHIC chest — a BASE box + a DOMED lid (a
@@ -920,6 +951,7 @@ export class EntityRenderer {
     this.syncChests(state, now);
     this.syncMelee(p, px, py, aim.x, aim.y);
     this.syncPickups(state, now);
+    this.syncPairChoice(state, now);
     this.syncToasts(frameDt);
     this.syncBarriers(state);
     this.syncStairs(state, now);
@@ -1256,6 +1288,53 @@ export class EntityRenderer {
       pos.needsUpdate = true;
       mat.opacity = Math.max(0, a.life / a.maxLife); // fade out over its lifetime
     }
+  }
+
+  /** CHEST CHOICE legibility: tether the two paired picks (same pairId, both active)
+   *  with a warm-gold LINE and float a "CHOOSE ONE" billboard over their midpoint, so
+   *  the pick-1-of-2 reads as a CHOICE (not "collect both"). Purely render — keyed off
+   *  existing sim state: when one is taken the sibling despawns, the pair no longer
+   *  exists, and the link + label hide automatically (no sim coupling). The label
+   *  opacity breathes to draw the eye; reduce-motion stills it (the link is static). */
+  private syncPairChoice(state: GameState, now: number): void {
+    const picks = state.pickups;
+    let slot = 0;
+    for (let i = 0; i < picks.length && slot < this.pairLinks.length; i++) {
+      const a = picks[i];
+      if (!a.active || a.pairId < 0) continue;
+      // Find the sibling AFTER i (so each pair is handled once, at its lower index).
+      let b: (typeof picks)[number] | null = null;
+      for (let j = i + 1; j < picks.length; j++) {
+        const cand = picks[j];
+        if (cand.active && cand.pairId === a.pairId) {
+          b = cand;
+          break;
+        }
+      }
+      if (!b) continue; // sibling already taken → the choice resolved → no link
+
+      const line = this.pairLinks[slot];
+      line.visible = true;
+      const pos = line.geometry.getAttribute('position') as Float32BufferAttribute;
+      pos.setXYZ(0, a.x, CHEST_CHOICE.linkHeight, a.y);
+      pos.setXYZ(1, b.x, CHEST_CHOICE.linkHeight, b.y);
+      pos.needsUpdate = true;
+
+      const label = this.pairLabels[slot];
+      label.visible = true;
+      label.position.set((a.x + b.x) / 2, CHEST_CHOICE.labelHeight, (a.y + b.y) / 2);
+      slot++;
+    }
+    // Hide unused pooled slots.
+    for (let k = slot; k < this.pairLinks.length; k++) {
+      this.pairLinks[k].visible = false;
+      this.pairLabels[k].visible = false;
+    }
+    // "CHOOSE ONE" breathes (shared material → all labels together); stilled flat under
+    // reduce-motion (held at full opacity, no pulse).
+    this.pairLabelMat.opacity = this.chestReduceMotion
+      ? 1
+      : CHEST_CHOICE.labelPulseMin + (1 - CHEST_CHOICE.labelPulseMin) * (0.5 + 0.5 * Math.sin(now * CHEST_CHOICE.labelPulseRate));
   }
 
   /** Accessibility reduce-motion (set by main.ts from Settings, mirroring HUD). Stills
