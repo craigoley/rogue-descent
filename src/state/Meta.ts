@@ -18,11 +18,6 @@
 const STORAGE_KEY = 'rogue-descent:meta';
 const VERSION = 1;
 
-/** Milestone thresholds (meta arc). All by-feel; each unlock is power-NEUTRAL (variety,
- *  never raw power) and flows from PLAYING — no currency, no grind. */
-const ARMORED_UNLOCK_DEPTH = 3; // reach depth 3 (cumulative deepestDepth) → armored chaser
-const WILDFIRE_UNLOCK_KILLS = 30; // cumulative wildfire kills → fire-rate track
-
 export interface MetaState {
   version: number;
   /** Layer 1 — unlocked content ids (e.g. 'freeze'). Drives the run's available pool. */
@@ -44,6 +39,63 @@ export interface MetaState {
   heat: number;
 }
 
+/** The milestone stat a given unlock tracks (a key of MetaState.stats). */
+export type StatKey = keyof MetaState['stats'];
+
+/** One unlockable's DEFINITION — the SINGLE source of truth for both the unlock RULE
+ *  (applyRunResult derives from it) AND the display (unlockProgress reads it), so the
+ *  two can never drift. Each unlock is power-NEUTRAL (variety, never raw power) and
+ *  flows from PLAYING — no currency, no grind. All thresholds by-feel. */
+export interface UnlockDef {
+  /** The content id (matches RunConfig.unlocked + the sim's LOCKABLE ids). */
+  id: string;
+  /** Player-facing name. */
+  label: string;
+  /** What it IS — shown when unlocked, and as a teaser while locked (not a spoiler). */
+  description: string;
+  /** The cumulative stat this milestone watches. */
+  statKey: StatKey;
+  /** Threshold on that stat to unlock (met when stat >= target). */
+  target: number;
+  /** Binary milestone (done / not-done, no count) vs a counted progression. */
+  binary: boolean;
+  /** The milestone phrasing; the surface appends live progress for non-binary ones. */
+  hint: string;
+}
+
+/** The unlock CATALOG — the one place "what unlocks what, at what threshold" lives.
+ *  Spans all three Layer-1 dimensions: EFFECT (freeze), ENEMY (armored-chaser),
+ *  TRACK (fireRate). Order = display order. */
+export const UNLOCKS: readonly UnlockDef[] = [
+  {
+    id: 'freeze',
+    label: 'Freeze',
+    description: 'Your direct hits slow the enemies they strike.',
+    statKey: 'bossKills',
+    target: 1,
+    binary: true,
+    hint: 'Beat the boss',
+  },
+  {
+    id: 'armored-chaser',
+    label: 'Armored Chaser',
+    description: 'A tougher, plated chaser variant joins the deeper floors.',
+    statKey: 'deepestDepth',
+    target: 3,
+    binary: false,
+    hint: 'Reach depth 3',
+  },
+  {
+    id: 'fireRate',
+    label: 'Fire Rate',
+    description: 'A new upgrade track that speeds up your ranged fire.',
+    statKey: 'wildfireKills',
+    target: 30,
+    binary: false,
+    hint: 'Land 30 wildfire kills (chain-spread burn)',
+  },
+];
+
 /** A clean-slate meta: nothing unlocked, zeroed stats. The graceful fallback for an
  *  absent/corrupt/Safari-private save — the game is fully playable from this. */
 export function defaultMeta(): MetaState {
@@ -64,21 +116,55 @@ export function applyRunResult(
   meta: MetaState,
   outcome: { depth: number; bossDefeated: boolean; wildfireKills: number },
 ): MetaState {
+  const stats = {
+    deepestDepth: Math.max(meta.stats.deepestDepth, outcome.depth),
+    bossKills: meta.stats.bossKills + (outcome.bossDefeated ? 1 : 0),
+    wildfireKills: meta.stats.wildfireKills + outcome.wildfireKills,
+  };
+  // MILESTONES — DERIVED from the catalog (the single source of truth): an unlock fires
+  // once its watched stat meets its target. Idempotent via the Set; stats are monotonic
+  // (max / sum), so an unlock never reverts. The surface (unlockProgress) reads the SAME
+  // catalog, so display + rule can't drift.
   const unlocked = new Set(meta.unlocked);
-  const bossKills = meta.stats.bossKills + (outcome.bossDefeated ? 1 : 0);
-  const deepestDepth = Math.max(meta.stats.deepestDepth, outcome.depth);
-  const wildfireKills = meta.stats.wildfireKills + outcome.wildfireKills;
-  // MILESTONES (each fires once its cumulative threshold is met; idempotent via the Set).
-  if (bossKills > 0) unlocked.add('freeze'); // EFFECT — beat the boss
-  if (deepestDepth >= ARMORED_UNLOCK_DEPTH) unlocked.add('armored-chaser'); // ENEMY — reach depth 3
-  if (wildfireKills >= WILDFIRE_UNLOCK_KILLS) unlocked.add('fireRate'); // TRACK — chain×burn skill
+  for (const u of UNLOCKS) if (stats[u.statKey] >= u.target) unlocked.add(u.id);
   return {
     version: VERSION,
     unlocked: [...unlocked].sort(), // sorted → stable/deterministic persisted order
-    stats: { deepestDepth, bossKills, wildfireKills },
+    stats,
     runStart: meta.runStart,
     heat: meta.heat,
   };
+}
+
+/** A display row for the UNLOCKS surface — the unlock's identity + its LIVE progress
+ *  toward the milestone, read from a (persisted) meta. PURE; the view renders these.
+ *  `current` clamps to `target` so a counted bar never overshoots. `unlocked` is the
+ *  persisted truth (meta.unlocked), not a re-derivation. */
+export interface UnlockRow {
+  id: string;
+  label: string;
+  description: string;
+  hint: string;
+  unlocked: boolean;
+  current: number;
+  target: number;
+  binary: boolean;
+}
+
+/** Build the surface's rows from a meta: for each catalog entry, its unlocked state +
+ *  progress toward the milestone (current/target). Pure — unit-testable like betterBest. */
+export function unlockProgress(meta: MetaState): UnlockRow[] {
+  const have = new Set(meta.unlocked);
+  return UNLOCKS.map((u) => ({
+    id: u.id,
+    label: u.label,
+    description: u.description,
+    hint: u.hint,
+    unlocked: have.has(u.id),
+    current: Math.min(meta.stats[u.statKey], u.target),
+    target: u.target,
+    binary: u.binary,
+  }));
 }
 
 /** The newly-unlocked ids between a before/after meta (for the run-end toast). Pure. */

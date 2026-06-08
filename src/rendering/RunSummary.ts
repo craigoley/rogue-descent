@@ -10,7 +10,7 @@
 
 import type { GameState } from '../game/GameState';
 import { recordRunDepth } from '../state/Best';
-import { applyRunResult, loadMeta, newlyUnlocked, saveMeta } from '../state/Meta';
+import { applyRunResult, loadMeta, newlyUnlocked, saveMeta, UNLOCKS } from '../state/Meta';
 import { CSS_PALETTE } from '../utils/constants';
 
 /** Seconds -> "m:ss". */
@@ -19,12 +19,9 @@ function formatTime(totalSec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** Human-readable labels for unlock ids (the run-end toast). */
-const UNLOCK_LABELS: Record<string, string> = {
-  freeze: 'Freeze',
-  'armored-chaser': 'Armored Chaser',
-  fireRate: 'Fire Rate',
-};
+/** Human-readable labels for unlock ids (the run-end toast) — sourced from the unlock
+ *  CATALOG (the single source of truth) so the toast + the Unlocks surface never drift. */
+const UNLOCK_LABELS: Record<string, string> = Object.fromEntries(UNLOCKS.map((u) => [u.id, u.label]));
 const labelFor = (id: string): string => UNLOCK_LABELS[id] ?? id.toUpperCase();
 
 export class RunSummary {

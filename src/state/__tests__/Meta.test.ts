@@ -6,7 +6,7 @@
  *   - the pure unlock rule: beat the boss → 'freeze' unlocks (idempotent); newlyUnlocked.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyRunResult, defaultMeta, loadMeta, newlyUnlocked, resetMeta, saveMeta } from '../Meta';
+import { applyRunResult, defaultMeta, loadMeta, newlyUnlocked, resetMeta, saveMeta, unlockProgress, UNLOCKS } from '../Meta';
 
 /** Minimal in-memory localStorage stub (node env has none). */
 function installStorage(): Map<string, string> {
@@ -131,5 +131,50 @@ describe('Meta — PR2 milestones (enemy + track dimensions)', () => {
     // Nothing achieved → empty.
     const none = applyRunResult(defaultMeta(), { depth: 1, bossDefeated: false, wildfireKills: 0 });
     expect(none.unlocked).toEqual([]);
+  });
+
+  it('the catalog covers all three dimensions (one entry per unlockable)', () => {
+    expect(UNLOCKS.map((u) => u.id).sort()).toEqual(['armored-chaser', 'fireRate', 'freeze']);
+  });
+});
+
+describe('Meta — unlockProgress (the surface helper, pure)', () => {
+  const byId = (rows: ReturnType<typeof unlockProgress>, id: string) => rows.find((r) => r.id === id)!;
+
+  it('base meta → everything LOCKED, current 0, correct targets', () => {
+    const rows = unlockProgress(defaultMeta());
+    expect(rows.every((r) => !r.unlocked)).toBe(true);
+    expect(rows.every((r) => r.current === 0)).toBe(true);
+    expect(byId(rows, 'freeze').target).toBe(1);
+    expect(byId(rows, 'armored-chaser').target).toBe(3);
+    expect(byId(rows, 'fireRate').target).toBe(30);
+    expect(byId(rows, 'freeze').binary).toBe(true);
+    expect(byId(rows, 'fireRate').binary).toBe(false);
+    // Each row carries its label + description + hint (the catalog copy).
+    expect(byId(rows, 'fireRate').label).toBe('Fire Rate');
+    expect(byId(rows, 'armored-chaser').hint).toMatch(/depth 3/i);
+  });
+
+  it('partial progress → in-progress counts shown, still locked', () => {
+    // deepestDepth 2, wildfire 12, no boss — and nothing persisted as unlocked.
+    const meta = { ...defaultMeta(), stats: { deepestDepth: 2, bossKills: 0, wildfireKills: 12 } };
+    const rows = unlockProgress(meta);
+    expect(byId(rows, 'armored-chaser')).toMatchObject({ unlocked: false, current: 2, target: 3 });
+    expect(byId(rows, 'fireRate')).toMatchObject({ unlocked: false, current: 12, target: 30 });
+    expect(byId(rows, 'freeze')).toMatchObject({ unlocked: false, current: 0, target: 1 });
+  });
+
+  it('reflects the PERSISTED unlocked set (✓ for earned ones)', () => {
+    // A real run-end meta: beat boss + depth 5 + 40 wildfire → all unlocked.
+    const meta = applyRunResult(defaultMeta(), { depth: 5, bossDefeated: true, wildfireKills: 40 });
+    expect(unlockProgress(meta).every((r) => r.unlocked)).toBe(true);
+  });
+
+  it('current CLAMPS to target (a counted bar never overshoots)', () => {
+    const meta = { ...defaultMeta(), stats: { deepestDepth: 9, bossKills: 4, wildfireKills: 45 } };
+    const rows = unlockProgress(meta);
+    expect(byId(rows, 'fireRate').current).toBe(30); // 45 clamped to 30
+    expect(byId(rows, 'armored-chaser').current).toBe(3); // 9 clamped to 3
+    expect(byId(rows, 'freeze').current).toBe(1); // 4 clamped to 1
   });
 });
