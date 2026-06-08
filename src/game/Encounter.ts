@@ -267,7 +267,9 @@ export function reactivateRoom(state: GameState, roomIndex: number): void {
 
 /** Roll a drop at a slain enemy's position, attributing it to the active room. */
 export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rng): void {
-  const kind = rollDrop(rng, state.config.unlocked); // META PR1: the run's unlocked pool
+  // META PR1: the run's unlocked pool. META L2: the run's lean (config.runStart) weights
+  // the chosen kind higher (same draw count → power-neutral).
+  let kind = rollDrop(rng, state.config.unlocked, state.config.runStart);
   if (!kind) return;
   // Suppress a HEALTH drop at/above near-full HP — it would just clamp to max, so
   // spawning it is useless litter (drop spam). The roll already happened above
@@ -284,6 +286,16 @@ export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rn
   if (kind !== 'health') {
     const accept = DROP.powerupAcceptByLevel[currentPowerupLevel(state.player, kind)];
     if (rng.next() >= accept) return;
+  }
+  // META L2 — GUARANTEED-FIRST: the FIRST powerup that actually SPAWNS in a leaned run
+  // is relabelled to the lean kind (once per run). It REPLACES this drop's kind — it does
+  // NOT add a drop or bypass any gate above — so the total powerup count is identical to a
+  // no-lean run (power-neutral); only which kind appears shifts. Health drops don't count
+  // as "the first powerup". The weighting already makes the lean likely first; this makes
+  // it certain (the discrete "your lean delivered" moment).
+  if (state.config.runStart && !state.run.leanFirstDelivered && kind !== 'health') {
+    kind = state.config.runStart as typeof kind;
+    state.run.leanFirstDelivered = true;
   }
   const room = state.activeRoom;
   if (spawnPickup(state.pickups, x, y, kind, room)) {

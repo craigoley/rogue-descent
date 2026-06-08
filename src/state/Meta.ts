@@ -167,6 +167,15 @@ export function unlockProgress(meta: MetaState): UnlockRow[] {
   }));
 }
 
+/** META LAYER 2 — does the RUN-START LEAN ritual appear? Only once the player has
+ *  unlocked SOMETHING: a fresh save plays exactly like today (no card), and the lean
+ *  ritual ARRIVES as a reward after the first unlock (the Layer 1→2 onboarding tie).
+ *  Once shown, its OPTIONS are everything available (base + unlocked kinds) — this gate
+ *  is only about the ritual's APPEARANCE. Pure. */
+export function shouldOfferLean(meta: MetaState): boolean {
+  return meta.unlocked.length > 0;
+}
+
 /** The newly-unlocked ids between a before/after meta (for the run-end toast). Pure. */
 export function newlyUnlocked(before: MetaState, after: MetaState): string[] {
   const had = new Set(before.unlocked);

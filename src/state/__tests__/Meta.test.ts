@@ -6,7 +6,7 @@
  *   - the pure unlock rule: beat the boss → 'freeze' unlocks (idempotent); newlyUnlocked.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyRunResult, defaultMeta, loadMeta, newlyUnlocked, resetMeta, saveMeta, unlockProgress, UNLOCKS } from '../Meta';
+import { applyRunResult, defaultMeta, loadMeta, newlyUnlocked, resetMeta, saveMeta, shouldOfferLean, unlockProgress, UNLOCKS } from '../Meta';
 
 /** Minimal in-memory localStorage stub (node env has none). */
 function installStorage(): Map<string, string> {
@@ -176,5 +176,15 @@ describe('Meta — unlockProgress (the surface helper, pure)', () => {
     expect(byId(rows, 'fireRate').current).toBe(30); // 45 clamped to 30
     expect(byId(rows, 'armored-chaser').current).toBe(3); // 9 clamped to 3
     expect(byId(rows, 'freeze').current).toBe(1); // 4 clamped to 1
+  });
+});
+
+describe('Meta — shouldOfferLean (the L2 run-start card gate, pure)', () => {
+  it('a fresh save (nothing unlocked) SUPPRESSES the lean card → today exactly', () => {
+    expect(shouldOfferLean(defaultMeta())).toBe(false);
+  });
+
+  it('once ANYTHING is unlocked, the lean ritual appears', () => {
+    expect(shouldOfferLean({ ...defaultMeta(), unlocked: ['freeze'] })).toBe(true);
   });
 });
