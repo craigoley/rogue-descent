@@ -1062,6 +1062,8 @@ export const PICKUP = {
    *  down — the brief "presenting / choose one" beckon on GOLDEN-CHEST picks before
    *  they become collectable. 0 = no swell. By-feel. */
   presentPulse: 0.4,
+  /** RENDER-ONLY: pulse speed (radians per ms) during spawnGrace. By-feel. */
+  presentPulseRate: 0.012,
   /** Floating type-icon (cross / arrow / burst) sprite size, world units. */
   iconSize: 0.7,
   /** Height of the floating icon above the pickup cube, world units. */

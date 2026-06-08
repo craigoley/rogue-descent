@@ -962,7 +962,7 @@ export class EntityRenderer {
       m.rotation.y = now * PICKUP.spinRate;
       // PRESENTATION beckon: while a pick is in its spawn grace (chest 1-of-2 choice,
       // not yet collectable) it swells + pulses so the "choose one" reads clearly.
-      const present = pk.spawnGrace > 0 ? 1 + PICKUP.presentPulse * (0.5 + 0.5 * Math.sin(now * 0.012)) : 1;
+      const present = pk.spawnGrace > 0 ? 1 + PICKUP.presentPulse * (0.5 + 0.5 * Math.sin(now * PICKUP.presentPulseRate)) : 1;
       m.scale.setScalar(present);
       const mat = this.pickupMats[i];
       mat.color.setHex(color);
