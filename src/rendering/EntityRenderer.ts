@@ -1234,6 +1234,25 @@ export class EntityRenderer {
       if (c.opened && !this.chestPrevOpened[i]) this.chestOpenStart[i] = now;
       this.chestPrevOpened[i] = c.opened;
 
+      if (c.mimicFighting) {
+        // MIMIC burst-out: the chest SHAKES for the tell (wobbleDuration), then hides —
+        // revealing the mimic (already spawned + stunned beneath it). Reduce-motion
+        // stills the shake but keeps the timing (the burst particles + the reveal still
+        // read). The mimic itself renders via the normal chaser path.
+        const elapsed = (now - this.chestOpenStart[i]) * 0.001;
+        if (elapsed >= CHEST.wobbleDuration) {
+          g.visible = false;
+          continue;
+        }
+        g.visible = true;
+        const sh = rm ? 0 : CHEST.wobbleAmp;
+        g.position.set(c.x + Math.sin(now * CHEST.wobbleFreqX) * sh, CHEST.bodyHeight, c.y + Math.cos(now * CHEST.wobbleFreqY) * sh);
+        g.rotation.y = rm ? 0 : Math.sin(now * CHEST.wobbleFreqRot) * CHEST.wobbleRot;
+        g.scale.setScalar(1);
+        lid.rotation.x = 0;
+        continue;
+      }
+
       if (!c.opened) {
         // CLOSED — idle beckon: bob + gentle sway + (global) glow pulse. Lid shut.
         g.visible = true;

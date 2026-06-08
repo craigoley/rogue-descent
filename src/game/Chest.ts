@@ -1,20 +1,31 @@
 /**
- * GOLDEN CHESTS (PR1) — a risk/reward loot CHOICE that makes side rooms worth a
- * detour. A chest spawns in 1-2 non-spawn, non-boss rooms per floor (Dungeon picks
- * the rooms; loadFloor places the entities). It opens on CONTACT, but ONLY once its
- * room is CLEARED (a post-fight reward, not a mid-combat grab) — and on open it pops
- * TWO linked pickups: walk over one and its sibling vanishes (the spatial 1-of-2
- * choice). Pure: ZERO three/DOM.
+ * GOLDEN CHESTS — a risk/reward loot CHOICE that makes side rooms worth a detour. A
+ * chest spawns in 1-2 non-spawn, non-boss rooms per floor (Dungeon picks the rooms;
+ * loadFloor places the entities). It opens on CONTACT, but ONLY once its room is
+ * CLEARED (a post-fight reward, not a mid-combat grab).
  *
- * A chest is NOT an enemy and never enters the enemy pool, so it can't affect
- * roomEnemyCount / the clear-gate (it's optional loot, like the stairs). PR2 will
- * insert the loot-vs-mimic roll at the open site (re-activating the room via the
- * existing encounter path) — PR1 is always loot, so it adds zero gating surface.
+ * On open, a seeded chestRng roll (CHEST.mimicChance) decides:
+ *   - LOOT: pop TWO linked pickups — walk over one, the other vanishes (the spatial
+ *     1-of-2 choice).
+ *   - MIMIC (PR-C): a buffed CHASER bursts out. The room RE-ACTIVATES via the existing
+ *     encounter machinery (reactivateRoom → phase 'active' + activeRoom + doors locked),
+ *     so the UNCHANGED updateEncounterResolve clears it on the mimic's death — the
+ *     #39/#42/#43 path, no new gating logic. The mimic spawns + the room locks
+ *     ATOMICALLY in this one call (zero gating window), and the mimic spawns STUNNED
+ *     for CHEST.wobbleDuration (frozen, can't damage) so the chest-wobble tell is fair.
+ *     Killing it re-clears the room AND pops the chest's loot anyway (a fair gamble:
+ *     "free loot vs a fight THEN loot").
+ *
+ * Pure: ZERO three/DOM. A chest is NOT an enemy (never in the enemy pool), so an
+ * UNOPENED chest can't affect roomEnemyCount / the clear-gate. Once a mimic spawns it
+ * IS an enemy (tagged to the room) and gates normally.
  */
 
 import { CHEST, PLAYER, POOL } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { chooseChestPicks, spawnPickup } from './Pickup';
+import { spawnEnemy, roomEnemyCount } from './Enemy';
+import { reactivateRoom } from './Encounter';
 import type { GameState } from './GameState';
 
 export interface Chest {
@@ -24,8 +35,13 @@ export interface Chest {
   y: number;
   /** The room this chest sits in (gates opening on that room being cleared). */
   roomIndex: number;
-  /** True once opened (its loot has popped) — inert thereafter. */
+  /** True once opened (its loot has popped, OR it turned out to be a mimic) — the
+   *  open path won't re-process it. */
   opened: boolean;
+  /** MIMIC (PR-C): true after a mimic burst, until the mimic is killed. While set,
+   *  updateChests watches for the room re-clearing (roomEnemyCount → 0) to pop the
+   *  chest's loot (the "fight THEN loot" reward). Also the render's wobble signal. */
+  mimicFighting: boolean;
 }
 
 export function createChestPool(): Chest[] {
@@ -35,21 +51,33 @@ export function createChestPool(): Chest[] {
     y: 0,
     roomIndex: -1,
     opened: false,
+    mimicFighting: false,
   }));
 }
 
-/** Per-step: open any unopened chest the player is touching, IF its room is cleared.
- *  Opening pops the two linked pickups (the 1-of-2 choice) + a spark burst. */
+/** Per-step: resolve chests. A MIMIC-fighting chest pops its loot once the room
+ *  re-clears (mimic dead); an unopened chest opens on contact IF its room is cleared. */
 export function updateChests(state: GameState): void {
   const p = state.player;
   const reach = CHEST.openReach + PLAYER.radius;
   const r2 = reach * reach;
   for (let ci = 0; ci < state.chests.length; ci++) {
     const c = state.chests[ci];
-    if (!c.active || c.opened) continue;
-    // GATE: openable only once the room is CLEARED (inert during the fight). Reading
-    // phase here means a chest can never be looted mid-encounter — and (PR2) any
-    // mimic spawns from a fully-cleared, activeRoom === -1 state.
+    if (!c.active) continue;
+    // MIMIC aftermath: the room re-cleared (mimic killed) -> deliver the chest loot
+    // (the fair gamble: you fought for it, you still get the 2-pick). roomEnemyCount
+    // is read AFTER updateEncounterResolve in the frame loop, so 0 == mimic dead.
+    if (c.mimicFighting) {
+      if (roomEnemyCount(state.enemies, c.roomIndex) === 0) {
+        popLoot(state, c, ci);
+        c.mimicFighting = false;
+        c.active = false; // chest fully consumed (loot delivered)
+      }
+      continue;
+    }
+    if (c.opened) continue; // loot chest already popped
+    // GATE: openable only once the room is CLEARED (inert during the fight). So any
+    // mimic spawns from a fully-cleared, activeRoom === -1 state (no double-activation).
     const enc = state.rooms[c.roomIndex];
     if (!enc || enc.phase !== 'cleared') continue;
     const dx = c.x - p.x;
@@ -59,11 +87,37 @@ export function updateChests(state: GameState): void {
   }
 }
 
-/** Resolve an opened chest. PR1: always loot — pop the two linked pickups. (PR2
- *  inserts the mimic roll before this.) */
+/** Resolve an opened chest: a seeded roll → MIMIC or LOOT. */
 function openChest(state: GameState, c: Chest, ci: number): void {
   c.opened = true;
-  spawnParticles(state.particles, c.x, c.y, CHEST.openBurst); // lid-pop tell
+  spawnParticles(state.particles, c.x, c.y, CHEST.openBurst); // lid-pop / burst tell
+  if (state.chestRng.next() < CHEST.mimicChance) {
+    // MIMIC: spawn a buffed chaser at the chest, STUNNED for the tell, and RE-ACTIVATE
+    // the room — atomically, in this call (zero gating window). The room was cleared
+    // (gate above) so activeRoom === -1: reactivateRoom is safe + can't double-activate.
+    if (spawnEnemy(state.enemies, c.x, c.y, state.run.depth, 'chaser', c.roomIndex)) {
+      // The chest room was cleared (0 enemies) before this spawn, so the only enemy
+      // tagged to it now IS the mimic.
+      const mimic = state.enemies.find((e) => e.active && e.roomIndex === c.roomIndex);
+      if (mimic) {
+        mimic.health *= CHEST.mimicHpMult;
+        mimic.attackDamage *= CHEST.mimicDamageMult;
+        mimic.stunTimer = CHEST.wobbleDuration; // frozen during the wobble tell (fair)
+      }
+      reactivateRoom(state, c.roomIndex); // existing machinery: lock + activeRoom
+      c.mimicFighting = true;
+      return;
+    }
+    // Defensive: pool full -> no mimic could spawn. Fall back to LOOT so the chest is
+    // never a dud AND we never leave an active room with zero enemies (insta-clear).
+  }
+  // LOOT: the #70 spatial 1-of-2 choice.
+  popLoot(state, c, ci);
+}
+
+/** Pop the two linked pickups (the 1-of-2 choice) at the chest position. Shared by
+ *  the loot roll AND the mimic-killed reward. */
+function popLoot(state: GameState, c: Chest, ci: number): void {
   const [a, b] = chooseChestPicks(state.player, state.chestRng);
   // pairId = the chest's pool slot + 1 (>= 1, unique per chest) so the two pickups
   // link only to each other — collecting one despawns its sibling (exactly one taken).

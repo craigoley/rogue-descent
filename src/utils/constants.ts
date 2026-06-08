@@ -847,6 +847,21 @@ export const CHEST = {
   pickupOffset: 1.2,
   /** Spark burst emitted on opening (the lid-pop tell). */
   openBurst: 18,
+  // --- MIMIC (PR-C): a chance the chest is a MIMIC — a strong enemy bursts out. ---
+  /** Chance an opened chest is a MIMIC instead of loot (seeded chestRng). By-feel:
+   *  frequent enough to make every chest a real gamble, rare enough they're usually
+   *  worth opening. */
+  mimicChance: 0.22,
+  /** Mimic = a buffed CHASER: HP × this (over the depth-scaled HP) + damage × the
+   *  next. NORMAL speed (you're locked in — a fast mimic would be unfair): a tanky
+   *  "uh oh", not a speedster. */
+  mimicHpMult: 2.5,
+  mimicDamageMult: 1.25,
+  /** Telegraph window, seconds: the mimic spawns STUNNED (AI frozen, can't damage)
+   *  for this long while the chest wobbles + bursts — a fair beat to react. After it
+   *  expires the mimic's normal chase + attack-telegraph apply. Also the render
+   *  wobble duration. */
+  wobbleDuration: 0.35,
   // --- RENDER (render-only): a beveled chest = a BASE box + a hinged LID + trim band
   //     + a front clasp, gold with an emissive "treasure" glow. ---
   /** Footprint (width/depth) of the chest body, world units. */
@@ -877,6 +892,14 @@ export const CHEST = {
   openDuration: 0.45,
   lidOpenAngle: 2.2,
   openPopScale: 0.15,
+  /** MIMIC burst (render-only): while the chest is mimic-fighting (the wobbleDuration
+   *  tell), it SHAKES — position jitter (world units) + a rotation buzz (radians) —
+   *  then hides, revealing the (stunned) mimic. Stilled under reduce-motion. */
+  wobbleAmp: 0.07,
+  wobbleRot: 0.22,
+  wobbleFreqX: 0.05,
+  wobbleFreqY: 0.07,
+  wobbleFreqRot: 0.06,
 } as const;
 
 /** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:
