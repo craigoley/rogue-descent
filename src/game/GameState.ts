@@ -246,6 +246,7 @@ function loadFloor(state: GameState, seed: number): void {
     const c = state.chests[i];
     c.active = true;
     c.opened = false;
+    c.mimicFighting = false;
     c.roomIndex = ri;
     c.x = (r.x + r.w / 2) * ts;
     c.y = (r.y + r.h / 2) * ts;

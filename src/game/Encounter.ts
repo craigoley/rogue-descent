@@ -231,6 +231,24 @@ export function updateEncounterResolve(state: GameState): void {
   }
 }
 
+/**
+ * GOLDEN CHESTS PR-C — re-activate a (currently CLEARED) room: lock it back to
+ * 'active', set it as the one active room, and seal its doors. The SAME machinery a
+ * normal encounter uses (phase + activeRoom + setDoors), exported so a MIMIC burst
+ * (Chest.openChest) re-runs the hardened path instead of duplicating gating logic —
+ * the unchanged updateEncounterResolve then clears it on the mimic's death
+ * (roomEnemyCount → 0). Caller guarantees activeRoom === -1 (chests open only from a
+ * cleared room) + that an enemy was actually spawned, so this never leaves an
+ * active room with zero enemies (which would insta-clear).
+ */
+export function reactivateRoom(state: GameState, roomIndex: number): void {
+  const enc = state.rooms[roomIndex];
+  if (!enc) return;
+  enc.phase = 'active';
+  state.activeRoom = roomIndex;
+  setDoors(state, enc, true);
+}
+
 /** Roll a drop at a slain enemy's position, attributing it to the active room. */
 export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rng): void {
   const kind = rollDrop(rng);
