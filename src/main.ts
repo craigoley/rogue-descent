@@ -22,11 +22,13 @@ import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD, isDebugEnabled } from './rendering/HUD';
 import { RunSummary } from './rendering/RunSummary';
 import { UnlocksOverlay } from './rendering/UnlocksOverlay';
+import { RunStartCard } from './rendering/RunStartCard';
+import { leanableKinds } from './game/Pickup';
 import { AudioEngine } from './audio/AudioEngine';
 import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
-import { loadMeta } from './state/Meta';
-import { DASH, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
+import { loadMeta, saveMeta, shouldOfferLean } from './state/Meta';
+import { DASH, DUNGEON, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
@@ -35,7 +37,8 @@ if (!app) throw new Error('#app container not found');
 // META: read the unlock set from localStorage (app layer) → build the run CONFIG that
 // feeds the pure sim. Re-read per run-start so a just-earned unlock applies next run.
 // loadMeta() degrades to base (nothing unlocked) on absent/corrupt storage.
-const runConfig = (): RunConfig => ({ unlocked: new Set(loadMeta().unlocked) });
+// META L2: `lean` is the run-start choice (config.runStart) — null = No Lean (today).
+const runConfig = (lean: string | null = null): RunConfig => ({ unlocked: new Set(loadMeta().unlocked), runStart: lean });
 const game = createGameState(runConfig());
 
 // E2E / screenshot SEAM (entry-layer only — src/game/ stays pure). Deterministic
@@ -51,6 +54,9 @@ const game = createGameState(runConfig());
 const bootParams = new URLSearchParams(window.location.search);
 const seedParam = bootParams.get('seed');
 if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0, runConfig());
+// E2E seam boots (deterministic baselines) bypass the run-start lean card; real-play
+// boots route through beginRun() below (the card shows only once something's unlocked).
+const isE2EBoot = (seedParam !== null && /^\d+$/.test(seedParam)) || bootParams.get('scene') === 'boss' || bootParams.get('still') === '1';
 if (bootParams.get('scene') === 'boss') {
   const rect = game.rooms[game.bossRoom]?.rect;
   if (rect) {
@@ -84,9 +90,30 @@ const hud = new HUD(app);
 let runSeedCounter = 0;
 const freshRunSeed = (): number => (Date.now() + Math.imul(++runSeedCounter, 0x9e3779b9)) >>> 0;
 
-// Run-over overlay: one-tap/-click/-key RESTART starts a FRESH run. The loop's
-// seed-change rebuild (below) picks up the new floor; we just mutate state here.
-const summary = new RunSummary(app, () => startNewRun(game, freshRunSeed(), runConfig()));
+// META L2 — run-start LEAN ritual. Shown before a run begins ONCE the player has
+// unlocked something (shouldOfferLean); a fresh save skips it → today exactly. The last
+// pick (meta.runStart) is pre-selected. The chosen lean flows in as config.runStart.
+const runStartCard = new RunStartCard(app);
+const beginRun = (seed: number): void => {
+  const meta = loadMeta();
+  if (shouldOfferLean(meta)) {
+    runStartCard.offer(leanableKinds(new Set(meta.unlocked)), meta.runStart, (lean) => {
+      const m = loadMeta();
+      m.runStart = lean; // persist the choice as next run's default
+      saveMeta(m);
+      startNewRun(game, seed, runConfig(lean));
+    });
+  } else {
+    startNewRun(game, seed, runConfig(null));
+  }
+};
+
+// Run-over overlay: one-tap/-click/-key RESTART starts a FRESH run — via beginRun so the
+// lean card is offered again. The loop's seed-change rebuild (below) picks up the floor.
+const summary = new RunSummary(app, () => beginRun(freshRunSeed()));
+
+// Real-play boot: offer the lean before floor 1 (E2E seam boots keep their fixed setup).
+if (!isE2EBoot) beginRun(DUNGEON.defaultSeed);
 
 // Start the camera framed on the player's spawn — no slide-in on frame 1.
 scene.snapFocus(game.spawn.x, game.spawn.y);

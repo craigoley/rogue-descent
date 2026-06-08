@@ -1025,6 +1025,12 @@ export const DROP = {
    *  By-feel — re-tune as more effects join the pool. */
   trackWeight: 1,
   effectWeight: 0.4,
+  /** META LAYER 2 — RUN-START LEAN: the drop-weight MULTIPLIER applied to the run's
+   *  chosen lean kind (config.runStart) in rollDrop's weighted walk. >1 = that kind is
+   *  rolled more often (the Hades "persuade" — a steered build DIRECTION). POWER-NEUTRAL:
+   *  it shifts WHICH kind is picked, never the drop COUNT (the walk consumes one rng draw
+   *  either way) — so the difficulty curve is unchanged, only the distribution. By-feel. */
+  leanWeightMult: 3,
   /** HP a health pickup restores (capped at max). */
   healAmount: 30,
   /** Knockback impulse a KNOCKBACK-melee hit applies (world units/sec). Much

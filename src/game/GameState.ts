@@ -75,6 +75,11 @@ export interface RunState {
    *  surfaced to the app-layer milestone via RunSummary (cumulative → unlocks fireRate).
    *  Deterministic (a pure fn of seed+config); reset per run like kills/timeSec. */
   wildfireKills: number;
+  /** META LAYER 2 — has this run's GUARANTEED-FIRST lean drop been delivered yet? The
+   *  first powerup that SPAWNS in a leaned run is relabelled to the lean kind (once);
+   *  this gates that to fire exactly once per run. Reset per run. No effect when the run
+   *  has no lean (config.runStart null). */
+  leanFirstDelivered: boolean;
 }
 
 /** Descent stairs for the CURRENT floor (per-floor; RESET unplaced by loadFloor,
@@ -99,11 +104,16 @@ export interface Stairs {
 export interface RunConfig {
   /** Unlocked content ids (e.g. 'freeze') — gates LOCKABLE drop kinds into the pool. */
   unlocked: ReadonlySet<string>;
+  /** META LAYER 2 — the RUN-START LEAN: a single powerup-kind id (e.g. 'burn') the run
+   *  is steered toward, or null for "No Lean" (= today exactly). The leaned kind is
+   *  weighted higher in the drop roll AND guaranteed to be the FIRST powerup surfaced.
+   *  POWER-NEUTRAL: steers WHICH drops appear, never how many. */
+  runStart: string | null;
 }
 
-/** Base config: nothing unlocked → a clean save plays EXACTLY like today. The default
- *  for createGameState + the graceful fallback when meta is absent/corrupt. */
-export const BASE_RUN_CONFIG: RunConfig = { unlocked: new Set<string>() };
+/** Base config: nothing unlocked + no lean → a clean save plays EXACTLY like today. The
+ *  default for createGameState + the graceful fallback when meta is absent/corrupt. */
+export const BASE_RUN_CONFIG: RunConfig = { unlocked: new Set<string>(), runStart: null };
 
 export interface GameState {
   player: PlayerState;
@@ -209,7 +219,7 @@ export function createGameState(config?: RunConfig): GameState {
     room: { tilesX: 0, tilesY: 0, tileSize: 1, walls: [], solid: [] },
     config: config ?? BASE_RUN_CONFIG,
     // Run state starts a fresh run; loadFloor below does NOT reset this.
-    run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0, wildfireKills: 0 },
+    run: { depth: 1, floorsCleared: 0, kills: 0, timeSec: 0, wildfireKills: 0, leanFirstDelivered: false },
     stairs: { x: 0, y: 0, roomIndex: -1, active: false },
     spawn: { x: 0, y: 0 },
     seed: DUNGEON.defaultSeed,
@@ -326,6 +336,7 @@ export function startNewRun(state: GameState, seed: number, config?: RunConfig):
   state.run.kills = 0;
   state.run.timeSec = 0;
   state.run.wildfireKills = 0;
+  state.run.leanFirstDelivered = false;
   state.runOver = false;
   loadFloor(state, seed);
 }

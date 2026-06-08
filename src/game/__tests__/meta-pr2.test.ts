@@ -160,7 +160,7 @@ describe('Armored chaser — enemy gating (depth 3, unlocked only)', () => {
     return types;
   }
 
-  const ARMORED: RunConfig = { unlocked: new Set(['armored-chaser']) };
+  const ARMORED: RunConfig = { unlocked: new Set(['armored-chaser']), runStart: null };
 
   it('⭐ depth 3 with armored-chaser UNLOCKED spawns an armored variant', () => {
     expect(activatedRoomTypes(runAtDepth(3, ARMORED)).has('armored')).toBe(true);

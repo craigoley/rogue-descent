@@ -108,8 +108,8 @@ describe('Freeze — mechanic (slow, DISTINCT from stun)', () => {
 });
 
 describe('Freeze — config gating (the meta boundary)', () => {
-  const UNLOCKED: RunConfig = { unlocked: new Set(['freeze']) };
-  const BASE: RunConfig = { unlocked: new Set() };
+  const UNLOCKED: RunConfig = { unlocked: new Set(['freeze']), runStart: null };
+  const BASE: RunConfig = { unlocked: new Set(), runStart: null };
 
   it('⭐ a chest offers freeze only when unlocked (base config never does)', () => {
     // Max every OTHER effect so freeze is the ONLY available effect — then the chest's

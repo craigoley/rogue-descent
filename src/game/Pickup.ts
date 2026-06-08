@@ -183,7 +183,11 @@ export function activePickupCount(pool: Pickup[]): number {
  *  per RNG state — first roll gates drop-vs-nothing + health-vs-powerup, the
  *  second (only consumed for a powerup) picks via a WEIGHTED cumulative walk
  *  (stat-tracks common, effect axes uncommon). */
-export function rollDrop(rng: Rng, unlocked: ReadonlySet<string> = NO_UNLOCKS): PickupKind | null {
+export function rollDrop(
+  rng: Rng,
+  unlocked: ReadonlySet<string> = NO_UNLOCKS,
+  lean: string | null = null,
+): PickupKind | null {
   if (rng.next() >= DROP.chance) return null;
   if (rng.next() < DROP.healthShare) return 'health';
   // WEIGHTED powerup pick (synergy arc): effect axes are rarer than stat-tracks.
@@ -191,15 +195,28 @@ export function rollDrop(rng: Rng, unlocked: ReadonlySet<string> = NO_UNLOCKS): 
   // downstream roll sequences / the scarcity acceptDraw stay positionally stable).
   // META PR1: the pool is the run's AVAILABLE kinds (lockables filtered unless
   // unlocked) — base config = today's kinds exactly, so the draw stream is unchanged.
+  // META L2: the run's LEAN kind (config.runStart) gets DROP.leanWeightMult — picked
+  // more often. STILL one rng draw → the draw stream + drop COUNT are unchanged; only
+  // WHICH kind is picked shifts (power-neutral). lean null / unmatched = no effect.
   const pool = availableKinds(unlocked);
+  const weight = (k: PickupKind): number => powerupWeight(k) * (k === lean ? DROP.leanWeightMult : 1);
   let total = 0;
-  for (const k of pool) total += powerupWeight(k);
+  for (const k of pool) total += weight(k);
   let r = rng.next() * total;
   for (const k of pool) {
-    r -= powerupWeight(k);
+    r -= weight(k);
     if (r < 0) return k;
   }
   return pool[pool.length - 1]; // floating-point safety net
+}
+
+/** META LAYER 2 — the kinds a run-start LEAN can target: the AVAILABLE leveled powerups
+ *  (effects + stat tracks), excluding the binary dash toggles + health (you lean toward a
+ *  build DIRECTION you find + level, not a one-shot toggle). The set grows with unlocks
+ *  (freeze/fireRate join once unlocked) — the Layer 1↔2 tie. Pure (config in → list out). */
+const NON_LEANABLE: ReadonlySet<PickupKind> = new Set<PickupKind>(['fasterRecharge', 'dashStrike']);
+export function leanableKinds(unlocked: ReadonlySet<string> = NO_UNLOCKS): PickupKind[] {
+  return availableKinds(unlocked).filter((k) => !NON_LEANABLE.has(k));
 }
 
 /** Increment a leveled powerup, capped at POWERUP_MAX_LEVEL (Phase 9): picking up
