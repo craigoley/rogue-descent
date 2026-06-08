@@ -976,9 +976,11 @@ export class EntityRenderer {
       const m = this.pickups[i];
       const icon = this.pickupIcons[i];
 
-      // Collection = active last frame, inactive now (pickups only deactivate on
-      // pickup). Fire a rising "+HP" / "PIERCE" / "KNOCKBACK" toast at its position.
-      if (this.prevPickupActive[i] && !pk.active) {
+      // Collection = active last frame, inactive now. A pickup deactivates two ways:
+      // COLLECTED (taken → pk.collected) or DISCARDED (a rejected pair-sibling, the
+      // #70 1-of-2 link). Toast ONLY the collected one — else the discarded sibling
+      // also announces itself ("both toasts" bug). Fire a rising "+HP" / "PIERCE" toast.
+      if (this.prevPickupActive[i] && !pk.active && pk.collected) {
         this.spawnToast(pk.x, pk.y, pk.kind);
       }
       this.prevPickupActive[i] = pk.active;
