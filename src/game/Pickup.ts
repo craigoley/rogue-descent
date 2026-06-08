@@ -96,6 +96,12 @@ export interface Pickup {
    *  GOLDEN-CHEST picks (PICKUP.spawnGrace) so the 1-of-2 choice always presents;
    *  0 for floor drops (instant-grab). */
   spawnGrace: number;
+  /** Was this pickup actually COLLECTED (taken by the player → applyPickup ran), as
+   *  opposed to DISCARDED as a rejected pair-sibling? Both deactivate, but only a
+   *  collected pick should announce — the renderer fires the name toast on the
+   *  active→inactive frame ONLY when this is set, so a discarded sibling is removed
+   *  SILENTLY (you didn't get it). A feedback marker only — never read by sim logic. */
+  collected: boolean;
 }
 
 /** Monotonic spawn counter (deterministic, like Particle.burstSeed) for eviction age. */
@@ -111,6 +117,7 @@ export function createPickupPool(): Pickup[] {
     pairId: -1,
     seq: 0,
     spawnGrace: 0,
+    collected: false,
   }));
 }
 
@@ -133,6 +140,7 @@ export function spawnPickup(
     pk.pairId = pairId;
     pk.seq = spawnSeq++;
     pk.spawnGrace = grace;
+    pk.collected = false; // reset on reuse — only set true if actually taken
     return true;
   }
   return false;
@@ -288,10 +296,13 @@ export function updatePickups(state: GameState, dt: number): void {
     if (dx * dx + dy * dy <= r2) {
       applyPickup(p, pk.kind);
       pk.active = false;
+      pk.collected = true; // TAKEN → it announces (the renderer toasts a collected pick only)
       if (pk.room >= 0 && pk.room < state.rooms.length) state.rooms[pk.room].dropsCollected++;
       // GOLDEN CHESTS: a paired pickup (the 1-of-2 choice) deactivates its sibling(s)
       // the instant it's taken — so exactly ONE of the two is ever collected. Handles
       // the simultaneous-overlap case too: the sibling is gone before the loop reaches it.
+      // The sibling is DISCARDED, not collected: deactivate WITHOUT setting `collected`,
+      // so it's removed silently (no name toast — you rejected it, you didn't get it).
       if (pk.pairId >= 0) {
         for (const other of state.pickups) {
           if (other !== pk && other.active && other.pairId === pk.pairId) other.active = false;

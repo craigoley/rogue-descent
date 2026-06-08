@@ -142,6 +142,33 @@ describe('Chest — the 1-of-2 choice PRESENTS (offset approach + grace)', () =>
       expect(gained(s, pb.kind, baseLevelB, baseHealth)).toBe(false); // exactly one taken
     }
   });
+
+  it('collecting one of a linked pair announces EXACTLY ONCE — the rejected sibling is discarded SILENTLY', () => {
+    // ⚠️ The double-toast bug: applyPickup was already exactly-once, but BOTH name
+    // toasts fired. The renderer announces a pickup when it goes active→inactive WITH
+    // `collected` set — so the sim must flag ONLY the taken pick, leaving the discarded
+    // sibling silent. This pins that: exactly one `collected` (one announcement), not two.
+    const { s, cx, cy } = withChest(1);
+    s.rooms[1].phase = 'cleared';
+    s.player.x = cx + 0.9; // side approach
+    s.player.y = cy;
+    update(s, createIntent(), DT); // open → 2 picks (in grace)
+    const pair = s.pickups.filter((pk) => pk.active);
+    expect(pair).toHaveLength(2);
+    const [pa, pb] = pair; // pa = the pick we take; pb = its sibling
+
+    // Take pick A (stand on it, let the grace expire) → A collected, B discarded.
+    s.player.x = pa.x;
+    s.player.y = pa.y;
+    advance(s, PICKUP.spawnGrace + 2 * DT);
+
+    expect(pa.active).toBe(false);
+    expect(pb.active).toBe(false);
+    expect(pa.collected).toBe(true); // the TAKEN pick announces
+    expect(pb.collected).toBe(false); // the sibling: removed with NO collection feedback
+    expect(s.pickups.filter((pk) => pk.collected)).toHaveLength(1); // EXACTLY ONE announcement
+    expect(s.rooms[1].dropsCollected).toBe(1); // ...and exactly one applyPickup/collection
+  });
 });
 
 describe('Chest — pick selection (interesting + non-maxed)', () => {
