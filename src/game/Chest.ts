@@ -21,11 +21,12 @@
  * IS an enemy (tagged to the room) and gates normally.
  */
 
-import { CHEST, PLAYER, POOL } from '../utils/constants';
+import { CHEST, PICKUP, PLAYER, POOL } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { chooseChestPicks, spawnGuaranteedPickup } from './Pickup';
 import { spawnEnemy, roomEnemyCount } from './Enemy';
 import { reactivateRoom } from './Encounter';
+import { isSolid } from './Room';
 import type { GameState } from './GameState';
 
 export interface Chest {
@@ -115,18 +116,58 @@ function openChest(state: GameState, c: Chest, ci: number): void {
   popLoot(state, c, ci);
 }
 
-/** Pop the two linked pickups (the 1-of-2 choice) at the chest position. Shared by
- *  the loot roll AND the mimic-killed reward. */
+/** A walkable spot for a pick at (x, y): if that tile is solid (chest jammed near a
+ *  wall), mirror across the chest to the open side; if BOTH sides are walled, fall
+ *  back to the chest tile itself (always walkable — the chest sits there). The grace
+ *  beat means even this degenerate stack still presents the choice. */
+function safeSpot(state: GameState, cx: number, cy: number, x: number, y: number): { x: number; y: number } {
+  const ts = state.room.tileSize;
+  const solidAt = (wx: number, wy: number): boolean => isSolid(state.room, Math.floor(wx / ts), Math.floor(wy / ts));
+  if (!solidAt(x, y)) return { x, y };
+  const mx = cx - (x - cx);
+  const my = cy - (y - cy);
+  if (!solidAt(mx, my)) return { x: mx, y: my };
+  return { x: cx, y: cy };
+}
+
+/** Pop the two linked pickups (the 1-of-2 choice) from the chest. Shared by the loot
+ *  roll AND the mimic-killed reward.
+ *
+ *  PRESENTATION (the #70 instant-collect fix): the pair is spread PERPENDICULAR to the
+ *  player's approach direction, so BOTH picks land equidistant off to the sides — never
+ *  in the player's path, and the approach side no longer force-decides which is grabbed
+ *  (offset > collection reach, so neither is in range at spawn). Each pick also carries
+ *  PICKUP.spawnGrace, so the choice is VISIBLE for a beat before either is collectable
+ *  even if the player is parked on it. The player then picks by moving toward one. */
 function popLoot(state: GameState, c: Chest, ci: number): void {
   const [a, b] = chooseChestPicks(state.player, state.chestRng, state.config.unlocked); // META PR1: unlocked pool
   // pairId = the chest's pool slot + 1 (>= 1, unique per chest) so the two pickups
   // link only to each other — collecting one despawns its sibling (exactly one taken).
   const pairId = ci + 1;
+  const off = CHEST.pickupOffset;
+  // Unit vector from the player TO the chest = the approach direction. Spread the pair
+  // along its perpendicular. Dead-on the chest (no approach dir) → default to a
+  // horizontal spread (as if approached from below).
+  const p = state.player;
+  let ux = c.x - p.x;
+  let uy = c.y - p.y;
+  const d = Math.hypot(ux, uy);
+  if (d > 1e-4) {
+    ux /= d;
+    uy /= d;
+  } else {
+    ux = 0;
+    uy = -1;
+  }
+  const px = -uy; // perpendicular unit
+  const py = ux;
+  const sa = safeSpot(state, c.x, c.y, c.x + px * off, c.y + py * off);
+  const sb = safeSpot(state, c.x, c.y, c.x - px * off, c.y - py * off);
   // GUARANTEED: a chest's reward is never lost to a full pickup pool — evict the
   // oldest stale FLOOR drop if needed so both picks always appear (the chest's
   // "reliable reward" identity; a stale uncollected drop is what yields).
-  spawnGuaranteedPickup(state.pickups, c.x - CHEST.pickupOffset, c.y, a, c.roomIndex, pairId);
-  spawnGuaranteedPickup(state.pickups, c.x + CHEST.pickupOffset, c.y, b, c.roomIndex, pairId);
+  spawnGuaranteedPickup(state.pickups, sa.x, sa.y, a, c.roomIndex, pairId, PICKUP.spawnGrace);
+  spawnGuaranteedPickup(state.pickups, sb.x, sb.y, b, c.roomIndex, pairId, PICKUP.spawnGrace);
 }
 
 /** Count of live chests — for tests / pool-reuse guards. */

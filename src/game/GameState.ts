@@ -515,11 +515,12 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
   // Open a golden chest the player is touching (only in a cleared room) → pops the
-  // 1-of-2 pickups. BEFORE updatePickups so the popped pickups are collectable the
-  // moment they appear (they're offset from the chest, so not instantly grabbed).
+  // 1-of-2 pickups. BEFORE updatePickups so the picks register this frame — but they
+  // spawn with a presentation grace (clear of the player, perpendicular to approach),
+  // so the CHOICE is always shown for a beat before either can be grabbed.
   updateChests(state);
-  // Collect any pickup the player is touching.
-  updatePickups(state);
+  // Collect any pickup the player is touching (respecting each pickup's spawn grace).
+  updatePickups(state, dt);
 
   // Descent: once the boss is dead the stairs open; stepping on them loads the
   // next floor. On descend the state is rebuilt, so end the frame here.

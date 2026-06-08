@@ -91,6 +91,11 @@ export interface Pickup {
    *  first when a chest reward needs room in a full pool (spawnGuaranteedPickup).
    *  Deterministic (a counter, no rng); mirrors Particle.ts's burstSeed. */
   seq: number;
+  /** PRESENTATION GRACE (seconds) remaining: while > 0 the pickup is VISIBLE but
+   *  NOT collectable (updatePickups counts it down and skips collection). Set on
+   *  GOLDEN-CHEST picks (PICKUP.spawnGrace) so the 1-of-2 choice always presents;
+   *  0 for floor drops (instant-grab). */
+  spawnGrace: number;
 }
 
 /** Monotonic spawn counter (deterministic, like Particle.burstSeed) for eviction age. */
@@ -105,6 +110,7 @@ export function createPickupPool(): Pickup[] {
     room: -1,
     pairId: -1,
     seq: 0,
+    spawnGrace: 0,
   }));
 }
 
@@ -115,6 +121,7 @@ export function spawnPickup(
   kind: PickupKind,
   room: number,
   pairId = -1,
+  grace = 0,
 ): boolean {
   for (const pk of pool) {
     if (pk.active) continue;
@@ -125,6 +132,7 @@ export function spawnPickup(
     pk.room = room;
     pk.pairId = pairId;
     pk.seq = spawnSeq++;
+    pk.spawnGrace = grace;
     return true;
   }
   return false;
@@ -142,15 +150,16 @@ export function spawnGuaranteedPickup(
   kind: PickupKind,
   room: number,
   pairId: number,
+  grace = 0,
 ): void {
-  if (spawnPickup(pool, x, y, kind, room, pairId)) return;
+  if (spawnPickup(pool, x, y, kind, room, pairId, grace)) return;
   let victim: Pickup | null = null;
   for (const pk of pool) {
     if (pk.active && pk.pairId < 0 && (victim === null || pk.seq < victim.seq)) victim = pk;
   }
   if (victim) {
     victim.active = false;
-    spawnPickup(pool, x, y, kind, room, pairId);
+    spawnPickup(pool, x, y, kind, room, pairId, grace);
   }
 }
 
@@ -259,13 +268,21 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
   }
 }
 
-/** Collect any pickup the player is touching; apply its effect. */
-export function updatePickups(state: GameState): void {
+/** Collect any pickup the player is touching; apply its effect. A pickup with a
+ *  PRESENTATION GRACE still counting down is VISIBLE but NOT collectable — the grace
+ *  ticks here and collection is skipped until it expires (so a GOLDEN-CHEST 1-of-2
+ *  choice always presents before either pick can be grabbed, even if the player
+ *  overlaps one). Floor drops spawn with grace 0 → collectable immediately. */
+export function updatePickups(state: GameState, dt: number): void {
   const p = state.player;
   const reach = PICKUP.radius + PLAYER.radius;
   const r2 = reach * reach;
   for (const pk of state.pickups) {
     if (!pk.active) continue;
+    if (pk.spawnGrace > 0) {
+      pk.spawnGrace = Math.max(0, pk.spawnGrace - dt); // presentation beat: shown, not yet grabbable
+      continue;
+    }
     const dx = pk.x - p.x;
     const dy = pk.y - p.y;
     if (dx * dx + dy * dy <= r2) {
