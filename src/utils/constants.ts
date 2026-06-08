@@ -863,7 +863,11 @@ export const CHEST = {
   /** Open reach by contact, world units (added to PLAYER.radius). */
   openReach: 0.7,
   /** Spatial offset of each of the 2 popped pickups from the chest centre, world
-   *  units — far enough apart that walking to one is a clear spatial commitment. */
+   *  units. The pair is spread PERPENDICULAR to the player's approach (see
+   *  Chest.popLoot), so both land equidistant off to the sides — neither in the
+   *  player's path. MUST exceed the collection reach (PICKUP.radius + PLAYER.radius
+   *  = 0.85) so neither pick is in range at spawn regardless of approach (the
+   *  position half of the instant-collect fix; PICKUP.spawnGrace is the timing half). */
   pickupOffset: 1.2,
   /** Spark burst emitted on opening (the lid-pop tell). */
   openBurst: 18,
@@ -1038,6 +1042,13 @@ export const POWERUP_MAX_LEVEL = 3;
 export const PICKUP = {
   /** Touch-collection radius, world units. */
   radius: 0.45,
+  /** PRESENTATION GRACE (seconds) a pickup is VISIBLE but NOT yet collectable after
+   *  spawn. Set ONLY on GOLDEN-CHEST picks (see Chest.popLoot) so the spatial 1-of-2
+   *  CHOICE always presents before either can be grabbed — even if the player is
+   *  parked on a pick. Floor drops get 0 (instant-grab on walk-over, as before). The
+   *  geometry-independent guard against the #70 instant-collect (contact-open puts a
+   *  pick in collection range at spawn). By-feel. */
+  spawnGrace: 0.4,
   /** Visual size (render), world units. */
   size: 0.35,
   /** Hover height above the floor (render), world units. */
@@ -1047,6 +1058,12 @@ export const PICKUP = {
   bobRate: 3,
   /** Y-axis spin speed (radians per ms), render-only. */
   spinRate: 0.002,
+  /** RENDER-ONLY: extra scale a pickup pulses to while its spawnGrace is counting
+   *  down — the brief "presenting / choose one" beckon on GOLDEN-CHEST picks before
+   *  they become collectable. 0 = no swell. By-feel. */
+  presentPulse: 0.4,
+  /** RENDER-ONLY: pulse speed (radians per ms) during spawnGrace. By-feel. */
+  presentPulseRate: 0.012,
   /** Floating type-icon (cross / arrow / burst) sprite size, world units. */
   iconSize: 0.7,
   /** Height of the floating icon above the pickup cube, world units. */

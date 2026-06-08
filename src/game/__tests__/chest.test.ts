@@ -16,10 +16,15 @@ import { spawnEnemy, roomEnemyCount } from '../Enemy';
 import { updateEncounterResolve } from '../Encounter';
 import { chooseChestPicks, currentPowerupLevel, rollDrop, activePickupCount, spawnPickup, type PickupKind } from '../Pickup';
 import { createRng } from '../../utils/rng';
-import { POOL, POWERUP_MAX_LEVEL, SIM_DT } from '../../utils/constants';
+import { PICKUP, PLAYER, POOL, POWERUP_MAX_LEVEL, SIM_DT } from '../../utils/constants';
 
 const DT = SIM_DT;
 const EFFECTS = new Set<PickupKind>(['lifesteal', 'burn', 'chain', 'crit']);
+
+/** Run `seconds` of sim at the fixed step (no input → the player holds position). */
+function advance(s: GameState, seconds: number): void {
+  for (let t = 0; t < seconds; t += DT) update(s, createIntent(), DT);
+}
 
 /** Fresh state with pools cleared; one chest placed at room `ri`'s centre. */
 function withChest(ri = 1): { s: GameState; chest: GameState['chests'][number]; cx: number; cy: number } {
@@ -82,14 +87,39 @@ describe('Chest — opens only when cleared, on contact', () => {
   });
 });
 
-describe('Chest — the spatial 1-of-2 choice grants exactly one', () => {
-  it('collecting one pickup applies it AND deactivates the sibling', () => {
+describe('Chest — the 1-of-2 choice PRESENTS (offset approach + grace)', () => {
+  // ⚠️ REAL-PLAY CONDITION. The old guard placed the player DEAD CENTRE — the one spot
+  // where both picks survive — so it passed while the choice never presented in actual
+  // play (#70 H1: you contact-open from a SIDE, the near pick spawns inside collection
+  // reach and is grabbed same-frame + the sibling despawns → "got nothing"). These pin
+  // the fix: BOTH picks spawn clear of the player, and a presentation grace holds
+  // collection so the choice is always seen before either can be taken.
+
+  it('approaching from a side pops BOTH picks clear of the player; NEITHER is auto-collected', () => {
     const { s, cx, cy } = withChest(1);
     s.rooms[1].phase = 'cleared';
-    s.player.x = cx;
+    s.player.x = cx + 0.9; // walked INTO the chest from the right (as in real play)
+    s.player.y = cy;
+    update(s, createIntent(), DT); // contact → open
+
+    const picks = s.pickups.filter((pk) => pk.active);
+    expect(picks).toHaveLength(2); // the choice popped
+    expect(s.rooms[1].dropsCollected).toBe(0); // nothing grabbed at spawn (the bug, now fixed)
+    const reach = PICKUP.radius + PLAYER.radius;
+    for (const pk of picks) {
+      const dist = Math.hypot(pk.x - s.player.x, pk.y - s.player.y);
+      expect(dist).toBeGreaterThan(reach); // both spawned OUTSIDE collection reach
+      expect(pk.spawnGrace).toBeGreaterThan(0); // ...and not yet collectable (grace held)
+    }
+  });
+
+  it('a pick the player OVERLAPS is NOT collected during the grace, but IS after it (and grants exactly one)', () => {
+    const { s, cx, cy } = withChest(1);
+    s.rooms[1].phase = 'cleared';
+    s.player.x = cx + 0.9; // side approach
     s.player.y = cy;
     s.player.health = 50; // hurt, so a health pick is observable
-    update(s, createIntent(), DT); // open → 2 pickups
+    update(s, createIntent(), DT); // open → 2 picks, both in their grace window
     const pair = s.pickups.filter((pk) => pk.active);
     expect(pair).toHaveLength(2);
     const [pa, pb] = pair;
@@ -97,15 +127,19 @@ describe('Chest — the spatial 1-of-2 choice grants exactly one', () => {
     const baseLevelB = currentPowerupLevel(s.player, pb.kind);
     const baseHealth = s.player.health;
 
-    // Walk onto pickup A.
+    // Park ON pick A but WITHIN its grace: shown, NOT grabbed (the choice still presents).
     s.player.x = pa.x;
     s.player.y = pa.y;
     update(s, createIntent(), DT);
+    expect(activePickupCount(s.pickups)).toBe(2); // grace holds — both still on offer
+    expect(gained(s, pa.kind, baseLevelA, baseHealth)).toBe(false); // nothing applied yet
 
+    // Let the grace expire (still standing on A) → now it collects + the sibling despawns.
+    advance(s, PICKUP.spawnGrace + 2 * DT);
     expect(gained(s, pa.kind, baseLevelA, baseHealth)).toBe(true); // A applied
     expect(activePickupCount(s.pickups)).toBe(0); // sibling B deactivated, not collected
     if (pb.kind !== pa.kind) {
-      expect(gained(s, pb.kind, baseLevelB, baseHealth)).toBe(false); // B never applied
+      expect(gained(s, pb.kind, baseLevelB, baseHealth)).toBe(false); // exactly one taken
     }
   });
 });
