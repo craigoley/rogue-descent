@@ -866,6 +866,7 @@ export const CHEST = {
    *  chest says "valuable, come get me". The pulse stills on reduce-motion; the base
    *  glow stays (it's not motion). */
   emissive: 0.4,
+  trimEmissive: 0.12,
   glowPulseAmp: 0.22,
   glowPulseRate: 2.2,
   /** THE OPEN MOMENT (render-only, frame-diffed off the sim `opened`): the lid flings

@@ -590,7 +590,7 @@ export class EntityRenderer {
     const trimMat = new MeshStandardMaterial({
       color: PALETTE.chestTrim,
       emissive: PALETTE.chestTrim,
-      emissiveIntensity: 0.12,
+      emissiveIntensity: CHEST.trimEmissive,
     });
     for (let i = 0; i < POOL.chests; i++) {
       const group = new Group();
