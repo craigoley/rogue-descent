@@ -126,6 +126,7 @@ window.addEventListener('keydown', unlockAudio);
 // toggle panel). The values already persist (#64 Settings); this only relocates +
 // relabels their controls. Render/state only — the sim is unaware.
 hud.setReduceMotion(settings.reduceMotion); // apply the persisted setting at startup
+entities.setReduceMotion(settings.reduceMotion); // ...and to the chest idle motion
 
 const settingsBtn = document.createElement('button');
 settingsBtn.className = 'hud-settings-btn';
@@ -177,6 +178,7 @@ motionRow.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   settings.reduceMotion = !settings.reduceMotion;
   hud.setReduceMotion(settings.reduceMotion);
+  entities.setReduceMotion(settings.reduceMotion);
   saveSettings(settings);
   refreshMotion();
 });
