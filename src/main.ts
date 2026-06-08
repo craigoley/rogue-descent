@@ -190,6 +190,23 @@ settingsBtn.addEventListener('pointerdown', (e) => {
   settingsBtn.classList.toggle('is-open');
 });
 
+const closeSettings = (): void => {
+  settingsPanel.classList.remove('is-open');
+  settingsBtn.classList.remove('is-open');
+};
+// Dismiss the panel on Escape, or on a tap/click OUTSIDE it (taps on the gear or the
+// panel itself don't count — the gear's own toggle + the rows still work). No-op when
+// the panel is closed, so normal-play input is never touched.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSettings();
+});
+window.addEventListener('pointerdown', (e) => {
+  if (!settingsPanel.classList.contains('is-open')) return;
+  const t = e.target as Node;
+  if (settingsPanel.contains(t) || settingsBtn.contains(t)) return;
+  closeSettings();
+});
+
 // M key keeps the quick mute shortcut (desktop), routed through the same toggle.
 window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() !== 'm') return;
