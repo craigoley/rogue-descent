@@ -22,7 +22,9 @@ concurrency:
 
 jobs:
   e2e:
-    name: E2E smoke (non-blocking)
+    name: E2E smoke + HUD baselines (non-blocking)
+    # PRs + nightly only; manual dispatch is reserved for the baseline-update job below.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,6 +36,8 @@ jobs:
       - run: npm ci
       # Chromium + its OS deps (pinned via the @playwright/test version in the lockfile).
       - run: npx playwright install --with-deps chromium
+      # Smoke + keyboard specs AND the committed L2 HUD baseline COMPARE
+      # (hud-baselines.spec.ts). Still NON-BLOCKING — informational only.
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
@@ -41,3 +45,40 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # Manual (workflow_dispatch): (re)generate the committed L2 HUD baselines ON UBUNTU —
+  # the platform CI compares against. Local macOS/Windows PNGs are font-rasterised
+  # differently and would never match, so baselines must be produced here. Run via the
+  # Actions "Run workflow" button on the branch; it commits the -linux PNGs back.
+  # (Genuineness — a HUD shift turns the diff RED at the 0.005 threshold — was verified
+  # before the spec landed; see hud-baselines.spec.ts.)
+  update-baselines:
+    name: Update L2 HUD baselines (manual, ubuntu)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Generate the -linux HUD baselines
+        run: npx playwright test hud-baselines --update-snapshots
+      - name: Sanity — the fresh baselines compare GREEN
+        run: npx playwright test hud-baselines
+      - name: Commit + push the baselines
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/e2e/hud-baselines.spec.ts-snapshots
+          if git diff --cached --quiet; then
+            echo "No baseline changes to commit."
+          else
+            git commit -m "test(e2e): L2 HUD visual baselines (ubuntu -linux, auto-generated)"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
