@@ -897,6 +897,9 @@ export const CHEST = {
    *  then hides, revealing the (stunned) mimic. Stilled under reduce-motion. */
   wobbleAmp: 0.07,
   wobbleRot: 0.22,
+  wobbleFreqX: 0.05,
+  wobbleFreqY: 0.07,
+  wobbleFreqRot: 0.06,
 } as const;
 
 /** Within-run drops. Health + seven powerups: four LEVELED weapon tracks (Phase 9:

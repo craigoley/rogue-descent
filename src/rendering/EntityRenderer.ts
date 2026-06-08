@@ -1246,8 +1246,8 @@ export class EntityRenderer {
         }
         g.visible = true;
         const sh = rm ? 0 : CHEST.wobbleAmp;
-        g.position.set(c.x + Math.sin(now * 0.05) * sh, CHEST.bodyHeight, c.y + Math.cos(now * 0.07) * sh);
-        g.rotation.y = rm ? 0 : Math.sin(now * 0.06) * CHEST.wobbleRot;
+        g.position.set(c.x + Math.sin(now * CHEST.wobbleFreqX) * sh, CHEST.bodyHeight, c.y + Math.cos(now * CHEST.wobbleFreqY) * sh);
+        g.rotation.y = rm ? 0 : Math.sin(now * CHEST.wobbleFreqRot) * CHEST.wobbleRot;
         g.scale.setScalar(1);
         lid.rotation.x = 0;
         continue;
