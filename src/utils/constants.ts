@@ -71,10 +71,7 @@ export const PALETTE = {
   /** GOLDEN CHEST body (golden chests) — warm amber-gold, distinct from the brighter
    *  crit gold, so a chest reads as "treasure" from across the room. */
   chest: 0xffb300,
-  /** GOLDEN CHEST trim/clasp — dark bronze: the band + lock accent that make the gold
-   *  box read as a chest, not a cube. */
-  chestTrim: 0x6e4a12,
-  /** GOLDEN CHEST dark METAL (v2) — near-black iron-bronze for the banding/straps/
+  /** GOLDEN CHEST dark METAL — near-black iron-bronze for the banding/straps/
    *  lock: a strong two-tone contrast against the gold body (mono-gold flattens it). */
   chestMetal: 0x2a2114,
   /**
