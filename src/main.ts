@@ -21,6 +21,7 @@ import { DungeonRenderer } from './rendering/DungeonRenderer';
 import { EntityRenderer } from './rendering/EntityRenderer';
 import { HUD, isDebugEnabled } from './rendering/HUD';
 import { RunSummary } from './rendering/RunSummary';
+import { UnlocksOverlay } from './rendering/UnlocksOverlay';
 import { AudioEngine } from './audio/AudioEngine';
 import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
@@ -186,6 +187,20 @@ motionRow.addEventListener('pointerdown', (e) => {
   entities.setReduceMotion(settings.reduceMotion);
   saveSettings(settings);
   refreshMotion();
+});
+
+// Unlocks row (meta PR3): opens the read-only UNLOCKS overlay (what's unlocked + each
+// locked item's milestone + live progress). Closes the settings panel first so the two
+// don't stack. Purely informational — the overlay mutates nothing.
+const unlocksOverlay = new UnlocksOverlay(app);
+const unlocksRow = document.createElement('button');
+unlocksRow.className = 'hud-settings-row';
+unlocksRow.textContent = 'Unlocks…';
+settingsPanel.appendChild(unlocksRow);
+unlocksRow.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  closeSettings();
+  unlocksOverlay.show();
 });
 
 // Gear toggles the panel open/closed.
