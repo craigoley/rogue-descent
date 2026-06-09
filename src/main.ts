@@ -29,6 +29,7 @@ import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
 import { loadMeta, saveMeta, shouldOfferLean } from './state/Meta';
 import { DASH, DUNGEON, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
+import { PerfMeter, type FrameStats } from './utils/perfMeter';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app container not found');
@@ -330,6 +331,10 @@ function tracePlayer(): void {
 let lastMs = performance.now();
 let accumulator = 0;
 let fps = 0;
+// Debug-only frame-time distribution meter (min/avg/1%-low). Built only under
+// ?debug so normal play pays nothing; the readout that consumes it is itself
+// debug-gated. null in normal play.
+const perf = debug ? new PerfMeter() : null;
 
 function frame(nowMs: number): void {
   let dt = (nowMs - lastMs) / 1000;
@@ -337,6 +342,13 @@ function frame(nowMs: number): void {
   dt = Math.min(dt, MAX_FRAME_DT);
   // Smoothed FPS for the debug overlay (no per-frame allocation).
   fps = fps === 0 ? 1 / dt : fps * 0.9 + (1 / dt) * 0.1;
+  // Feed the distribution meter the (clamped) frame-time in ms. push() is O(1);
+  // the percentile is computed lazily inside sample() on an interval, not here.
+  let perfStats: FrameStats | null = null;
+  if (perf) {
+    perf.push(dt * 1000);
+    perfStats = perf.sample(nowMs);
+  }
 
   // Desktop mouse-aim: aim from the player's screen position toward the cursor.
   // (On touch there's no mouse, so the aim stick's value is left untouched.)
@@ -388,7 +400,7 @@ function frame(nowMs: number): void {
   audioMgr.sync(game); // diff state -> play combat SFX (side-effect only)
   scene.updateFollow(game, alpha, dt);
   scene.render();
-  hud.update(game, fps, steps, alpha, controls.intent, scene, controls);
+  hud.update(game, fps, steps, alpha, controls.intent, scene, controls, perfStats);
   summary.update(game);
   if (debug) logEncounters();
 
