@@ -15,13 +15,14 @@ import {
   AmbientLight,
   Color,
   DirectionalLight,
+  LinearToneMapping,
   OrthographicCamera,
   Scene,
   Vector3,
   WebGLRenderer,
 } from 'three';
 import type { GameState } from '../game/GameState';
-import { CAMERA, KEY_LIGHT_POS, PALETTE, TUNING } from '../utils/constants';
+import { CAMERA, KEY_LIGHT_POS, LIGHTING, PALETTE, RIM_LIGHT_POS, TUNING } from '../utils/constants';
 import { deadZoneFollow, lerp, type Vec2 } from '../utils/math';
 
 export class SceneManager {
@@ -46,14 +47,28 @@ export class SceneManager {
 
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Exposure via LinearToneMapping (a flat ×exposure, NOT ACES — ACES would
+    // desaturate the neon palette). At exposure 1.0 this matches no tone mapping;
+    // LIGHTING.exposure gives a gentle phone-tunable lift. Curves wait for bloom.
+    this.renderer.toneMapping = LinearToneMapping;
+    this.renderer.toneMappingExposure = LIGHTING.exposure;
     container.appendChild(this.renderer.domElement);
 
-    // Slightly directional lighting so wall tops read against the floor. Lit
-    // from above and to one side so the iso walls cast readable shading.
-    this.scene.add(new AmbientLight(0xffffff, 0.85));
-    const key = new DirectionalLight(0xffffff, 0.6);
+    // Three-light rig (all static — no animation, so no reduce-motion gating):
+    //  - low AMBIENT fill so the key actually shapes the iso cubes (lit vs
+    //    shadowed face = form), not a flat wash;
+    //  - a warm KEY from above-and-to-one-side (wall tops + the lit cube face);
+    //  - a low cool RIM from the far side for separation + depth.
+    // Entities self-glow via emissive (light-independent), so the lower ambient
+    // deepens floor shadow WITHOUT crushing enemies — it sharpens enemy↔floor
+    // contrast rather than hiding the dark-side faces.
+    this.scene.add(new AmbientLight(0xffffff, LIGHTING.ambient));
+    const key = new DirectionalLight(LIGHTING.keyColor, LIGHTING.keyIntensity);
     key.position.set(KEY_LIGHT_POS.x, KEY_LIGHT_POS.y, KEY_LIGHT_POS.z);
     this.scene.add(key);
+    const rim = new DirectionalLight(LIGHTING.rimColor, LIGHTING.rimIntensity);
+    rim.position.set(RIM_LIGHT_POS.x, RIM_LIGHT_POS.y, RIM_LIGHT_POS.z);
+    this.scene.add(rim);
 
     this.resize();
     window.addEventListener('resize', this.resize);

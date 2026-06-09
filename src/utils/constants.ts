@@ -362,6 +362,48 @@ export const KEY_LIGHT_POS = {
   z: CAMERA.offsetZ * 0.6,
 } as const;
 
+/** A low COOL FILL/RIM light opposite the warm key (lighting PR-A) — comes from
+ *  the far side + lower, so the cube face the key leaves dark gets a faint cool
+ *  edge: separation + depth without a second strong source. No new pass. */
+export const RIM_LIGHT_POS = {
+  x: -CAMERA.offsetX * 0.5,
+  y: CAMERA.offsetY * 0.55,
+  z: -CAMERA.offsetZ * 0.45,
+} as const;
+
+/**
+ * Lighting rig dials (render-only; the live "render simple shapes beautifully"
+ * knobs Craig tunes on the phone). Lighting PR-A drops the old flat 0.85 ambient
+ * so the directional KEY actually SHAPES the iso cubes (a lit face + a shadowed
+ * face = form/contrast), and adds a cool rim for separation. The neon look is
+ * safe: entities carry light-INDEPENDENT emissive (VFX.*Emissive), so a shadowed
+ * enemy still self-glows and reads against the (non-emissive, now-darker) floor —
+ * lowering ambient actually INCREASES enemy↔floor contrast. By-feel.
+ *
+ * Exposure uses LinearToneMapping (a flat ×exposure, NOT ACES) — ACES desaturates
+ * the neon palette that is the look's identity, so tone-mapping curves wait for
+ * bloom (PR-C). At exposure 1.0 this is visually identical to no tone mapping.
+ */
+export const LIGHTING = {
+  /** Ambient fill intensity. Was 0.85 (flat wash) → 0.5 so the key reads as form
+   *  while the emissive self-glow keeps entities legible in shadow (clarity). */
+  ambient: 0.5,
+  /** Warm-white key intensity. Nudged up from 0.6 to keep lit faces punchy under
+   *  the lower ambient. */
+  keyIntensity: 0.68,
+  /** Key tint — a barely-warm white, so lit faces feel lit (not clinical) without
+   *  shifting the palette. */
+  keyColor: 0xfff4e6,
+  /** Cool rim/fill intensity (low — it's an accent, not a second key). */
+  rimIntensity: 0.3,
+  /** Cool rim tint — a desaturated blue-grey opposite the warm key (warm/cool
+   *  separation reads the cube's two dark-side planes apart). */
+  rimColor: 0x8aa0cc,
+  /** Output exposure (LinearToneMapping multiplier). A gentle lift for richness;
+   *  1.0 = neutral. The phone-tuning dial. */
+  exposure: 1.06,
+} as const;
+
 /** Touch virtual-stick tuning. */
 export const TOUCH = {
   /** Drag distance (px) from the stick origin that maps to full deflection. */
