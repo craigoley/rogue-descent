@@ -1268,6 +1268,37 @@ export const SHAKE = {
   duration: 0.25,
 } as const;
 
+/**
+ * Fake blob shadows (lighting PR-B) — a flat, soft-edged dark disc laid on the
+ * floor under each floating entity for GROUNDING + depth. NOT a real shadowMap
+ * (that's the mobile-perf killer: a depth pass + PCF per light, scaling with
+ * entity count). Each blob is one pooled transparent quad sharing a single
+ * radial-alpha texture + one CircleGeometry — near-zero cost, no render pass, no
+ * light interaction. COSMETIC: follows the rendered position only, adds no sim
+ * state. Subtle by design (soft, semi-transparent) so it grounds an entity
+ * WITHOUT muddying it — the entity stays the brightest thing on the floor.
+ * All static (position-only, no pulse) → no reduce-motion gating. By-feel dials.
+ */
+export const BLOB = {
+  /** Height above the floor (floor plane y=0, grid y=0.01) — just clear of both
+   *  to avoid z-fighting. */
+  y: 0.02,
+  /** Circle tessellation (cheap; a disc needs little). */
+  segments: 24,
+  /** Radial-alpha texture: fraction of the radius held at near-full alpha before
+   *  the soft falloff begins (a soft core, not a hard ring). */
+  coreStop: 0.35,
+  /** Alpha at the core stop (centre is 1; edge is 0). */
+  coreAlpha: 0.85,
+  /** Per-entity disc radius (world units) + peak opacity. Radii track each
+   *  silhouette's footprint; opacities stay subtle so a blob never out-reads its
+   *  entity. Boss is broad; pickups small (they float — the blob grounds them). */
+  player: { radius: 0.55, opacity: 0.34 },
+  enemy: { radius: 0.5, opacity: 0.3 },
+  boss: { radius: 1.7, opacity: 0.4 },
+  pickup: { radius: 0.32, opacity: 0.22 },
+} as const;
+
 /** Render-only VFX dimensions (no gameplay effect). */
 export const VFX = {
   /** Dash afterimage count. */
