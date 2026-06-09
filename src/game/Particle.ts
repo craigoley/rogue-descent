@@ -42,25 +42,41 @@ export function createParticlePool(): Particle[] {
 /** Rotates each burst so successive bursts don't overlap identically. */
 let burstSeed = 0;
 
-/** Emit up to `count` particles in a radial fan from (x, y). Reuses inactive
- *  slots; never grows the pool. `tint` (default 0 = white spark) is a pure colour
- *  tag the renderer maps to a material — it does NOT affect the deterministic
- *  spread/speed/life, so a tinted burst is byte-identical to an untinted one in
- *  every sim quantity. */
+/** Emit up to `count` particles from (x, y). Reuses inactive slots; never grows
+ *  the pool. `tint` (default 0 = white spark) is a pure colour tag the renderer
+ *  maps to a material. `dir`+`spread` (default 0 = the uniform radial RING, the
+ *  original behaviour) bias the burst into a CONE centred on (dirX, dirY) with the
+ *  given angular `spread` — a DIRECTIONAL impact spray (juice PR-2). Everything is
+ *  DETERMINISTIC: angles derive from the per-burst `burstSeed` + the passed dir, no
+ *  RNG — same seed+dir → same particles; an untinted, non-directional call is
+ *  byte-identical to before. */
 export function spawnParticles(
   pool: Particle[],
   x: number,
   y: number,
   count: number,
   tint = 0,
+  dirX = 0,
+  dirY = 0,
+  spread = 0,
 ): void {
   const base = burstSeed * 0.61803; // golden-ish offset, deterministic
   burstSeed++;
+  const directional = spread > 0 && (dirX !== 0 || dirY !== 0);
+  const dirAng = directional ? Math.atan2(dirY, dirX) : 0;
   let spawned = 0;
   for (let i = 0; i < pool.length && spawned < count; i++) {
     const p = pool[i];
     if (p.active) continue;
-    const ang = base + (spawned / count) * Math.PI * 2;
+    let ang: number;
+    if (directional) {
+      // Fan evenly across the impact cone (centred on the hit direction), with a
+      // small deterministic jitter so repeated identical hits don't look stamped.
+      const frac = count > 1 ? spawned / (count - 1) : 0.5; // 0..1 across the cone
+      ang = dirAng + (frac - 0.5) * spread + ((base % 1) - 0.5) * (spread / count);
+    } else {
+      ang = base + (spawned / count) * Math.PI * 2; // uniform ring (unchanged default)
+    }
     // Deterministic speed variation in [0.6, 1.0] * PARTICLE.speed.
     const spd = PARTICLE.speed * (0.6 + 0.4 * ((spawned % 4) / 3));
     p.active = true;

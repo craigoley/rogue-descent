@@ -34,6 +34,47 @@ describe('Particle tint (juice PR-1 kill-feel) — a colour tag, never a sim inp
     }
   });
 
+  it('a directional burst sprays inside the impact cone, centred on the hit vector', () => {
+    const pool = createParticlePool();
+    const dirX = 1;
+    const dirY = 0; // impact along +x
+    const spread = PARTICLE.hitSpread;
+    spawnParticles(pool, 0, 0, PARTICLE.hitCount, 0, dirX, dirY, spread);
+    const live = pool.filter((p) => p.active);
+    expect(live.length).toBe(PARTICLE.hitCount);
+    const dirAng = Math.atan2(dirY, dirX);
+    // Every particle's heading is within (half-cone + the one-step jitter) of the dir.
+    const tol = spread / 2 + spread / PARTICLE.hitCount;
+    for (const p of live) {
+      let d = Math.atan2(p.vy, p.vx) - dirAng;
+      d = Math.atan2(Math.sin(d), Math.cos(d)); // wrap to [-π, π]
+      expect(Math.abs(d)).toBeLessThanOrEqual(tol + 1e-9);
+    }
+  });
+
+  it('the directional spray is BIASED along the hit vector (mean velocity aligns with dir), unlike the uniform ring', () => {
+    // Directional: the average velocity points roughly along the impact dir.
+    const dir = createParticlePool();
+    const dx = 0.6;
+    const dy = -0.8; // normalized impact vector
+    spawnParticles(dir, 0, 0, PARTICLE.hitCount, 0, dx, dy, PARTICLE.hitSpread);
+    const dl = dir.filter((p) => p.active);
+    const mvx = dl.reduce((s, p) => s + p.vx, 0) / dl.length;
+    const mvy = dl.reduce((s, p) => s + p.vy, 0) / dl.length;
+    const mlen = Math.hypot(mvx, mvy);
+    expect(mlen).toBeGreaterThan(0.3 * PARTICLE.speed); // a real net bias, not ~0
+    // ...and that bias points along the impact dir (dot of unit-mean with dir > 0.8).
+    expect((mvx / mlen) * dx + (mvy / mlen) * dy).toBeGreaterThan(0.8);
+
+    // Uniform ring (no dir): the mean velocity ~cancels to near zero (no bias).
+    const ring = createParticlePool();
+    spawnParticles(ring, 0, 0, PARTICLE.hitCount);
+    const rl = ring.filter((p) => p.active);
+    const rmx = rl.reduce((s, p) => s + p.vx, 0) / rl.length;
+    const rmy = rl.reduce((s, p) => s + p.vy, 0) / rl.length;
+    expect(Math.hypot(rmx, rmy)).toBeLessThan(0.3 * PARTICLE.speed);
+  });
+
   it('a tinted particle ages + dies exactly like an untinted one (tint survives, drives nothing)', () => {
     const pool = createParticlePool();
     spawnParticles(pool, 0, 0, 1, 0x00ff88);

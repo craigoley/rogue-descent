@@ -130,7 +130,22 @@ export function damageEnemy(
     // CRIT tell (synergy arc PR4): a bigger spark burst + a stronger/longer hit-stop
     // (the time-dilation "crunch") so a crit READS as a crit, not just more damage.
     // Render-fed-by-sim, like the base feedback. Falls back to the normal hit feel.
-    spawnParticles(state.particles, enemy.x, enemy.y, crit ? PARTICLE.critCount : PARTICLE.hitCount);
+    // DIRECTIONAL spray (juice PR-2): fan the sparks AWAY along the knockback
+    // vector (the impact side) so the hit reads "struck from the player". White
+    // (tint 0) — distinct from the enemy-COLOURED kill burst. Deterministic (dir
+    // is the already-computed kbDir; no new RNG). Chain arcs also spray along
+    // their arc direction (source → target); only calls with zero dir fall back
+    // to the uniform ring.
+    spawnParticles(
+      state.particles,
+      enemy.x,
+      enemy.y,
+      crit ? PARTICLE.critCount : PARTICLE.hitCount,
+      0,
+      kbDirX,
+      kbDirY,
+      PARTICLE.hitSpread,
+    );
     const stop = crit ? CRIT.hitstop : TUNING.hitstop;
     if (stop > state.hitstopTimer) state.hitstopTimer = stop;
     // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt (the crit-boosted
