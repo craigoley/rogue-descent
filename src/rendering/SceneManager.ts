@@ -18,12 +18,21 @@ import {
   LinearToneMapping,
   OrthographicCamera,
   Scene,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { GameState } from '../game/GameState';
-import { CAMERA, KEY_LIGHT_POS, LIGHTING, PALETTE, RIM_LIGHT_POS, TUNING } from '../utils/constants';
+import { BLOOM, CAMERA, KEY_LIGHT_POS, LIGHTING, PALETTE, RIM_LIGHT_POS, TUNING } from '../utils/constants';
 import { deadZoneFollow, lerp, type Vec2 } from '../utils/math';
+
+/** Bloom quality / auto-downgrade tier. 'off' bypasses the composer (the exact
+ *  PR-A/B direct-render path — zero bloom cost). */
+export type BloomQuality = 'full' | 'half' | 'off';
 
 export class SceneManager {
   readonly scene = new Scene();
@@ -36,6 +45,14 @@ export class SceneManager {
   private focusY = 0;
   /** Reused scratch for the dead-zone follow result (no per-frame allocation). */
   private readonly _focusOut: Vec2 = { x: 0, y: 0 };
+
+  /** Bloom (PR-C): post chain + current quality tier. `bloomQuality` is PUBLIC so
+   *  the ?debug HUD can show the live tier (incl. an auto-downgrade). */
+  private composer!: EffectComposer;
+  private bloomPass!: UnrealBloomPass;
+  bloomQuality: BloomQuality = BLOOM.defaultQuality as BloomQuality;
+  /** Seconds the smoothed FPS has sustained below the downgrade trigger (anti-flap). */
+  private bloomBelowSec = 0;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -70,8 +87,29 @@ export class SceneManager {
     rim.position.set(RIM_LIGHT_POS.x, RIM_LIGHT_POS.y, RIM_LIGHT_POS.z);
     this.scene.add(rim);
 
+    this.initBloom();
     this.resize();
     window.addEventListener('resize', this.resize);
+  }
+
+  /** Build the post chain: RenderPass (scene → linear RT) → UnrealBloom (threshold
+   *  + blur) → OutputPass (tone map + sRGB). The composer is sized in resize().
+   *  Bloom only runs when quality !== 'off' (see render). */
+  private initBloom(): void {
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // resolution is set properly in resize(); a placeholder here.
+    this.bloomPass = new UnrealBloomPass(
+      new Vector2(1, 1),
+      BLOOM.strength,
+      BLOOM.radius,
+      BLOOM.threshold,
+    );
+    this.composer.addPass(this.bloomPass);
+    // OutputPass applies renderer.toneMapping (LinearToneMapping + exposure) and
+    // the sRGB encode at the end of the chain — so the scene RT stays linear for
+    // a correct bloom, and the composite is tone-mapped exactly like direct render.
+    this.composer.addPass(new OutputPass());
   }
 
   /** Jump the focus to a world position with no easing (use at init so the
@@ -118,7 +156,53 @@ export class SceneManager {
   }
 
   render(): void {
-    this.renderer.render(this.scene, this.camera);
+    // 'off' bypasses the composer entirely → the exact PR-A/B direct-render path
+    // (zero bloom cost). Otherwise the post chain composites the glow.
+    if (this.bloomQuality === 'off') {
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      this.composer.render();
+    }
+  }
+
+  /**
+   * Auto-downgrade watchdog (the perf safety net). Keys off the ALWAYS-ON smoothed
+   * FPS EMA (not the debug-only 1%-low): if it sustains below BLOOM.downgradeFps
+   * for BLOOM.downgradeSustainSec, step quality full → half → off so a weak device
+   * degrades gracefully instead of stuttering. Downgrade-only (sticky) within a
+   * session — anti-flap. Called once per frame from the loop with the real dt.
+   */
+  tickBloom(fps: number, dtSec: number): void {
+    if (this.bloomQuality === 'off') return; // nothing lower to drop to
+    if (fps > 0 && fps < BLOOM.downgradeFps) {
+      this.bloomBelowSec += dtSec;
+      if (this.bloomBelowSec >= BLOOM.downgradeSustainSec) {
+        this.setBloomQuality(this.bloomQuality === 'full' ? 'half' : 'off');
+        this.bloomBelowSec = 0;
+        console.info(`[bloom] auto-downgraded → ${this.bloomQuality} (fps ${fps.toFixed(0)})`);
+      }
+    } else {
+      // Recover the budget slowly so a single dip doesn't trip the step.
+      this.bloomBelowSec = Math.max(0, this.bloomBelowSec - dtSec);
+    }
+  }
+
+  /** Set the bloom tier and re-apply the matching composite pixel-ratio cap (the
+   *  resolution control). 'off' needs no composer sizing. */
+  setBloomQuality(q: BloomQuality): void {
+    this.bloomQuality = q;
+    if (q !== 'off') this.sizeComposer();
+  }
+
+  /** Size the composer + bloom pass to the viewport at the current tier's capped
+   *  pixel ratio (below the renderer's DPR-2 — the #1 mobile cost control). */
+  private sizeComposer(): void {
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    const cap = this.bloomQuality === 'half' ? BLOOM.halfPixelRatio : BLOOM.fullPixelRatio;
+    this.composer.setPixelRatio(Math.min(window.devicePixelRatio, cap));
+    this.composer.setSize(w, h);
+    this.bloomPass.setSize(w, h);
   }
 
   // --- Diagnostics ----------------------------------------------------------
@@ -176,5 +260,8 @@ export class SceneManager {
     this.camera.bottom = -v + bias;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    // Keep the post chain in sync (no-op cost when bloom is 'off' — it just resizes
+    // the RTs; they aren't rendered until quality leaves 'off').
+    this.sizeComposer();
   };
 }

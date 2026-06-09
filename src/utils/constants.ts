@@ -404,6 +404,52 @@ export const LIGHTING = {
   exposure: 1.06,
 } as const;
 
+/**
+ * Bloom (lighting PR-C, the marquee) — an EffectComposer pass so the authored
+ * emissive (player dash glow, burn/chain/crit effects, chest, the bright tells)
+ * actually GLOWS/bleeds, leaning into the neon-on-dark identity. The first new
+ * render pass, so it ships WITH its full mobile safety apparatus:
+ *
+ *  - RESOLUTION-CAP: the composite runs at a capped pixel-ratio per quality tier
+ *    (below the renderer's DPR-2), and UnrealBloom's blur is inherently a halved
+ *    mip pyramid — fullscreen bloom at DPR 2 on iPhone is the danger zone, so we
+ *    never pay it.
+ *  - THRESHOLD-GATE (clarity): a HIGH luminance threshold so only the BRIGHTEST
+ *    emissive blooms. The amber telegraph (#ffcc33, luma ~0.8) and white hit-flash
+ *    must stay CRISP — the threshold sits above the telegraph so gameplay-critical
+ *    tells don't smear. Clarity wins the tension: keep this high, glow is modest.
+ *  - AUTO-DOWNGRADE (perf net): if the smoothed FPS (always-on, not the debug-only
+ *    1%-low) sustains below `downgradeFps` for `downgradeSustainSec`, step quality
+ *    full → half → off. A weak device degrades gracefully instead of stuttering;
+ *    'off' bypasses the composer entirely (the exact PR-A/B direct-render path).
+ *
+ * Tone mapping stays LinearToneMapping + LIGHTING.exposure (applied by OutputPass)
+ * — NOT ACES, which desaturates the neon. All by-feel; tune on the phone.
+ */
+export const BLOOM = {
+  /** Starting quality + the MANUAL override: 'full' | 'half' | 'off'. */
+  defaultQuality: 'full',
+  /** Glow strength. Modest — a glow, not a wash (clarity). */
+  strength: 0.62,
+  /** Blur spread (0..1). Small-ish so the glow hugs its source, not a fog. */
+  radius: 0.34,
+  /** Luminance threshold — only pixels brighter than this bloom. HIGH so the
+   *  telegraph/hit-flash stay crisp while the brightest neon (emissive > 1, the
+   *  effects/dash glow) blooms. Lower for more glow, raise for more clarity. */
+  threshold: 0.9,
+  /** Composite pixel-ratio cap at FULL quality — below the renderer's DPR-2 so the
+   *  fullscreen post chain isn't paid at 2× on a high-DPI phone. */
+  fullPixelRatio: 1.5,
+  /** Composite pixel-ratio cap at HALF quality — CSS-resolution composite (cheap),
+   *  the first auto-downgrade step before turning bloom off entirely. */
+  halfPixelRatio: 1.0,
+  /** Auto-downgrade trigger: sustained smoothed-FPS below this steps quality down. */
+  downgradeFps: 50,
+  /** How long (seconds) FPS must stay below the trigger before stepping down
+   *  (anti-flap — a momentary dip won't drop quality). */
+  downgradeSustainSec: 2,
+} as const;
+
 /** Touch virtual-stick tuning. */
 export const TOUCH = {
   /** Drag distance (px) from the stick origin that maps to full deflection. */
