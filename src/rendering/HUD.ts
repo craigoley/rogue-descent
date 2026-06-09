@@ -661,6 +661,7 @@ export class HUD {
     this.readoutEl.textContent =
       `fps ${fps.toFixed(0)}` +
       (perf ? `  ·  1%low ${perf.p1LowFps.toFixed(0)}  worst ${perf.worstMs.toFixed(0)}ms` : '') +
+      `  ·  bloom ${scene.bloomQuality}` +
       `   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
       `DESCENT  depth ${state.run.depth}  floorsCleared ${state.run.floorsCleared}  ` +
       `kills ${state.run.kills}\n` +

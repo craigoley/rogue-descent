@@ -399,6 +399,9 @@ function frame(nowMs: number): void {
   entities.sync(game, alpha, controls.intent);
   audioMgr.sync(game); // diff state -> play combat SFX (side-effect only)
   scene.updateFollow(game, alpha, dt);
+  // Bloom auto-downgrade watchdog (keys off the always-on smoothed fps EMA) — runs
+  // before render so a quality drop applies this frame.
+  scene.tickBloom(fps, dt);
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene, controls, perfStats);
   summary.update(game);
