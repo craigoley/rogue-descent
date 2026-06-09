@@ -52,6 +52,7 @@ import {
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
+  KILL,
   MELEE,
   PALETTE,
   PICKUP,
@@ -89,6 +90,16 @@ const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
 /** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled);
  *  the boss-add (gimmick #2) IS pooled like the base enemies. */
 const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bossadd'];
+
+/** Death-POP scale from the remaining pop timer (juice PR-1). A fast UP-phase to
+ *  1+overshoot, then an eased (accelerating) collapse to 0 — the enemy "pops" out
+ *  of existence. Pure: timer in [0, KILL.popDuration] → scale, no state. */
+function killPopScale(timerRemaining: number): number {
+  const t = 1 - timerRemaining / KILL.popDuration; // 0 at death → 1 at end
+  if (t < KILL.popUpFrac) return 1 + KILL.popOvershoot * (t / KILL.popUpFrac);
+  const u = (t - KILL.popUpFrac) / (1 - KILL.popUpFrac);
+  return (1 + KILL.popOvershoot) * (1 - u * u); // → 0
+}
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
 const cssHex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -534,8 +545,17 @@ export class EntityRenderer {
   private readonly chestPrevOpened: boolean[] = [];
   private readonly chestOpenStart: number[] = [];
   /** Accessibility reduce-motion (set by main.ts from Settings, like HUD): stills the
-   *  idle bob/sway/glow-pulse. The brief open-reveal stays (discrete feedback). */
-  private chestReduceMotion = false;
+   *  chest idle bob/sway/glow-pulse AND the death POP (the pop is motion; the colored
+   *  death burst, being information, is kept). Discrete reveals stay. */
+  private reduceMotion = false;
+  /** Death POP (juice PR-1): per enemy-slot render state. `enemyPrevActive` frame-
+   *  diffs active→false to start a pop; `enemyDyingTimer` counts the pop down so the
+   *  dead figure scale-overshoots-then-vanishes before it's hidden. Render-only. */
+  private readonly enemyPrevActive: boolean[] = [];
+  private readonly enemyDyingTimer: number[] = [];
+  /** Death-burst tint → shared material cache (built lazily, ≤ a handful of colors,
+   *  one-time each — NO per-particle/per-frame allocation). Key 0 = the white spark. */
+  private readonly particleMats = new Map<number, MeshBasicMaterial>();
   private readonly trail: Mesh[] = [];
   private readonly trailX: number[] = [];
   private readonly trailY: number[] = [];
@@ -604,6 +624,11 @@ export class EntityRenderer {
         scene.add(fig.group);
       }
     }
+    // Seed per-slot death-pop state (one entry per enemy pool slot).
+    for (let i = 0; i < POOL.enemies; i++) {
+      this.enemyPrevActive.push(false);
+      this.enemyDyingTimer.push(0);
+    }
 
     // --- Projectiles (pooled, shared material) ---
     const projGeo = new BoxGeometry(RANGED.radius * 2, RANGED.radius * 2, RANGED.radius * 2);
@@ -627,9 +652,11 @@ export class EntityRenderer {
       scene.add(m);
     }
 
-    // --- Hit-spark particles (pooled, shared material) ---
+    // --- Hit-spark particles (pooled). The default WHITE spark is the tint-0
+    // material; death bursts swap to a per-hue material from the lazy cache. ---
     const partGeo = new BoxGeometry(VFX.particleSize, VFX.particleSize, VFX.particleSize);
     const partMat = new MeshBasicMaterial({ color: PALETTE.spark });
+    this.particleMats.set(0, partMat); // tint 0 = white spark (hits / dodge / player death)
     for (let i = 0; i < POOL.particles; i++) {
       const m = new Mesh(partGeo, partMat);
       m.visible = false;
@@ -1031,7 +1058,7 @@ export class EntityRenderer {
     this.player.inner.rotation.z = -this.playerLean;
 
     this.syncTrail(p, px, py);
-    this.syncEnemies(state, alpha, px, py, now);
+    this.syncEnemies(state, alpha, px, py, now, frameDt);
     this.syncBoss(state, alpha, px, py, now);
     this.syncProjectiles(state, alpha);
     this.syncEnemyProjectiles(state, alpha);
@@ -1174,10 +1201,25 @@ export class EntityRenderer {
     }
   }
 
-  private syncEnemies(state: GameState, alpha: number, px: number, py: number, now: number): void {
+  private syncEnemies(
+    state: GameState,
+    alpha: number,
+    px: number,
+    py: number,
+    now: number,
+    frameDt: number,
+  ): void {
     const list = state.enemies;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
+      // Death-POP trigger (frame-diff active→false). The boss is excluded (its
+      // death is juiced separately); reduce-motion skips the pop (motion) — the
+      // colored burst (information) still fires from the sim regardless.
+      if (this.enemyPrevActive[i] && !e.active && e.type !== 'boss' && !this.reduceMotion) {
+        this.enemyDyingTimer[i] = KILL.popDuration;
+      }
+      this.enemyPrevActive[i] = e.active;
+
       // The boss is a bespoke mesh (syncBoss), not a pooled figure — hide every
       // pooled-kind figure at this slot and skip (no enemyFigs.boss pool exists).
       if (e.type === 'boss') {
@@ -1192,10 +1234,22 @@ export class EntityRenderer {
         if (kind !== e.type) this.enemyFigs[kind][i].group.visible = false;
       }
       if (!e.active) {
-        fig.group.visible = false;
         this.enemyBlobs[i].visible = false;
+        // Play the death pop on the dead figure until it elapses, then hide. The
+        // dead enemy isn't moving, so (e.x, e.y) is its final position. If the slot
+        // recycles (active→true) the normal branch below takes over → pop aborts.
+        if (this.enemyDyingTimer[i] > 0) {
+          this.enemyDyingTimer[i] = Math.max(0, this.enemyDyingTimer[i] - frameDt);
+          fig.group.visible = true;
+          fig.group.position.set(e.x, 0, e.y);
+          fig.group.scale.setScalar(killPopScale(this.enemyDyingTimer[i]));
+        } else {
+          fig.group.visible = false;
+        }
         continue;
       }
+      // Active → cancel any lingering pop on this slot (it's a live enemy now).
+      this.enemyDyingTimer[i] = 0;
       fig.group.visible = true;
       const ex = lerp(e.prevX, e.x, alpha);
       const ey = lerp(e.prevY, e.y, alpha);
@@ -1366,9 +1420,21 @@ export class EntityRenderer {
         continue;
       }
       m.visible = true;
+      m.material = this.particleMaterial(pa.tint); // white spark, or a death-burst hue
       m.position.set(pa.x, VFX.particleHeight, pa.y);
       m.scale.setScalar(Math.max(0.001, pa.life / pa.maxLife));
     }
+  }
+
+  /** Shared material for a particle tint (0 = white spark). Lazily created + cached
+   *  the first time a hue appears (≤ a handful ever) — no per-particle allocation. */
+  private particleMaterial(tint: number): MeshBasicMaterial {
+    let mat = this.particleMats.get(tint);
+    if (!mat) {
+      mat = new MeshBasicMaterial({ color: tint });
+      this.particleMats.set(tint, mat);
+    }
+    return mat;
   }
 
   /** Draw the pooled chain-arc bolts (synergy arc PR3): a line between each chained
@@ -1434,7 +1500,7 @@ export class EntityRenderer {
     }
     // "CHOOSE ONE" breathes (shared material → all labels together); stilled flat under
     // reduce-motion (held at full opacity, no pulse).
-    this.pairLabelMat.opacity = this.chestReduceMotion
+    this.pairLabelMat.opacity = this.reduceMotion
       ? 1
       : CHEST_CHOICE.labelPulseMin + (1 - CHEST_CHOICE.labelPulseMin) * (0.5 + 0.5 * Math.sin(now * CHEST_CHOICE.labelPulseRate));
   }
@@ -1442,7 +1508,7 @@ export class EntityRenderer {
   /** Accessibility reduce-motion (set by main.ts from Settings, mirroring HUD). Stills
    *  the chest idle bob/sway/glow-pulse; the brief open-reveal stays (discrete feedback). */
   setReduceMotion(on: boolean): void {
-    this.chestReduceMotion = on;
+    this.reduceMotion = on;
   }
 
   /** Draw the golden chests (PR-B): a glowing 3D chest while closed (bob + sway +
@@ -1451,7 +1517,7 @@ export class EntityRenderer {
    *  timer), so src/game stays untouched. Reduce-motion stills the idle motion. */
   private syncChests(state: GameState, now: number): void {
     const list = state.chests;
-    const rm = this.chestReduceMotion;
+    const rm = this.reduceMotion;
     // Idle emissive PULSE (shared material → all chests glow together). Base glow
     // stays under reduce-motion (it's light, not motion); only the pulse is stilled.
     this.chestGoldMat.emissiveIntensity = rm

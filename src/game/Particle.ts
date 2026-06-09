@@ -20,6 +20,10 @@ export interface Particle {
   life: number;
   /** Life at spawn, seconds (renderer fades by life / maxLife). */
   maxLife: number;
+  /** Burst colour tag (0xRRGGBB) — 0 = the default white spark; a death burst
+   *  carries the dead enemy's bright body hue (see ENEMY_DEATH_TINT). Pure data
+   *  (a plain number); the RENDERER maps it to a material. Never affects the sim. */
+  tint: number;
 }
 
 export function createParticlePool(): Particle[] {
@@ -31,6 +35,7 @@ export function createParticlePool(): Particle[] {
     vy: 0,
     life: 0,
     maxLife: 0,
+    tint: 0,
   }));
 }
 
@@ -38,8 +43,17 @@ export function createParticlePool(): Particle[] {
 let burstSeed = 0;
 
 /** Emit up to `count` particles in a radial fan from (x, y). Reuses inactive
- *  slots; never grows the pool. */
-export function spawnParticles(pool: Particle[], x: number, y: number, count: number): void {
+ *  slots; never grows the pool. `tint` (default 0 = white spark) is a pure colour
+ *  tag the renderer maps to a material — it does NOT affect the deterministic
+ *  spread/speed/life, so a tinted burst is byte-identical to an untinted one in
+ *  every sim quantity. */
+export function spawnParticles(
+  pool: Particle[],
+  x: number,
+  y: number,
+  count: number,
+  tint = 0,
+): void {
   const base = burstSeed * 0.61803; // golden-ish offset, deterministic
   burstSeed++;
   let spawned = 0;
@@ -56,6 +70,7 @@ export function spawnParticles(pool: Particle[], x: number, y: number, count: nu
     p.vy = Math.sin(ang) * spd;
     p.life = PARTICLE.lifetime;
     p.maxLife = PARTICLE.lifetime;
+    p.tint = tint;
     spawned++;
   }
 }

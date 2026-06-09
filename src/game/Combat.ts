@@ -8,7 +8,7 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_TYPES, FREEZE_LEVELS, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_DEATH_TINT, ENEMY_TYPES, FREEZE_LEVELS, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { spawnChainArc } from './ChainArc';
 import { isoRotate, type InputIntent } from './Input';
@@ -94,7 +94,7 @@ export function damageEnemy(
       enemy.health -= amount * BOSS.blockedDamageMult; // 0 => fully negated
       if (enemy.health <= 0) {
         enemy.active = false;
-        spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
+        spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount, ENEMY_DEATH_TINT[enemy.type]);
       }
       return false; // BLOCKED — armored side (not a weak-side hit)
     }
@@ -171,7 +171,7 @@ export function damageEnemy(
   }
   if (enemy.health <= 0) {
     enemy.active = false;
-    spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount);
+    spawnParticles(state.particles, enemy.x, enemy.y, PARTICLE.deathCount, ENEMY_DEATH_TINT[enemy.type]);
     // META PR2 — WILDFIRE counter (Def C): a burn-TICK kill on a CHAIN-spread enemy =
     // the fire the chain carried finished it. The single, exhaustive death choke (direct/
     // chain/tick all reach here), so this counts every wildfire kill exactly once. A

@@ -1279,6 +1279,45 @@ export const PARTICLE = {
   dodgeCount: 12,
 } as const;
 
+/**
+ * KILL feel (juice PR-1) — a kill should read as "enemy DIES", not "enemy
+ * vanishes". Two parts:
+ *  - the DEATH POP (render-only): on the active→false frame-diff the figure plays
+ *    a fast scale-overshoot-then-collapse-to-0 instead of an instant hide. FAST +
+ *    small so a dead enemy's pop never occludes a live threat behind it. Gated by
+ *    reduce-motion (the pop is motion — stilled to an instant hide; the colored
+ *    burst, which is INFORMATION, stays).
+ *  - the death BURST tint (sim-side, deterministic): the burst is coloured to the
+ *    dead enemy's body hue (see ENEMY_DEATH_TINT) so a kill reads "THAT enemy
+ *    died" instead of the uniform white hit-spark, and the bright hue flares
+ *    through the bloom (PR-C). NO per-kill screen shake (a swarm would rattle into
+ *    nausea + lose telegraphs — shake stays for player-hit / boss-death).
+ */
+export const KILL = {
+  /** Death-pop duration, seconds. SHORT so it never lingers/occludes (<150ms). */
+  popDuration: 0.13,
+  /** Peak overshoot above full size during the up-phase (0.35 = +35%). */
+  popOvershoot: 0.35,
+  /** Fraction of the duration spent popping UP before the collapse to 0. */
+  popUpFrac: 0.32,
+} as const;
+
+/**
+ * Per-enemy-type DEATH-BURST tint (sim tags each death particle; the renderer maps
+ * it to a shared material). Each is the type's BODY hue LIFTED toward white — so it
+ * reads as that enemy's colour (identity/clarity) while being bright enough to
+ * FLARE through the bloom. Plain hex numbers (no three/DOM) → the pure sim can read
+ * them deterministically. Tint 0 elsewhere = the default white spark (hits/dodge).
+ */
+export const ENEMY_DEATH_TINT: Record<EnemyType, number> = {
+  chaser: 0xff8095, // bright pink-red (body 0xff4466)
+  armored: 0xc8d4e6, // bright steel (body 0x9aa6b8)
+  ranged: 0xff5570, // bright crimson (body 0xcc1133)
+  swarmer: 0xff8a55, // bright vermilion (body 0xff4422)
+  boss: 0xff5a72, // bright maroon-red (body 0x7a1020) — boss death juiced later
+  bossadd: 0xffb066, // bright ember (body 0xff8a3c)
+};
+
 /** CHAIN-arc bolt render (synergy arc PR3). Cosmetic-in-sim like particles: the sim
  *  spawns an arc segment (endpoints + a timer), the renderer draws + fades a line. */
 export const CHAIN_ARC = {
