@@ -1270,6 +1270,11 @@ export const PARTICLE = {
   drag: 0.9,
   /** Particles emitted per enemy hit. */
   hitCount: 7,
+  /** Directional HIT spray cone (juice PR-2), radians (~120°). The hit burst fans
+   *  AWAY along the knockback vector (sparks fly off the impact side) instead of a
+   *  uniform ring, so a hit reads "struck FROM the player". Wide enough not to look
+   *  sparse, narrow enough to read directional. By-feel. */
+  hitSpread: 2.1,
   /** Particles emitted on a CRIT hit (synergy arc PR4) — a bigger burst (≈2× the
    *  normal hit) so a crit READS as a crit, not just more damage. */
   critCount: 16,
@@ -1418,6 +1423,11 @@ export const VFX = {
   meleeArcOpacity: 0.5,
   /** Resting emissive intensity of an enemy figure. */
   enemyEmissive: 0.25,
+  /** CRISP hit-flash PEAK emissive (juice PR-2): the enemy flashes brightest at the
+   *  impact instant then decays fast (quadratic) toward enemyEmissive over the flash
+   *  window — a sharp, bloom-flaring punch instead of a flat white hold. Brief by
+   *  design (clarity): it's the impact frame, not a wash. */
+  hitFlashPeak: 2.2,
   /** Emissive intensity of pickup meshes. */
   pickupEmissive: 0.8,
   /** Emissive intensity of the front visor "eye" (the facing indicator) so it

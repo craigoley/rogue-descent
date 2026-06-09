@@ -49,6 +49,7 @@ import {
   CHAIN_ARC,
   CHEST,
   CHEST_CHOICE,
+  ENEMY_COMMON,
   ENEMY_PROJ,
   ENEMY_TYPES,
   FIGURE,
@@ -1268,8 +1269,12 @@ export class EntityRenderer {
       // is reset here and only re-applied by the stun branch (so a recovered enemy stops).
       fig.inner.rotation.z = 0;
       if (e.flashTimer > 0) {
+        // Crisp PEAK (juice PR-2): brightest at the impact instant, decaying fast
+        // (quadratic) toward the resting emissive over the flash window — a sharp
+        // bloom-flaring punch, not a flat white hold. Brief = clarity-safe.
+        const fr = e.flashTimer / ENEMY_COMMON.flash; // 1 at impact → 0 at end
         mat.color.setHex(PALETTE.hitFlash);
-        mat.emissiveIntensity = VFX.invulnEmissive;
+        mat.emissiveIntensity = VFX.enemyEmissive + (VFX.hitFlashPeak - VFX.enemyEmissive) * fr * fr;
         fig.group.scale.setScalar(1);
       } else if (e.stunTimer > 0) {
         // STUNNED (Phase 9 PR2): cold disabled tint + a dazed sway, so the CC
