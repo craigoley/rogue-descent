@@ -28,6 +28,7 @@ import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
 import { nearestLiveEnemyInRoom } from './softlock';
+import type { FrameStats } from '../utils/perfMeter';
 import {
   CSS_PALETTE,
   DASH,
@@ -526,6 +527,7 @@ export class HUD {
     intent: InputIntent,
     scene: SceneManager,
     controls: Controls,
+    perf: FrameStats | null = null,
   ): void {
     const p = state.player;
 
@@ -657,7 +659,9 @@ export class HUD {
     for (const b of state.enemyProjectiles) if (b.active) bolts++;
 
     this.readoutEl.textContent =
-      `fps ${fps.toFixed(0)}   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
+      `fps ${fps.toFixed(0)}` +
+      (perf ? `  ·  1%low ${perf.p1LowFps.toFixed(0)}  worst ${perf.worstMs.toFixed(0)}ms` : '') +
+      `   steps ${steps}/f   alpha ${alpha.toFixed(2)}\n` +
       `DESCENT  depth ${state.run.depth}  floorsCleared ${state.run.floorsCleared}  ` +
       `kills ${state.run.kills}\n` +
       `  all-cleared ${cleared === state.rooms.length}  stairs-active ${state.stairs.active}  ` +

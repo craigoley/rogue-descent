@@ -425,6 +425,20 @@ export const VIGNETTE = {
   reducedOpacity: 0.15,
 } as const;
 
+/** Debug-only frame-time meter (?debug=1 readout). Surfaces min/avg/1%-low so the
+ *  lighting arc can PROVE it didn't tank mobile FPS — a smoothed average hides the
+ *  hitches bloom introduces. The meter must not itself cost FPS: a bounded ring
+ *  buffer (push is O(1), no per-frame alloc) whose percentile is recomputed only
+ *  every `recalcMs`, never per frame. */
+export const PERF_METER = {
+  /** Rolling window of recent frames. 240 ≈ 4s at 60fps — wide enough that the
+   *  worst-1% slice is a meaningful 3 frames (ceil(240/100)), not a single spike. */
+  window: 240,
+  /** Recompute the avg/worst/1%-low at most this often, ms (twice/sec). Between
+   *  recomputes the readout shows the cached stats — the per-frame path is push-only. */
+  recalcMs: 500,
+} as const;
+
 /** Dash shape. Distance + i-frames + cooldown are in TUNING (tunable). */
 export const DASH = {
   /** Burst duration, seconds. dash speed = TUNING.dashDist / duration. */
