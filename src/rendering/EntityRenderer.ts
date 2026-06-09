@@ -44,6 +44,7 @@ import type { InputIntent } from '../game/Input';
 import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
+  BLOB,
   BOSS_VFX,
   CHAIN_ARC,
   CHEST,
@@ -487,6 +488,16 @@ export class EntityRenderer {
   private playerLean = 0;
   private lastNow = 0;
 
+  /** Fake blob shadows (lighting PR-B) — flat soft discs under floating entities
+   *  for grounding. Pooled in parallel with each entity pool; share ONE radial-
+   *  alpha texture + ONE CircleGeometry (built in initBlobShadows). Cosmetic:
+   *  positioned from the rendered location each frame, never read by the sim. */
+  private blobGeo!: CircleGeometry;
+  private playerBlob!: Mesh;
+  private readonly enemyBlobs: Mesh[] = [];
+  private bossBlob!: Mesh;
+  private readonly pickupBlobs: Mesh[] = [];
+
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
   private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], boss: [], bossadd: [] };
@@ -868,6 +879,56 @@ export class EntityRenderer {
     this.stairsLabel.visible = false;
     this.stairsLabel.renderOrder = 10;
     scene.add(this.stairsLabel);
+
+    this.initBlobShadows(scene);
+  }
+
+  /** Build the shared blob-shadow texture + geometry once, then the per-entity
+   *  blob pools (parallel to the figure/pickup pools). One texture + one geometry
+   *  are shared across every blob; only the per-type material (opacity) and the
+   *  per-mesh scale (radius) + position differ. */
+  private initBlobShadows(scene: Scene): void {
+    // Shared radial-alpha texture: opaque black core fading to transparent edge —
+    // the soft shadow falloff. Generated once on a small canvas.
+    const px = 64;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = px;
+    const ctx = cv.getContext('2d')!;
+    const g = ctx.createRadialGradient(px / 2, px / 2, 0, px / 2, px / 2, px / 2);
+    g.addColorStop(0, `rgba(0,0,0,${BLOB.coreAlpha})`);
+    g.addColorStop(BLOB.coreStop, `rgba(0,0,0,${BLOB.coreAlpha})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, px, px);
+    const tex = new CanvasTexture(cv);
+
+    // Unit disc (radius 1), laid flat per-mesh via rotation.x; radius set by scale.
+    this.blobGeo = new CircleGeometry(1, BLOB.segments);
+
+    // One material per entity type (shared across that type's pool). Unlit,
+    // transparent, depthWrite off so blobs never occlude each other or z-fight.
+    const makeMat = (opacity: number): MeshBasicMaterial =>
+      new MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity, depthWrite: false });
+    const playerMat = makeMat(BLOB.player.opacity);
+    const enemyMat = makeMat(BLOB.enemy.opacity);
+    const bossMat = makeMat(BLOB.boss.opacity);
+    const pickupMat = makeMat(BLOB.pickup.opacity);
+
+    const makeBlob = (mat: MeshBasicMaterial, radius: number): Mesh => {
+      const m = new Mesh(this.blobGeo, mat);
+      m.rotation.x = -Math.PI / 2; // lay the disc flat on the floor (XZ plane)
+      m.scale.setScalar(radius);
+      m.position.y = BLOB.y;
+      m.visible = false;
+      m.renderOrder = -1; // draw under the entities (after the opaque floor)
+      scene.add(m);
+      return m;
+    };
+
+    this.playerBlob = makeBlob(playerMat, BLOB.player.radius);
+    this.bossBlob = makeBlob(bossMat, BLOB.boss.radius);
+    for (let i = 0; i < POOL.enemies; i++) this.enemyBlobs.push(makeBlob(enemyMat, BLOB.enemy.radius));
+    for (let i = 0; i < POOL.pickups; i++) this.pickupBlobs.push(makeBlob(pickupMat, BLOB.pickup.radius));
   }
 
   /** Build the shared geometry + child offsets for a figure type. Called twice
@@ -928,6 +989,9 @@ export class EntityRenderer {
     // --- Player figure ---
     this.player.group.position.set(px, 0, py);
     this.player.group.visible = p.alive;
+    // Blob shadow on the floor under the player (grounds the figure).
+    this.playerBlob.position.set(px, BLOB.y, py);
+    this.playerBlob.visible = p.alive;
 
     // Face the AIM vector (resolved exactly as the sim does; pure, no state add).
     const aim = aimDirection(p, intent, this.aim);
@@ -1013,11 +1077,15 @@ export class EntityRenderer {
       if (!pk.active) {
         m.visible = false;
         icon.visible = false;
+        this.pickupBlobs[i].visible = false;
         continue;
       }
       const color = DROP_COLOR[pk.kind];
       m.visible = true;
       m.position.set(pk.x, PICKUP.height + bob, pk.y);
+      // Blob stays on the FLOOR (not at the bob height) — grounds the float.
+      this.pickupBlobs[i].position.set(pk.x, BLOB.y, pk.y);
+      this.pickupBlobs[i].visible = true;
       m.rotation.y = now * PICKUP.spinRate;
       // PRESENTATION beckon: while a pick is in its spawn grace (chest 1-of-2 choice,
       // not yet collectable) it swells + pulses so the "choose one" reads clearly.
@@ -1114,6 +1182,7 @@ export class EntityRenderer {
       // pooled-kind figure at this slot and skip (no enemyFigs.boss pool exists).
       if (e.type === 'boss') {
         for (const kind of ENEMY_KINDS) this.enemyFigs[kind][i].group.visible = false;
+        this.enemyBlobs[i].visible = false; // the boss uses its own (larger) blob
         continue;
       }
       // Show the figure matching this slot's enemy type; hide every other kind's
@@ -1124,12 +1193,15 @@ export class EntityRenderer {
       }
       if (!e.active) {
         fig.group.visible = false;
+        this.enemyBlobs[i].visible = false;
         continue;
       }
       fig.group.visible = true;
       const ex = lerp(e.prevX, e.x, alpha);
       const ey = lerp(e.prevY, e.y, alpha);
       fig.group.position.set(ex, 0, ey);
+      this.enemyBlobs[i].position.set(ex, BLOB.y, ey);
+      this.enemyBlobs[i].visible = true;
 
       // Face the player (chase/telegraph/strike target). Keep prior facing if
       // exactly coincident (degenerate).
@@ -1188,12 +1260,15 @@ export class EntityRenderer {
     const e = boss ? state.enemies[boss.slot] : null;
     if (!boss || !e || !e.active) {
       this.bossGroup.visible = false;
+      this.bossBlob.visible = false;
       return;
     }
     this.bossGroup.visible = true;
     const ex = lerp(e.prevX, e.x, alpha);
     const ey = lerp(e.prevY, e.y, alpha);
     this.bossGroup.position.set(ex, 0, ey);
+    this.bossBlob.position.set(ex, BLOB.y, ey);
+    this.bossBlob.visible = true;
     // Face the player (whole group), so the body/head orient toward the fight.
     const dx = px - ex;
     const dy = py - ey;
