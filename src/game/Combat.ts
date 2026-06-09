@@ -133,8 +133,9 @@ export function damageEnemy(
     // DIRECTIONAL spray (juice PR-2): fan the sparks AWAY along the knockback
     // vector (the impact side) so the hit reads "struck from the player". White
     // (tint 0) — distinct from the enemy-COLOURED kill burst. Deterministic (dir
-    // is the already-computed kbDir; no new RNG). Chain hits pass kbDir 0 → the
-    // function falls back to the uniform ring (no clear impact direction for an arc).
+    // is the already-computed kbDir; no new RNG). Chain arcs also spray along
+    // their arc direction (source → target); only calls with zero dir fall back
+    // to the uniform ring.
     spawnParticles(
       state.particles,
       enemy.x,
