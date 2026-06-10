@@ -21,7 +21,8 @@ import {
   damageMultForDepth,
   healthMultForDepth,
 } from '../Difficulty';
-import { BOSS, DUNGEON, ENEMY_TYPES, SIM_DT } from '../../utils/constants';
+import { activeParticleCount } from '../Particle';
+import { BOSS, BOSS_DEATH, DUNGEON, ENEMY_TYPES, SHAKE, SIM_DT } from '../../utils/constants';
 
 const DT = SIM_DT;
 const idle = createIntent;
@@ -182,11 +183,42 @@ describe('Boss — room spawn + descent gating', () => {
     expect(s.stairs.active).toBe(true); // all rooms cleared -> descent open
     expect(s.stairs.roomIndex).toBe(bossRoom); // stairs pinned to the boss room
 
+    // Drain the brief boss-death celebration hit-stop (the slow-mo beat freezes the
+    // sim) before stepping onto the stairs — mirrors real play (celebrate, then walk).
+    while (s.hitstopTimer > 0) update(s, idle(), DT);
     // Stepping on the stairs descends.
     s.player.x = s.stairs.x;
     s.player.y = s.stairs.y;
     update(s, idle(), DT);
     expect(s.run.depth).toBe(2);
+  });
+
+  it('boss death fires the ONE-SHOT celebration (big shake + slow-mo + burst), boss-exclusive', () => {
+    const s = createGameState();
+    const bossRoom = s.bossRoom;
+    for (let i = 1; i < s.rooms.length; i++) {
+      if (i !== bossRoom) s.rooms[i].phase = 'cleared';
+    }
+    placeInRoom(s, bossRoom);
+    update(s, idle(), DT); // activate the boss room
+    const bossSlot = s.boss!.slot;
+
+    // A normal hit on the boss does NOT trigger the celebration (boss still alive).
+    for (const pk of s.pickups) pk.active = false;
+    s.shakeTimer = 0;
+    s.player.x = s.spawn.x; // park away from the stairs
+    s.player.y = s.spawn.y;
+    s.enemies[bossSlot].active = false; // boss dies THIS frame
+    update(s, idle(), DT);
+
+    // Big shake (bigger + longer than a player hit) + slow-mo hit-stop (longer than
+    // crit) + a big multi-wave burst — all one-shot on the boss-death frame.
+    expect(s.shakeTimer).toBeGreaterThan(SHAKE.duration); // bigger than a player-hit shake
+    expect(s.hitstopTimer).toBe(BOSS_DEATH.hitstop); // the slow-mo beat is armed
+    expect(activeParticleCount(s.particles)).toBeGreaterThanOrEqual(BOSS_DEATH.burstCount);
+    // The mechanical outcome is unchanged: descent is unlocked.
+    expect(s.bossDefeated).toBe(true);
+    expect(s.stairs.active).toBe(true);
   });
 });
 

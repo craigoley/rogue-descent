@@ -646,6 +646,34 @@ export const CRIT = {
   flashDuration: 0.06,
 } as const;
 
+/**
+ * BOSS-DEATH celebration (juice PR-5) — the floor CLIMAX. A boss death was the same
+ * pop as a trash mob; now it's a one-shot climactic beat (big shake + slow-mo +
+ * big bloom-flaring burst + a boss-sized pop), then it resolves into the descent
+ * unlock that already follows. This is the ONE place a big SHAKE is tasteful: it's
+ * RARE + EARNED (unlike per-kill shake, banned for swarm-nausea). All deterministic
+ * (timers + seeded burst); boss-EXCLUSIVE (fires only on the boss-death frame).
+ */
+export const BOSS_DEATH = {
+  /** One-shot camera shake on boss death. The magnitude is
+   *  (shakeTimer / SHAKE.duration) × TUNING.shake, so a value ABOVE SHAKE.duration
+   *  (0.25) starts bigger than a player-hit shake and tapers to 0 — a satisfying
+   *  THUMP, not an earthquake. Reuses the existing deterministic shake decay; zeroes
+   *  under reduce-motion (main.ts), like every shake. */
+  shakeDuration: 0.55,
+  /** Slow-mo hit-stop on the killing blow, seconds — longer than crit's (0.09) so
+   *  the "you DID it" beat lands with weight. Brief, not a long freeze. */
+  hitstop: 0.18,
+  /** Particles per WAVE in the big multi-burst (two waves: a hot-white bloom flare +
+   *  a boss-coloured burst). Bounded by POOL.particles (96). */
+  burstCount: 30,
+  /** Boss death-POP (render): slower + grander than a trash kill (KILL.popDuration
+   *  0.13), scaling the bespoke boss mesh up then collapsing it. */
+  popDuration: 0.34,
+  popOvershoot: 0.45,
+  popUpFrac: 0.3,
+} as const;
+
 /** Melee swing. Damage is in TUNING. */
 export const MELEE = {
   /** Reach from the player centre, world units. */

@@ -45,6 +45,7 @@ import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
   BLOB,
+  BOSS_DEATH,
   BOSS_VFX,
   CHAIN_ARC,
   CHEST,
@@ -93,14 +94,22 @@ const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
  *  the boss-add (gimmick #2) IS pooled like the base enemies. */
 const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bossadd'];
 
-/** Death-POP scale from the remaining pop timer (juice PR-1). A fast UP-phase to
- *  1+overshoot, then an eased (accelerating) collapse to 0 — the enemy "pops" out
- *  of existence. Pure: timer in [0, KILL.popDuration] → scale, no state. */
+/** Death-POP scale (juice PR-1/PR-5): a fast UP-phase to 1+overshoot, then an eased
+ *  (accelerating) collapse to 0 — the figure "pops" out of existence. Pure: the
+ *  remaining timer + its full duration/shape params → scale, no state. */
+function popScale(timerRemaining: number, duration: number, overshoot: number, upFrac: number): number {
+  const t = 1 - timerRemaining / duration; // 0 at death → 1 at end
+  if (t < upFrac) return 1 + overshoot * (t / upFrac);
+  const u = (t - upFrac) / (1 - upFrac);
+  return (1 + overshoot) * (1 - u * u); // → 0
+}
+/** Trash-kill pop (PR-1). */
 function killPopScale(timerRemaining: number): number {
-  const t = 1 - timerRemaining / KILL.popDuration; // 0 at death → 1 at end
-  if (t < KILL.popUpFrac) return 1 + KILL.popOvershoot * (t / KILL.popUpFrac);
-  const u = (t - KILL.popUpFrac) / (1 - KILL.popUpFrac);
-  return (1 + KILL.popOvershoot) * (1 - u * u); // → 0
+  return popScale(timerRemaining, KILL.popDuration, KILL.popOvershoot, KILL.popUpFrac);
+}
+/** Boss death pop (PR-5) — slower + grander, scaling the bespoke boss mesh. */
+function bossPopScale(timerRemaining: number): number {
+  return popScale(timerRemaining, BOSS_DEATH.popDuration, BOSS_DEATH.popOvershoot, BOSS_DEATH.popUpFrac);
 }
 
 /** 0xRRGGBB -> '#rrggbb' for canvas drawing (reuses PALETTE, no new colours). */
@@ -555,6 +564,13 @@ export class EntityRenderer {
    *  dead figure scale-overshoots-then-vanishes before it's hidden. Render-only. */
   private readonly enemyPrevActive: boolean[] = [];
   private readonly enemyDyingTimer: number[] = [];
+  /** Boss death-POP (juice PR-5): the bespoke boss mesh isn't a pooled figure, so it
+   *  gets its own frame-diff. `bossWasAlive` + the captured last position drive a
+   *  grander pop when the boss vanishes (state.boss is nulled the death frame). */
+  private bossWasAlive = false;
+  private bossDyingTimer = 0;
+  private bossDeathX = 0;
+  private bossDeathY = 0;
   /** Death-burst tint → shared material cache (built lazily, ≤ a handful of colors,
    *  one-time each — NO per-particle/per-frame allocation). Key 0 = the white spark. */
   private readonly particleMats = new Map<number, MeshBasicMaterial>();
@@ -1061,7 +1077,7 @@ export class EntityRenderer {
 
     this.syncTrail(p, px, py);
     this.syncEnemies(state, alpha, px, py, now, frameDt);
-    this.syncBoss(state, alpha, px, py, now);
+    this.syncBoss(state, alpha, px, py, now, frameDt);
     this.syncProjectiles(state, alpha);
     this.syncEnemyProjectiles(state, alpha);
     this.syncParticles(state);
@@ -1325,17 +1341,33 @@ export class EntityRenderer {
   /** Position + recolour the bespoke boss mesh from state.boss + its pooled Enemy.
    *  Shows the rotating weak-point (gimmick #1 tell), the phase-2 escalation tint,
    *  the slam telegraph grow, and the hit / blocked-shield flashes. */
-  private syncBoss(state: GameState, alpha: number, px: number, py: number, now: number): void {
+  private syncBoss(state: GameState, alpha: number, px: number, py: number, now: number, frameDt: number): void {
     const boss = state.boss;
     const e = boss ? state.enemies[boss.slot] : null;
     if (!boss || !e || !e.active) {
-      this.bossGroup.visible = false;
       this.bossBlob.visible = false;
+      // Boss death-POP (juice PR-5): the death frame nulls state.boss, so detect the
+      // transition via bossWasAlive and play a grand pop at the captured position.
+      if (this.bossWasAlive) {
+        this.bossDyingTimer = BOSS_DEATH.popDuration;
+        this.bossWasAlive = false;
+      }
+      if (this.bossDyingTimer > 0) {
+        this.bossDyingTimer = Math.max(0, this.bossDyingTimer - frameDt);
+        this.bossGroup.visible = true;
+        this.bossGroup.position.set(this.bossDeathX, 0, this.bossDeathY);
+        this.bossGroup.scale.setScalar(bossPopScale(this.bossDyingTimer));
+      } else {
+        this.bossGroup.visible = false;
+      }
       return;
     }
     this.bossGroup.visible = true;
+    this.bossWasAlive = true;
     const ex = lerp(e.prevX, e.x, alpha);
     const ey = lerp(e.prevY, e.y, alpha);
+    this.bossDeathX = ex; // remember where to pop if it dies this/next frame
+    this.bossDeathY = ey;
     this.bossGroup.position.set(ex, 0, ey);
     this.bossBlob.position.set(ex, BLOB.y, ey);
     this.bossBlob.visible = true;

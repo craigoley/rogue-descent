@@ -132,6 +132,8 @@ describe('Descent — boss death unlocks stairs with side rooms UNCLEARED (the f
     expect(s.stairs.roomIndex).toBe(bossRoom); // stairs pinned to the boss room
     expect(s.rooms.some((r) => r.phase !== 'cleared')).toBe(true); // NOT all-cleared
 
+    // Drain the brief boss-death celebration hit-stop before stepping on the stairs.
+    while (s.hitstopTimer > 0) update(s, idle(), DT);
     // And stepping on the (boss-room) stairs descends.
     s.player.x = s.stairs.x;
     s.player.y = s.stairs.y;

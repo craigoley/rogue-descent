@@ -10,7 +10,7 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { BOSS, FIRE_RATE_LEVELS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
+import { BOSS, BOSS_DEATH, ENEMY_DEATH_TINT, FIRE_RATE_LEVELS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
 import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
@@ -519,6 +519,10 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
   // freed) so render/HUD/shield logic all switch off together. The death already
   // counted above + cleared the room via roomEnemyCount.
   if (state.boss && !state.enemies[state.boss.slot].active) {
+    // Boss death position (the slot is inactive but its x/y persist) — captured
+    // before state.boss is nulled below, for the celebration burst.
+    const bx = state.enemies[state.boss.slot].x;
+    const by = state.enemies[state.boss.slot].y;
     // GIMMICK #2 (adds): the boss is dead -> DESPAWN any lingering adds so (1) the
     // room clears on BOSS death (roomEnemyCount hits 0 in updateEncounterResolve
     // on the next line) instead of requiring every add dead — the research-
@@ -533,6 +537,17 @@ export function update(state: GameState, intent: InputIntent, dt: number): void 
     // Durable signal that THIS floor's boss is dead -> descent unlocks (see
     // descendIfReady). Survives state.boss going null; reset in loadFloor.
     state.bossDefeated = true;
+    // BOSS-DEATH CELEBRATION (juice PR-5) — one-shot, boss-EXCLUSIVE (only this
+    // block reaches here), DETERMINISTIC. Adds feedback only; the mechanical outcome
+    // (bossDefeated + descent unlock) above is unchanged. A big shake (reuses the
+    // shake state/decay; the magnitude > a player hit since shakeDuration > SHAKE
+    // .duration; zeroes under reduce-motion in main.ts), a slow-mo hit-stop (longer
+    // than crit's; the freeze lands next frame), and a big two-wave burst: a hot-
+    // white bloom flare + a boss-coloured wave (seeded burst → deterministic).
+    state.shakeTimer = BOSS_DEATH.shakeDuration;
+    if (BOSS_DEATH.hitstop > state.hitstopTimer) state.hitstopTimer = BOSS_DEATH.hitstop;
+    spawnParticles(state.particles, bx, by, BOSS_DEATH.burstCount, 0); // hot-white flare
+    spawnParticles(state.particles, bx, by, BOSS_DEATH.burstCount, ENEMY_DEATH_TINT.boss);
   }
   // Clear the active room if its enemies are all dead -> unlock doors.
   updateEncounterResolve(state);
