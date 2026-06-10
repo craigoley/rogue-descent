@@ -148,6 +148,11 @@ export function damageEnemy(
     );
     const stop = crit ? CRIT.hitstop : TUNING.hitstop;
     if (stop > state.hitstopTimer) state.hitstopTimer = stop;
+    // CRIT FLARE (juice PR-3): a brief bright bloom-flaring flash so the crit is
+    // SEEN, not just felt. Cosmetic timer set ONLY on a crit (the seeded roll above)
+    // → crit-exclusive + byte-deterministic; the renderer reads it. Adds to the
+    // crunch (bigger burst + longer hit-stop), doesn't replace it.
+    if (crit) enemy.critFlashTimer = CRIT.flashDuration;
     // SYNERGY ARC PR1 — LIFESTEAL: heal a fraction of damage dealt (the crit-boosted
     // `dmg` → a crit heals bigger, free). DIRECT hits ONLY — a chain arc must NOT
     // lifesteal per-jump (bound E). Auto-multiplies with melee/multishot/pierce/dash.

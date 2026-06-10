@@ -640,6 +640,10 @@ export const CRIT_LEVELS = {
 export const CRIT = {
   /** Hit-stop on a crit, seconds (> TUNING.hitstop). */
   hitstop: 0.09,
+  /** CRIT-flare duration, seconds (juice PR-3). BRIEF (~3-4 frames) so the bright
+   *  bloom-flaring flash spikes-then-gone — a crit reads as SEEN without strobing a
+   *  crit-heavy build. By-feel. */
+  flashDuration: 0.06,
 } as const;
 
 /** Melee swing. Damage is in TUNING. */
@@ -1428,6 +1432,11 @@ export const VFX = {
    *  window — a sharp, bloom-flaring punch instead of a flat white hold. Brief by
    *  design (clarity): it's the impact frame, not a wash. */
   hitFlashPeak: 2.2,
+  /** CRIT-flare PEAK emissive (juice PR-3): brighter/hotter than a normal hit so a
+   *  crit is SEEN — a strong gold (PALETTE.crit) bloom flare on the crit-struck enemy
+   *  for CRIT.flashDuration, then it falls back to the normal hit-flash decay. Damped
+   *  to hitFlashPeak under reduce-motion (a photosensitivity courtesy). */
+  critFlashPeak: 3.6,
   /** Emissive intensity of pickup meshes. */
   pickupEmissive: 0.8,
   /** Emissive intensity of the front visor "eye" (the facing indicator) so it
