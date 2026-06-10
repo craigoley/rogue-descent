@@ -10,7 +10,7 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { BOSS, BOSS_DEATH, ENEMY_DEATH_TINT, FIRE_RATE_LEVELS, MELEE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE, DUNGEON, DESCENT } from '../utils/constants';
+import { BOSS, BOSS_DEATH, DESCENT, DUNGEON, ENEMY_DEATH_TINT, FIRE_RATE_LEVELS, MELEE, PALETTE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE } from '../utils/constants';
 import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
@@ -435,6 +435,10 @@ function descendIfReady(state: GameState): boolean {
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);
+  // Descend FLOURISH (juice): a violet (stairs-coloured) burst at the new spawn —
+  // an "arrival" flare that pops through the bloom under the receding floor-
+  // transition cover. Deterministic; loadFloor cleared the pool just above.
+  spawnParticles(state.particles, state.spawn.x, state.spawn.y, DESCENT.burstCount, PALETTE.stairs);
   return true;
 }
 

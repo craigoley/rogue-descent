@@ -1018,6 +1018,16 @@ export const DESCENT = {
   /** Deterministic next-floor seed stride: nextSeed = seed + stride*depth
    *  (32-bit, via Math.imul). The golden-ratio constant, as used by dropSeed. */
   seedStride: 0x9e3779b9,
+  /** Floor-TRANSITION reveal (juice): a brief downward wipe that COVERS the floor
+   *  swap — the cover is at full opacity the first frame the new floor would paint
+   *  (so the swap is never shown uncovered: cover, not trail), then the dark sweeps
+   *  DOWNWARD off the new floor over `revealSec`. Render/app-layer only (HUD overlay
+   *  driven by the seed change); the sim/floor-load is unchanged. Reduce-motion
+   *  swaps the directional wipe for a plain opacity fade. Seconds. */
+  revealSec: 0.4,
+  /** Descend FLOURISH: a violet (stairs-coloured) particle burst at the new-floor
+   *  spawn as you arrive, flaring through the bloom under the receding cover. */
+  burstCount: 20,
 } as const;
 
 /** Descent-stairs VISUALS (render-only; no gameplay effect). */
