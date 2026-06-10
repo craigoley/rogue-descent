@@ -266,6 +266,8 @@ describe('KEY GATING — boss death clears the room even with adds alive', () =>
     expect(s.run.kills).toBe(kills0);
     expect(activePickups(s)).toBe(pickups0);
 
+    // Drain the brief boss-death celebration hit-stop before stepping on the stairs.
+    while (s.hitstopTimer > 0) update(s, idle(), DT);
     // And stepping on the pinned stairs descends.
     s.player.x = s.stairs.x;
     s.player.y = s.stairs.y;
