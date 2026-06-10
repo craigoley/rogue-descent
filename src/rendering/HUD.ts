@@ -32,6 +32,7 @@ import type { FrameStats } from '../utils/perfMeter';
 import {
   CSS_PALETTE,
   DASH,
+  DESCENT,
   PLAYER_COMBAT,
   POWERUP_MAX_LEVEL,
   SOFTLOCK_DETECT,
@@ -98,6 +99,17 @@ export class HUD {
   /** Full-screen damage vignette (juice): red edge-glow, opacity driven each frame
    *  from player.hitFlashTimer — the "I got hit" signal. Render-only. */
   private readonly damageVignette: HTMLDivElement;
+  /** Floor-transition cover (juice): a full-screen dark overlay that COVERS the floor
+   *  swap. The sim swaps the floor atomically (seed change); we slam this to full the
+   *  frame the new floor would first paint, then sweep it DOWNWARD off over
+   *  DESCENT.revealSec — so the swap is covered, not trailed. Reduce-motion = a plain
+   *  opacity fade (no directional wipe). */
+  private readonly floorTransition: HTMLDivElement;
+  /** Last floor seed the HUD saw — a change means a floor swap → start the cover. */
+  private prevSeed = NaN;
+  /** Wall-clock ms the current transition started (cosmetic, like the idle pulses);
+   *  -1 = no transition in progress. */
+  private transitionStart = -1;
   /** Accessibility reduce-motion (set by main.ts from Settings). When on, the vignette
    *  uses the softened peak (VIGNETTE.reducedOpacity) — it stays present as combat info,
    *  while camera shake (handled in main.ts) goes to 0. Render-side only. */
@@ -142,6 +154,12 @@ export class HUD {
     this.damageVignette = document.createElement('div');
     this.damageVignette.className = 'hud-damage-vignette';
     container.appendChild(this.damageVignette);
+
+    // Floor-transition cover — above the canvas, below the interactive HUD;
+    // pointer-events:none. Hidden (opacity 0) at rest; driven in update().
+    this.floorTransition = document.createElement('div');
+    this.floorTransition.className = 'hud-floor-transition';
+    container.appendChild(this.floorTransition);
 
     const title = document.createElement('div');
     title.className = 'hud-title';
@@ -506,6 +524,41 @@ export class HUD {
   }
 
   /**
+   * Floor-transition cover (juice). A seed change = the sim swapped the floor this
+   * frame; slam the cover to FULL so the new floor's FIRST paint is hidden (cover,
+   * not trail), then sweep the dark DOWNWARD off over DESCENT.revealSec. Reduce-
+   * motion uses a plain opacity fade instead of the directional wipe. The first
+   * seed we ever see (boot) does NOT wipe in. performance.now() is cosmetic timing,
+   * like the idle pulses — no sim coupling.
+   */
+  private updateFloorTransition(seed: number): void {
+    const el = this.floorTransition;
+    if (!Number.isNaN(this.prevSeed) && seed !== this.prevSeed) {
+      this.transitionStart = performance.now(); // floor swapped → start the cover
+    }
+    this.prevSeed = seed;
+    if (this.transitionStart < 0) return; // none in progress
+
+    const t = (performance.now() - this.transitionStart) / (DESCENT.revealSec * 1000); // 0 → 1
+    if (t >= 1) {
+      this.transitionStart = -1;
+      el.style.opacity = '0';
+      el.style.clipPath = 'none';
+      return;
+    }
+    if (this.reduceMotion) {
+      // Plain fade: full cover at the swap → transparent (no directional motion).
+      el.style.clipPath = 'none';
+      el.style.opacity = (1 - t).toFixed(3);
+    } else {
+      // Downward wipe: full black, the TOP edge sweeping DOWN (inset-top 0 → 100%),
+      // so the new floor reveals from the top — reads as descending INTO it.
+      el.style.opacity = '1';
+      el.style.clipPath = `inset(${(t * 100).toFixed(1)}% 0 0 0)`;
+    }
+  }
+
+  /**
    * Refresh the live readout + the full input→screen TRACE. No-op when debug
    * off. The trace shows every stage of the transform for the CURRENT input so
    * we can read on-device exactly where "screen-up" stops being up:
@@ -537,6 +590,8 @@ export class HUD {
     const vignettePeak = this.reduceMotion ? VIGNETTE.reducedOpacity : VIGNETTE.peakOpacity;
     const dmg = p.hitFlashTimer > 0 ? (p.hitFlashTimer / PLAYER_COMBAT.hitFlash) * vignettePeak : 0;
     this.damageVignette.style.opacity = dmg.toFixed(3);
+
+    this.updateFloorTransition(state.seed);
 
     // Combat HUD (always): health fraction + dash charge pips.
     const hp = Math.max(0, p.health) / PLAYER_COMBAT.maxHealth;

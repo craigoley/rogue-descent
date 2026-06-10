@@ -79,6 +79,19 @@ body {
   background: radial-gradient(ellipse at center, transparent 55%, #c81830 100%);
 }
 
+/* Floor-transition cover (juice) — a solid dark fill that COVERS the floor swap,
+   then sweeps downward off the new floor (the clip-path is driven each frame in
+   HUD.updateFloorTransition; reduce-motion fades opacity instead). Above the canvas
+   + vignette, below the interactive HUD; never blocks input. Opacity 0 at rest. */
+.hud-floor-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: var(--bg);
+}
+
 /* Depth indicator — centred just below the title, between the corner widgets.
    Violet (= PALETTE.stairs) ties it to the descent system. */
 .hud-depth {
