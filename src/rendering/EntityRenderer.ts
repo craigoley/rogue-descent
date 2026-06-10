@@ -49,6 +49,7 @@ import {
   CHAIN_ARC,
   CHEST,
   CHEST_CHOICE,
+  CRIT,
   ENEMY_COMMON,
   ENEMY_PROJ,
   ENEMY_TYPES,
@@ -1269,13 +1270,23 @@ export class EntityRenderer {
       // is reset here and only re-applied by the stun branch (so a recovered enemy stops).
       fig.inner.rotation.z = 0;
       if (e.flashTimer > 0) {
-        // Crisp PEAK (juice PR-2): brightest at the impact instant, decaying fast
-        // (quadratic) toward the resting emissive over the flash window — a sharp
-        // bloom-flaring punch, not a flat white hold. Brief = clarity-safe.
-        const fr = e.flashTimer / ENEMY_COMMON.flash; // 1 at impact → 0 at end
-        mat.color.setHex(PALETTE.hitFlash);
-        mat.emissiveIntensity = VFX.enemyEmissive + (VFX.hitFlashPeak - VFX.enemyEmissive) * fr * fr;
         fig.group.scale.setScalar(1);
+        if (e.critFlashTimer > 0) {
+          // CRIT FLARE (juice PR-3): a hotter GOLD flash, brighter than a normal hit,
+          // so a crit is SEEN — it spikes the bloom for its brief window then falls
+          // back to the normal hit-flash decay. Damped to the normal peak under
+          // reduce-motion (a photosensitivity courtesy; the gold colour still tells).
+          const cr = e.critFlashTimer / CRIT.flashDuration; // 1 → 0
+          const peak = this.reduceMotion ? VFX.hitFlashPeak : VFX.critFlashPeak;
+          mat.color.setHex(PALETTE.crit);
+          mat.emissiveIntensity = VFX.enemyEmissive + (peak - VFX.enemyEmissive) * cr;
+        } else {
+          // Crisp PEAK (juice PR-2): brightest at the impact instant, decaying fast
+          // (quadratic) toward the resting emissive — a sharp bloom-flaring punch.
+          const fr = e.flashTimer / ENEMY_COMMON.flash; // 1 at impact → 0 at end
+          mat.color.setHex(PALETTE.hitFlash);
+          mat.emissiveIntensity = VFX.enemyEmissive + (VFX.hitFlashPeak - VFX.enemyEmissive) * fr * fr;
+        }
       } else if (e.stunTimer > 0) {
         // STUNNED (Phase 9 PR2): cold disabled tint + a dazed sway, so the CC
         // reads. No telegraph grow (the AI — and its phase tell — is frozen).

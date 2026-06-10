@@ -51,6 +51,10 @@ export interface Enemy {
   timer: number;
   /** Hit-flash countdown, seconds. */
   flashTimer: number;
+  /** CRIT-flare countdown, seconds (juice PR-3) — set ONLY when a crit lands, so the
+   *  renderer can flash a brighter/hotter flare than a normal hit. Cosmetic: the sim
+   *  never reads it, so it never affects the deterministic crit outcome. */
+  critFlashTimer: number;
   /** Knockback velocity (decays), world units/sec. */
   kbVx: number;
   kbVy: number;
@@ -104,6 +108,7 @@ export function createEnemyPool(): Enemy[] {
     phase: 'chase' as EnemyPhase,
     timer: 0,
     flashTimer: 0,
+    critFlashTimer: 0,
     kbVx: 0,
     kbVy: 0,
     struck: false,
@@ -148,6 +153,7 @@ export function spawnEnemy(
     e.phase = 'chase';
     e.timer = 0;
     e.flashTimer = 0;
+    e.critFlashTimer = 0; // recycled slot never inherits a crit flare
     e.kbVx = 0;
     e.kbVy = 0;
     e.struck = false;
@@ -414,6 +420,7 @@ export function updateEnemies(state: GameState, dt: number): void {
     e.prevX = e.x;
     e.prevY = e.y;
     if (e.flashTimer > 0) e.flashTimer = Math.max(0, e.flashTimer - dt);
+    if (e.critFlashTimer > 0) e.critFlashTimer = Math.max(0, e.critFlashTimer - dt);
     // FREEZE/SLOW tick (meta PR1): count down, but do NOT touch the AI — a slowed
     // enemy still decides + acts; only its movement is scaled (in the integrate tail).
     if (e.slowTimer > 0) e.slowTimer = Math.max(0, e.slowTimer - dt);

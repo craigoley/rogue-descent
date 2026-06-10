@@ -18,7 +18,7 @@ import { buildTestRoom, roomCenter } from '../Room';
 import { spawnEnemy } from '../Enemy';
 import { rollDrop } from '../Pickup';
 import { damageEnemy } from '../Combat';
-import { BURN_LEVELS, CRIT_LEVELS, LIFESTEAL_LEVELS, SIM_DT } from '../../utils/constants';
+import { BURN_LEVELS, CRIT, CRIT_LEVELS, LIFESTEAL_LEVELS, SIM_DT } from '../../utils/constants';
 import type { Rng } from '../../utils/rng';
 
 void SIM_DT;
@@ -63,6 +63,24 @@ describe('Crit — the multiply (deterministic via a stubbed combatRng)', () => 
     const e2 = enemyAt(noS, noS.player.x + 1, noS.player.y);
     damageEnemy(e2, 100, 1, 0, 0, noS);
     expect(10_000 - e2.health).toBe(100);
+  });
+
+  it('a crit sets critFlashTimer (the PR-3 flare); a non-crit hit leaves it 0 (crit-exclusive)', () => {
+    const critS = arena();
+    critS.player.critLevel = 3;
+    critS.combatRng = fixedRng(0); // always crit
+    const e1 = enemyAt(critS, critS.player.x + 1, critS.player.y);
+    expect(e1.critFlashTimer).toBe(0); // not set before the hit
+    damageEnemy(e1, 100, 1, 0, 0, critS);
+    expect(e1.critFlashTimer).toBe(CRIT.flashDuration); // the crit armed the flare
+
+    const noS = arena();
+    noS.player.critLevel = 3;
+    noS.combatRng = fixedRng(0.99); // never crit
+    const e2 = enemyAt(noS, noS.player.x + 1, noS.player.y);
+    damageEnemy(e2, 100, 1, 0, 0, noS);
+    expect(e2.flashTimer).toBeGreaterThan(0); // a normal hit still flashes
+    expect(e2.critFlashTimer).toBe(0); // ...but NOT the crit flare
   });
 
   it('level 0 NEVER crits (gated → no draw → base), even with an always-crit rng', () => {
