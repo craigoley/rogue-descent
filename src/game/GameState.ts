@@ -49,6 +49,7 @@ import {
   type RoomEncounter,
 } from './Encounter';
 import { aimDirection, dashStrike, meleeAttack } from './Combat';
+import { NO_HEAT, heatStatMults, type HeatConfig } from './Heat';
 import { createRng, type Rng } from '../utils/rng';
 import type { InputIntent } from './Input';
 import type { Vec2 } from '../utils/math';
@@ -109,11 +110,15 @@ export interface RunConfig {
    *  weighted higher in the drop roll AND guaranteed to be the FIRST powerup surfaced.
    *  POWER-NEUTRAL: steers WHICH drops appear, never how many. */
   runStart: string | null;
+  /** META LAYER 3 — the chosen HEAT: per-modifier ranks the sim multiplies into the
+   *  enemy/rule difficulty. NO_HEAT (all 0) = today exactly. Power-neutral INVERTED:
+   *  hardens the world, never the player. */
+  heat: HeatConfig;
 }
 
-/** Base config: nothing unlocked + no lean → a clean save plays EXACTLY like today. The
- *  default for createGameState + the graceful fallback when meta is absent/corrupt. */
-export const BASE_RUN_CONFIG: RunConfig = { unlocked: new Set<string>(), runStart: null };
+/** Base config: nothing unlocked + no lean + no heat → a clean save plays EXACTLY like
+ *  today. The default for createGameState + the graceful fallback when meta is absent. */
+export const BASE_RUN_CONFIG: RunConfig = { unlocked: new Set<string>(), runStart: null, heat: NO_HEAT };
 
 export interface GameState {
   player: PlayerState;
@@ -266,7 +271,7 @@ function loadFloor(state: GameState, seed: number): void {
   for (const p of state.particles) p.active = false;
   for (const a of state.chainArcs) a.active = false;
   for (const pk of state.pickups) pk.active = false;
-  state.rooms = buildEncounters(floor, state.run.depth, state.config.unlocked); // Phase 7c: depth-scaled spawns; meta PR2: armored gating
+  state.rooms = buildEncounters(floor, state.run.depth, state.config.unlocked, state.config.heat); // Phase 7c: depth-scaled spawns; meta PR2: armored gating; L3: Heat crowd
   state.activeRoom = -1;
   state.bossRoom = floor.bossRoom; // Phase 8: boss room for this floor
   // GOLDEN CHESTS: place a chest at each chest room's centre (additive — chestRooms
@@ -355,6 +360,7 @@ export function startNewRun(state: GameState, seed: number, config?: RunConfig):
 export function consumeBossSummon(state: GameState): void {
   const summon = state.boss?.pendingSummon;
   if (!summon) return;
+  const hm = heatStatMults(state.config.heat); // L3 Heat: summoned adds scale too
   for (let k = 0; k < summon.count; k++) {
     const dist = BOSS.summon.lineOffset + k * BOSS.summon.lineSpacing;
     spawnEnemy(
@@ -364,6 +370,7 @@ export function consumeBossSummon(state: GameState): void {
       state.run.depth,
       'bossadd',
       state.bossRoom,
+      hm,
     );
   }
   state.boss!.pendingSummon = null;

@@ -25,6 +25,7 @@ import { CHEST, PICKUP, PLAYER, POOL } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { chooseChestPicks, spawnGuaranteedPickup } from './Pickup';
 import { spawnEnemy, roomEnemyCount } from './Enemy';
+import { heatStatMults } from './Heat';
 import { reactivateRoom } from './Encounter';
 import { isSolid } from './Room';
 import type { GameState } from './GameState';
@@ -96,7 +97,7 @@ function openChest(state: GameState, c: Chest, ci: number): void {
     // MIMIC: spawn a buffed chaser at the chest, STUNNED for the tell, and RE-ACTIVATE
     // the room — atomically, in this call (zero gating window). The room was cleared
     // (gate above) so activeRoom === -1: reactivateRoom is safe + can't double-activate.
-    if (spawnEnemy(state.enemies, c.x, c.y, state.run.depth, 'chaser', c.roomIndex)) {
+    if (spawnEnemy(state.enemies, c.x, c.y, state.run.depth, 'chaser', c.roomIndex, heatStatMults(state.config.heat))) {
       // The chest room was cleared (0 enemies) before this spawn, so the only enemy
       // tagged to it now IS the mimic.
       const mimic = state.enemies.find((e) => e.active && e.roomIndex === c.roomIndex);

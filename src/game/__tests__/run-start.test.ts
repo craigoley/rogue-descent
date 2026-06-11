@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createGameState, type RunConfig } from '../GameState';
+import { NO_HEAT } from '../Heat';
 import { rollDrop, leanableKinds, activePickupCount } from '../Pickup';
 import { rollAndSpawnDrop } from '../Encounter';
 import { createRng } from '../../utils/rng';
@@ -64,7 +65,7 @@ describe('Run-start lean — ⭐ power-neutrality (count invariant, distribution
 
 describe('Run-start lean — guaranteed first powerup', () => {
   const firstSpawnedKind = (lean: string | null): string => {
-    const s = createGameState({ unlocked: new Set<string>(), runStart: lean });
+    const s = createGameState({ unlocked: new Set<string>(), runStart: lean, heat: NO_HEAT });
     const rng = createRng(424242);
     for (let i = 0; i < 8000; i++) {
       const before = activePickupCount(s.pickups);
@@ -80,13 +81,13 @@ describe('Run-start lean — guaranteed first powerup', () => {
   });
 
   it('delivers it once (the run flag flips) and No-Lean forces nothing', () => {
-    const s = createGameState({ unlocked: new Set<string>(), runStart: 'crit' });
+    const s = createGameState({ unlocked: new Set<string>(), runStart: 'crit', heat: NO_HEAT });
     const rng = createRng(7);
     let guard = 0;
     while (activePickupCount(s.pickups) === 0 && guard++ < 8000) rollAndSpawnDrop(s, 0, 0, rng);
     expect(s.run.leanFirstDelivered).toBe(true);
     // No-Lean: the flag never sets (nothing is forced).
-    const n = createGameState({ unlocked: new Set<string>(), runStart: null });
+    const n = createGameState({ unlocked: new Set<string>(), runStart: null, heat: NO_HEAT });
     const rng2 = createRng(7);
     for (let i = 0; i < 50; i++) rollAndSpawnDrop(n, 0, 0, rng2);
     expect(n.run.leanFirstDelivered).toBe(false);
@@ -112,7 +113,7 @@ describe('Run-start lean — the leanable set (Layer 1↔2 tie)', () => {
   });
 
   it('createGameState carries the lean on config.runStart (base default = null)', () => {
-    const leaned: RunConfig = { unlocked: new Set<string>(), runStart: 'chain' };
+    const leaned: RunConfig = { unlocked: new Set<string>(), runStart: 'chain', heat: NO_HEAT };
     expect(createGameState(leaned).config.runStart).toBe('chain');
     expect(createGameState().config.runStart).toBeNull();
   });

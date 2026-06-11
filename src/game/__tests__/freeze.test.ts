@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createGameState, update, type GameState, type RunConfig } from '../GameState';
+import { NO_HEAT } from '../Heat';
 import { createPlayer } from '../Player';
 import { createIntent } from '../Input';
 import { buildTestRoom, roomCenter } from '../Room';
@@ -108,8 +109,8 @@ describe('Freeze — mechanic (slow, DISTINCT from stun)', () => {
 });
 
 describe('Freeze — config gating (the meta boundary)', () => {
-  const UNLOCKED: RunConfig = { unlocked: new Set(['freeze']), runStart: null };
-  const BASE: RunConfig = { unlocked: new Set(), runStart: null };
+  const UNLOCKED: RunConfig = { unlocked: new Set(['freeze']), runStart: null, heat: NO_HEAT };
+  const BASE: RunConfig = { unlocked: new Set(), runStart: null, heat: NO_HEAT };
 
   it('⭐ a chest offers freeze only when unlocked (base config never does)', () => {
     // Max every OTHER effect so freeze is the ONLY available effect — then the chest's

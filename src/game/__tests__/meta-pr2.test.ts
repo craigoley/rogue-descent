@@ -15,6 +15,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createGameState, startNewRun, update, type GameState, type RunConfig } from '../GameState';
+import { NO_HEAT } from '../Heat';
 import { createPlayer } from '../Player';
 import { createIntent } from '../Input';
 import { buildTestRoom, roomCenter } from '../Room';
@@ -160,7 +161,7 @@ describe('Armored chaser — enemy gating (depth 3, unlocked only)', () => {
     return types;
   }
 
-  const ARMORED: RunConfig = { unlocked: new Set(['armored-chaser']), runStart: null };
+  const ARMORED: RunConfig = { unlocked: new Set(['armored-chaser']), runStart: null, heat: NO_HEAT };
 
   it('⭐ depth 3 with armored-chaser UNLOCKED spawns an armored variant', () => {
     expect(activatedRoomTypes(runAtDepth(3, ARMORED)).has('armored')).toBe(true);

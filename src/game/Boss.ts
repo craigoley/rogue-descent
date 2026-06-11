@@ -189,7 +189,7 @@ function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
  *  bossHpForDepth (depth-1 gentle carve-out, depth >= 2 the 7c curve) — the SAME
  *  value Encounter overrides onto the Enemy's health, so the HP bar + 50% gate
  *  match the actual HP. */
-export function createBossState(slot: number, depth: number): BossState {
+export function createBossState(slot: number, depth: number, healthMult = 1): BossState {
   return {
     slot,
     outerPhase: 1,
@@ -197,7 +197,9 @@ export function createBossState(slot: number, depth: number): BossState {
     gimmick: bossGimmickForDepth(depth),
     attackCursor: 0,
     vulnerableAngle: 0,
-    maxHealth: bossHpForDepth(depth),
+    // META L3 HEAT (Thick Skin): scale the bar's max to match the boss's actual HP (set
+    // with the same mult in updateEncounterEntry), so the bar + 50% phase gate stay true.
+    maxHealth: bossHpForDepth(depth) * healthMult,
     blockedFlash: 0,
     pendingSummon: null,
     interruptHit: false,

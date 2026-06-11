@@ -23,11 +23,13 @@ import { HUD, isDebugEnabled } from './rendering/HUD';
 import { RunSummary } from './rendering/RunSummary';
 import { UnlocksOverlay } from './rendering/UnlocksOverlay';
 import { RunStartCard } from './rendering/RunStartCard';
+import { HeatCard } from './rendering/HeatCard';
+import { NO_HEAT, normalizeHeat, type HeatConfig } from './game/Heat';
 import { leanableKinds } from './game/Pickup';
 import { AudioEngine } from './audio/AudioEngine';
 import { AudioManager } from './audio/AudioManager';
 import { loadSettings, saveSettings, type Settings } from './state/Settings';
-import { loadMeta, saveMeta, shouldOfferLean } from './state/Meta';
+import { loadMeta, saveMeta, shouldOfferLean, shouldOfferHeat } from './state/Meta';
 import { DASH, DUNGEON, MAX_FRAME_DT, SHAKE, SIM_DT, TUNING } from './utils/constants';
 import { PerfMeter, type FrameStats } from './utils/perfMeter';
 
@@ -39,7 +41,11 @@ if (!app) throw new Error('#app container not found');
 // feeds the pure sim. Re-read per run-start so a just-earned unlock applies next run.
 // loadMeta() degrades to base (nothing unlocked) on absent/corrupt storage.
 // META L2: `lean` is the run-start choice (config.runStart) — null = No Lean (today).
-const runConfig = (lean: string | null = null): RunConfig => ({ unlocked: new Set(loadMeta().unlocked), runStart: lean });
+const runConfig = (lean: string | null = null, heat: HeatConfig = NO_HEAT): RunConfig => ({
+  unlocked: new Set(loadMeta().unlocked),
+  runStart: lean,
+  heat: normalizeHeat(heat), // L3: defensively clamp the chosen ranks
+});
 const game = createGameState(runConfig());
 
 // E2E / screenshot SEAM (entry-layer only — src/game/ stays pure). Deterministic
@@ -95,17 +101,34 @@ const freshRunSeed = (): number => (Date.now() + Math.imul(++runSeedCounter, 0x9
 // unlocked something (shouldOfferLean); a fresh save skips it → today exactly. The last
 // pick (meta.runStart) is pre-selected. The chosen lean flows in as config.runStart.
 const runStartCard = new RunStartCard(app);
+// META L3 — HEAT ritual. Offered AFTER the lean (shouldOfferHeat = first win reached);
+// the chosen ranks flow in as config.heat. Suppressed until the win-depth → before that,
+// the pre-run flow is exactly L2 (lean only).
+const heatCard = new HeatCard(app);
 const beginRun = (seed: number): void => {
+  // Resolve the lean (card or null), THEN the heat (card or NO_HEAT), then start.
+  const afterLean = (lean: string | null): void => {
+    if (shouldOfferHeat(loadMeta())) {
+      heatCard.offer(loadMeta().heat, (heat) => {
+        const m = loadMeta();
+        m.heat = normalizeHeat(heat); // persist the chosen ranks as next run's default
+        saveMeta(m);
+        startNewRun(game, seed, runConfig(lean, heat));
+      });
+    } else {
+      startNewRun(game, seed, runConfig(lean));
+    }
+  };
   const meta = loadMeta();
   if (shouldOfferLean(meta)) {
     runStartCard.offer(leanableKinds(new Set(meta.unlocked)), meta.runStart, (lean) => {
       const m = loadMeta();
       m.runStart = lean; // persist the choice as next run's default
       saveMeta(m);
-      startNewRun(game, seed, runConfig(lean));
+      afterLean(lean);
     });
   } else {
-    startNewRun(game, seed, runConfig(null));
+    afterLean(null);
   }
 };
 
