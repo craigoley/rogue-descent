@@ -81,14 +81,14 @@ function computeSpawns(
 ): { x: number; y: number; type: EnemyType }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
-  // META L3 HEAT — CROWD: extra enemies added on top of the depth count, CLAMPED to the
-  // clarity cap + the shared pool (readability + no pool exhaustion). The extra slots
-  // fill as CHASERS (ranged/swarmer counts stay depth-based), keeping the mix readable.
-  // heatExtraEnemies is 0 at NO_HEAT → n is byte-identical to today.
+  // META L3 HEAT — CROWD: extra enemies on top of the depth count, CLAMPED to the clarity
+  // cap + the shared pool. The cap never undercuts the depth curve (Math.max) so base
+  // (NO_HEAT) stays byte-identical to today; crowd extras fill as CHASERS.
+  const baseN = enemiesPerRoomForDepth(depth);
   const n = Math.min(
-    HEAT.maxEnemiesPerRoom,
+    Math.max(baseN, HEAT.maxEnemiesPerRoom),
     POOL.enemies,
-    enemiesPerRoomForDepth(depth) + heatExtraEnemies(heat),
+    baseN + heatExtraEnemies(heat),
   );
   const ranged = rangedCountForDepth(depth); // SUBSTITUTE for chasers (7.5)
   const swarmer = swarmerCountForDepth(depth); // SUBSTITUTE for chasers (7.6)

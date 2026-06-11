@@ -1042,7 +1042,6 @@ export const HEAT = {
   fireRateRewardHeat: 2,
 } as const;
 
-
 /**
  * Descent (Phase 8a/7a). Stairs appear in the LAST-cleared room once every room
  * is cleared (so the exit lands where the final fight ended, no backtrack);
