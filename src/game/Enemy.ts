@@ -22,6 +22,7 @@ import { resolveX, resolveY } from './Collision';
 import { damageEnemy, damagePlayer } from './Combat';
 import { fireEnemyProjectile } from './EnemyProjectile';
 import { damageMultForDepth, healthMultForDepth, speedMultForDepth } from './Difficulty';
+import { NO_HEAT_MULTS, type HeatStatMults } from './Heat';
 import { updateBoss } from './Boss';
 import type { GameState } from './GameState';
 
@@ -137,6 +138,7 @@ export function spawnEnemy(
   depth = 1,
   type: EnemyType = 'chaser',
   roomIndex = -1,
+  heat: HeatStatMults = NO_HEAT_MULTS,
 ): boolean {
   const stats = ENEMY_TYPES[type];
   for (const e of pool) {
@@ -147,9 +149,13 @@ export function spawnEnemy(
     e.y = y;
     e.prevX = x;
     e.prevY = y;
-    e.health = stats.maxHealth * healthMultForDepth(depth);
-    e.moveSpeed = stats.moveSpeed * speedMultForDepth(depth);
-    e.attackDamage = stats.attackDamage * damageMultForDepth(depth);
+    // META L3 HEAT: the per-enemy stat multipliers apply ON TOP of the depth curve.
+    // NO_HEAT_MULTS (all 1) = identity → byte-identical to today. Enemy-only (the
+    // player is never touched). A boss OVERRIDES health/damage after this (see
+    // updateEncounterEntry) and applies Heat there.
+    e.health = stats.maxHealth * healthMultForDepth(depth) * heat.health;
+    e.moveSpeed = stats.moveSpeed * speedMultForDepth(depth) * heat.speed;
+    e.attackDamage = stats.attackDamage * damageMultForDepth(depth) * heat.damage;
     e.phase = 'chase';
     e.timer = 0;
     e.flashTimer = 0;

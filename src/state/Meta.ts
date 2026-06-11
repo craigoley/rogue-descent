@@ -15,6 +15,9 @@
  * choice; heat = L3 challenge) so later layers add no migration.
  */
 
+import { HEAT } from '../utils/constants';
+import { NO_HEAT, normalizeHeat, type HeatConfig } from '../game/Heat';
+
 const STORAGE_KEY = 'rogue-descent:meta';
 const VERSION = 1;
 
@@ -32,11 +35,16 @@ export interface MetaState {
      *  chain-spread enemies). The first SKILL-attributed milestone source: sustained
      *  chain×burn play unlocks the fire-rate track. */
     wildfireKills: number;
+    /** META L3 — the HIGHEST Heat total at which the player has WON (reached the
+     *  win-depth W). The reward-stat Heat unlocks dispense against (a Heat win at N
+     *  records max(prev, N)); 0 = never won at any Heat. */
+    highestHeatWin: number;
   };
-  /** Layer 2 (later) — chosen run-start direction. Present now, unused → no migration. */
+  /** Layer 2 — chosen run-start LEAN direction (a powerup-kind id, or null). */
   runStart: string | null;
-  /** Layer 3 (later) — chosen challenge/Heat level. Present now, unused. */
-  heat: number;
+  /** Layer 3 — chosen HEAT: the per-modifier ranks for the next run (the menu persists
+   *  the last pick here). NO_HEAT = no challenge selected. */
+  heat: HeatConfig;
 }
 
 /** The milestone stat a given unlock tracks (a key of MetaState.stats). */
@@ -94,12 +102,30 @@ export const UNLOCKS: readonly UnlockDef[] = [
     binary: false,
     hint: 'Land 30 wildfire kills (chain-spread burn)',
   },
+  // META L3 — the Heat REWARD: an ALTERNATE path to the SAME fireRate content, proving
+  // the L3→L1 loop (crank Heat → earn variety). A second row for the same id is fine —
+  // applyRunResult's Set dedupes the unlock, and the surface shows the two routes.
+  {
+    id: 'fireRate',
+    label: 'Fire Rate',
+    description: 'A new upgrade track that speeds up your ranged fire.',
+    statKey: 'highestHeatWin',
+    target: HEAT.fireRateRewardHeat,
+    binary: false,
+    hint: `Or win at Heat ${HEAT.fireRateRewardHeat}+`,
+  },
 ];
 
 /** A clean-slate meta: nothing unlocked, zeroed stats. The graceful fallback for an
  *  absent/corrupt/Safari-private save — the game is fully playable from this. */
 export function defaultMeta(): MetaState {
-  return { version: VERSION, unlocked: [], stats: { deepestDepth: 0, bossKills: 0, wildfireKills: 0 }, runStart: null, heat: 0 };
+  return {
+    version: VERSION,
+    unlocked: [],
+    stats: { deepestDepth: 0, bossKills: 0, wildfireKills: 0, highestHeatWin: 0 },
+    runStart: null,
+    heat: { ...NO_HEAT },
+  };
 }
 
 /** Layer-1 unlock rules — PURE (run outcome + current meta → updated meta). No I/O, so
@@ -114,12 +140,23 @@ export function defaultMeta(): MetaState {
  *  meta → meta), so it's unit-testable; persisted unlocked order is sorted/stable. */
 export function applyRunResult(
   meta: MetaState,
-  outcome: { depth: number; bossDefeated: boolean; wildfireKills: number },
+  outcome: {
+    depth: number;
+    bossDefeated: boolean;
+    wildfireKills: number;
+    /** META L3 — this run's Heat TOTAL (Heat.heatTotal of the chosen config). */
+    heat: number;
+    /** META L3 — did this run reach the win-depth W (deepestDepth >= HEAT.unlockDepth)? */
+    reachedWinDepth: boolean;
+  },
 ): MetaState {
   const stats = {
     deepestDepth: Math.max(meta.stats.deepestDepth, outcome.depth),
     bossKills: meta.stats.bossKills + (outcome.bossDefeated ? 1 : 0),
     wildfireKills: meta.stats.wildfireKills + outcome.wildfireKills,
+    // L3: a WIN (reached W) records the Heat it was won at; a non-win records nothing.
+    // Monotonic max → the highest Heat ever cleared, the reward stat.
+    highestHeatWin: Math.max(meta.stats.highestHeatWin, outcome.reachedWinDepth ? outcome.heat : 0),
   };
   // MILESTONES — DERIVED from the catalog (the single source of truth): an unlock fires
   // once its watched stat meets its target. Idempotent via the Set; stats are monotonic
@@ -134,6 +171,14 @@ export function applyRunResult(
     runStart: meta.runStart,
     heat: meta.heat,
   };
+}
+
+/** META LAYER 3 — does the HEAT menu appear? Only AFTER the FIRST WIN — reaching the
+ *  win-depth W (deepestDepth >= HEAT.unlockDepth). Before that the player is still
+ *  mastering the base game → no Heat card (the post-win gate, mirroring shouldOfferLean's
+ *  suppressed-til-first-unlock). Pure. */
+export function shouldOfferHeat(meta: MetaState): boolean {
+  return meta.stats.deepestDepth >= HEAT.unlockDepth;
 }
 
 /** A display row for the UNLOCKS surface — the unlock's identity + its LIVE progress
@@ -196,9 +241,13 @@ export function loadMeta(): MetaState {
         deepestDepth: numberOr(parsed.stats?.deepestDepth, 0),
         bossKills: numberOr(parsed.stats?.bossKills, 0),
         wildfireKills: numberOr(parsed.stats?.wildfireKills, 0),
+        highestHeatWin: numberOr(parsed.stats?.highestHeatWin, 0),
       },
       runStart: typeof parsed.runStart === 'string' ? parsed.runStart : null,
-      heat: numberOr(parsed.heat, 0),
+      // L3: heat evolved from number → HeatConfig. normalizeHeat sanitizes any shape
+      // (an old stored `heat: 0`, a partial, or a corrupt object) to valid ranks → no
+      // migration needed; an absent/invalid heat falls back to NO_HEAT.
+      heat: normalizeHeat(parsed.heat as Partial<HeatConfig> | undefined),
     };
   } catch {
     return defaultMeta();

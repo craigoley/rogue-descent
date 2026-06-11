@@ -1007,6 +1007,43 @@ export const DIFFICULTY = {
 } as const;
 
 /**
+ * META LAYER 3 — HEAT (player-authored challenge). Each modifier is a pure RunConfig
+ * input the sim multiplies into an EXISTING difficulty value (base rank 0 = identity =
+ * today exactly — the regression floor). Heat hardens the WORLD, never the player
+ * (power-neutral, inverted). FAIR-not-cheap: these raise the skill demand (still fully
+ * dodgeable/survivable), never add unavoidable punishment. All by-feel; tune on replay.
+ */
+export const HEAT = {
+  /** WIN-DEPTH W — reaching depth W (deepestDepth >= W) is the "win" that unlocks the
+   *  Heat system + records highestHeatWin. ⚠️ The descent was ENDLESS — this is the
+   *  FIRST win-line ever, UNVALIDATED. THE #1 by-feel tune target: does reaching 8 feel
+   *  like an achievement or a slog? Craig validates by playing to 8; if it's a slog it
+   *  drops (one constant). */
+  unlockDepth: 8,
+  /** Enemy ATTACK-DAMAGE added per Hard Labor rank (×: 1 + rank × this). */
+  hardLaborPerRank: 0.15,
+  /** Enemy MOVE-SPEED added per Swift Death rank. Kept small (speed compounds harder). */
+  swiftDeathPerRank: 0.1,
+  /** Enemy MAX-HEALTH added per Thick Skin rank. */
+  thickSkinPerRank: 0.2,
+  /** Extra enemies/room per Crowd rank (added to enemiesPerRoomForDepth). */
+  crowdPerRank: 1,
+  /** Max ranks per modifier (the menu stepper ceiling). */
+  maxRankStat: 3, // Hard Labor / Swift Death / Thick Skin
+  maxRankCrowd: 2, // Crowd (the riskiest — fewer ranks)
+  /** Heat points each rank is worth (the menu total). */
+  heatPerRankStat: 1,
+  heatPerRankCrowd: 2,
+  /** ⚠️ CROWD CLARITY CAP — enemies/room never exceed this (readability + below the
+   *  shared POOL.enemies of 8). Bounds the one count-based modifier up front. */
+  maxEnemiesPerRoom: 7,
+  /** highestHeatWin threshold that unlocks fireRate via the Heat path (the L3→L1 proof:
+   *  an ALTERNATE route to the 30-wildfire-kill grind). */
+  fireRateRewardHeat: 2,
+} as const;
+
+
+/**
  * Descent (Phase 8a/7a). Stairs appear in the LAST-cleared room once every room
  * is cleared (so the exit lands where the final fight ended, no backtrack);
  * stepping onto them descends to the next floor. SIM values only — the visuals

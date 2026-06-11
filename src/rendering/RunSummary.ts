@@ -9,9 +9,10 @@
  */
 
 import type { GameState } from '../game/GameState';
+import { heatTotal } from '../game/Heat';
 import { recordRunDepth } from '../state/Best';
 import { applyRunResult, loadMeta, newlyUnlocked, saveMeta, UNLOCKS } from '../state/Meta';
-import { CSS_PALETTE } from '../utils/constants';
+import { CSS_PALETTE, HEAT } from '../utils/constants';
 
 /** Seconds -> "m:ss". */
 function formatTime(totalSec: number): string {
@@ -123,6 +124,10 @@ export class RunSummary {
         depth: state.run.depth,
         bossDefeated: state.run.floorsCleared >= 1 || state.bossDefeated,
         wildfireKills: state.run.wildfireKills, // META PR2 — cumulative skill milestone
+        // META L3 — record the Heat this run was played at + whether it reached the
+        // win-depth W. A win at Heat N records max(prev, N) → the reward stat.
+        heat: heatTotal(state.config.heat),
+        reachedWinDepth: state.run.depth >= HEAT.unlockDepth,
       });
       saveMeta(after);
       const gained = newlyUnlocked(before, after);

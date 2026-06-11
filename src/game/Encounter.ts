@@ -13,7 +13,13 @@
  * at a time — so "cleared = active room with zero live enemies".
  */
 
-import { DROP, ENCOUNTER, PLAYER, PLAYER_COMBAT, ROOM, type EnemyType } from '../utils/constants';
+import { DROP, ENCOUNTER, HEAT, PLAYER, PLAYER_COMBAT, POOL, ROOM, type EnemyType } from '../utils/constants';
+import {
+  NO_HEAT,
+  heatExtraEnemies,
+  heatStatMults,
+  type HeatConfig,
+} from './Heat';
 import {
   bossDamageForDepth,
   bossHpForDepth,
@@ -71,10 +77,19 @@ function computeSpawns(
   rect: Rect,
   depth: number,
   unlocked: ReadonlySet<string> = NO_UNLOCKS,
+  heat: HeatConfig = NO_HEAT,
 ): { x: number; y: number; type: EnemyType }[] {
   const cx = (rect.x + rect.w / 2) * ROOM.tileSize;
   const cy = (rect.y + rect.h / 2) * ROOM.tileSize;
-  const n = enemiesPerRoomForDepth(depth); // depth-scaled count (Phase 7c)
+  // META L3 HEAT — CROWD: extra enemies added on top of the depth count, CLAMPED to the
+  // clarity cap + the shared pool (readability + no pool exhaustion). The extra slots
+  // fill as CHASERS (ranged/swarmer counts stay depth-based), keeping the mix readable.
+  // heatExtraEnemies is 0 at NO_HEAT → n is byte-identical to today.
+  const n = Math.min(
+    HEAT.maxEnemiesPerRoom,
+    POOL.enemies,
+    enemiesPerRoomForDepth(depth) + heatExtraEnemies(heat),
+  );
   const ranged = rangedCountForDepth(depth); // SUBSTITUTE for chasers (7.5)
   const swarmer = swarmerCountForDepth(depth); // SUBSTITUTE for chasers (7.6)
   const chasers = n - ranged - swarmer; // >= 1 by the count clamps
@@ -104,11 +119,16 @@ function computeSpawns(
  *  The BOSS room (Phase 8) gets NO normal spawns — it's boss-alone; the single
  *  boss is spawned on activation in updateEncounterEntry. `unlocked` (meta PR2) gates
  *  content additions like the armored chaser; defaults to base (none). */
-export function buildEncounters(floor: Floor, depth = 1, unlocked: ReadonlySet<string> = NO_UNLOCKS): RoomEncounter[] {
+export function buildEncounters(
+  floor: Floor,
+  depth = 1,
+  unlocked: ReadonlySet<string> = NO_UNLOCKS,
+  heat: HeatConfig = NO_HEAT,
+): RoomEncounter[] {
   return floor.rooms.map((rect, i) => ({
     rect,
     phase: i === 0 ? ('cleared' as RoomPhase) : ('idle' as RoomPhase),
-    spawns: i === floor.bossRoom ? [] : computeSpawns(rect, depth, unlocked),
+    spawns: i === floor.bossRoom ? [] : computeSpawns(rect, depth, unlocked, heat),
     doorCells: computeDoorCells(floor.room, rect),
     dropsSpawned: 0,
     dropsCollected: 0,
@@ -245,6 +265,9 @@ export function updateEncounterEntry(state: GameState): void {
   if (state.room.corridor?.[ty * state.room.tilesX + tx]) return;
   enc.phase = 'active';
   state.activeRoom = idx;
+  // META L3 HEAT: per-enemy stat multipliers for THIS run (identity at NO_HEAT). Enemy-
+  // only; applied to the boss override + every regular spawn below.
+  const hm = heatStatMults(state.config.heat);
   if (idx === state.bossRoom) {
     // BOSS room (Phase 8): spawn the SINGLE boss at the room centre (boss-alone,
     // no normal spawns) and build its companion state. Tagged with this room so
@@ -253,20 +276,21 @@ export function updateEncounterEntry(state: GameState): void {
     const ts = state.room.tileSize;
     const bx = (r.x + r.w / 2) * ts;
     const by = (r.y + r.h / 2) * ts;
-    if (spawnEnemy(state.enemies, bx, by, state.run.depth, 'boss', idx)) {
+    if (spawnEnemy(state.enemies, bx, by, state.run.depth, 'boss', idx, hm)) {
       const slot = state.enemies.findIndex((e) => e.active && e.type === 'boss');
       // Override the generic base×mult HP/damage spawnEnemy just set with the boss
       // curve — DEPTH 1 is a gentle flat carve-out, depth >= 2 is the unchanged 7c
-      // curve (see bossHpForDepth / bossDamageForDepth). createBossState.maxHealth
-      // reads the same bossHpForDepth, so the HP bar + 50% gate match.
+      // curve (see bossHpForDepth / bossDamageForDepth). Heat scales these the same as
+      // a regular enemy (Thick Skin / Hard Labor); createBossState takes the SAME health
+      // mult so the HP bar + 50% gate match the boss's actual HP.
       const e = state.enemies[slot];
-      e.health = bossHpForDepth(state.run.depth);
-      e.attackDamage = bossDamageForDepth(state.run.depth);
-      state.boss = createBossState(slot, state.run.depth);
+      e.health = bossHpForDepth(state.run.depth) * hm.health;
+      e.attackDamage = bossDamageForDepth(state.run.depth) * hm.damage;
+      state.boss = createBossState(slot, state.run.depth, hm.health);
     }
   } else {
     // Tag each enemy with its owning room so the room clears on ITS OWN enemies.
-    for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type, idx);
+    for (const s of enc.spawns) spawnEnemy(state.enemies, s.x, s.y, state.run.depth, s.type, idx, hm);
   }
   setDoors(state, enc, true);
 }
