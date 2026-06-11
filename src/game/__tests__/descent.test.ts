@@ -19,6 +19,11 @@ function clearFloor(s: GameState, lastIdx = 1): void {
     s.rooms[i].phase = i === lastIdx ? 'active' : 'cleared';
   }
   s.activeRoom = lastIdx;
+  // The active room is SEALED (a real active room has its doors locked) — so the
+  // deactivate-on-leave guard (which reverts an UNSEALED active room the player has
+  // left) does not fire on this synthetic "about to resolve" state with the player
+  // parked at spawn. Resolve then clears the (enemy-less) room as the test intends.
+  for (const c of s.rooms[lastIdx].doorCells) s.room.solid[c.ty * s.room.tilesX + c.tx] = true;
   s.bossDefeated = true; // Phase 8: the boss is the descent gate (simulate the kill)
   s.player.x = s.spawn.x;
   s.player.y = s.spawn.y;

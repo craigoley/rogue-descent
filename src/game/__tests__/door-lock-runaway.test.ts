@@ -106,19 +106,43 @@ describe('(a) door-lock skips the player + re-locks on vacate', () => {
     expect(isSolid(s.room, tx, ty)).toBe(false); // the player's own tile is never solid
   });
 
-  it('re-locks the deferred cell once the player moves off (the room still seals)', () => {
+  // The deferred door's fate depends on the DIRECTION the player vacates it (the
+  // enter-then-leave softlock fix). The embed protection this test once also covered
+  // — the door is never slammed UNDER the player — still lives in the two tests above
+  // ('does NOT lock the cell the player occupies' + 'never embedded after a lock') and
+  // in the (b) per-step clamp block; it is NOT lost by this split.
+  it('VACATE INWARD — the player steps DEEPER into the room → the deferred door SEALS', () => {
     const { s, room } = activeRoomWithDoors();
     const occupied = s.rooms[room].doorCells[0];
     placeOn(s, occupied);
     updateEncounterDoors(s);
     expect(cellSolid(s, occupied)).toBe(false); // deferred while occupied
 
-    s.player.x = s.spawn.x; // step off (far away)
+    const rect = s.rooms[room].rect;
+    s.player.x = (rect.x + rect.w / 2) * s.room.tileSize; // step to the room CENTRE (still inside)
+    s.player.y = (rect.y + rect.h / 2) * s.room.tileSize;
+    updateEncounterDoors(s);
+    expect(cellSolid(s, occupied)).toBe(true); // sealed once the player is clear, INSIDE
+    for (const c of s.rooms[room].doorCells) expect(cellSolid(s, c)).toBe(true); // fully sealed
+    expect(s.rooms[room].phase).toBe('active'); // sealed IN → the fight gates normally
+    expect(s.activeRoom).toBe(room);
+  });
+
+  it('VACATE OUTWARD — the player leaves the rect → the room DEACTIVATES (never sealed out)', () => {
+    const { s, room } = activeRoomWithDoors();
+    const occupied = s.rooms[room].doorCells[0];
+    placeOn(s, occupied);
+    updateEncounterDoors(s);
+    expect(cellSolid(s, occupied)).toBe(false); // deferred while occupied
+
+    s.player.x = s.spawn.x; // flee OUT of the room (to spawn, past the doorway)
     s.player.y = s.spawn.y;
     updateEncounterDoors(s);
-    expect(cellSolid(s, occupied)).toBe(true); // sealed the moment the player vacated
-    // ...and the whole room is now sealed.
-    for (const c of s.rooms[room].doorCells) expect(cellSolid(s, c)).toBe(true);
+    // The softlock fix: the door does NOT seal behind the fleeing player; the room
+    // reverts to idle so the player is never trapped outside a live room.
+    expect(s.rooms[room].phase).toBe('idle');
+    expect(s.activeRoom).toBe(-1);
+    for (const c of s.rooms[room].doorCells) expect(cellSolid(s, c)).toBe(false); // unlocked
   });
 
   it('a locked (non-occupied) door cell is solid — normal door collision intact', () => {

@@ -135,17 +135,75 @@ function setDoors(state: GameState, enc: RoomEncounter, solid: boolean): void {
 }
 
 /**
- * Per-frame seal maintenance: re-apply the (occupancy-aware) lock to the active
- * room's doorways. Idempotent — re-locking an already-solid cell is a no-op; a
- * cell deferred because the player stood on it gets locked the frame they vacate
- * it. So the seal completes ~1 tick after the player leaves the doorway, with no
- * new state to track (an unlocked door cell of the active room IS the pending
- * state). No-op when no room is active.
+ * Per-frame seal maintenance + the DEACTIVATE-ON-LEAVE guard (softlock fix). While a
+ * room is active, either re-apply the (occupancy-aware) lock to its doorways, OR — if
+ * the player has FLED the room before it sealed — revert it so they're never sealed
+ * OUT of a live room.
+ *
+ * The invariant restored: an active (locked) room must always have the player INSIDE
+ * it (able to reach the fight). The bug window is the un-sealed gap right after entry:
+ * activation defers the door the player straddles (the embed-skip), and the original
+ * code re-locked it the moment the player vacated — sealing it behind a player who
+ * walked back OUT (enter-then-leave softlock). The fix: when the player's centre has
+ * left the rect AND they're past the doorway (not on a door cell) AND the room isn't
+ * fully sealed yet, DEACTIVATE (idle + unlock + free activeRoom + despawn its enemies)
+ * instead of sealing. Re-entering re-arms it cleanly (full reset → fresh enc.spawns).
+ *
+ * Can't-re-trap / can't-false-fire (the key property): once a room is FULLY sealed,
+ * the player physically can't leave (every door is solid) → their centre stays inside
+ * → playerRoomIndex === activeRoom → the leave-branch never fires. The grace for a
+ * player standing IN a doorway (mid-transition, entering OR leaving) is one frame; the
+ * embed-skip mechanics (door not slammed under the player) are unchanged. No-op when
+ * no room is active.
  */
 export function updateEncounterDoors(state: GameState): void {
   if (state.activeRoom < 0) return;
   const enc = state.rooms[state.activeRoom];
-  if (enc.phase === 'active') setDoors(state, enc, true);
+  if (enc.phase !== 'active') return;
+  if (
+    playerRoomIndex(state) !== state.activeRoom && // the player's centre left the rect
+    !playerOnActiveDoorCell(state, enc) && // ...and is past the doorway (not mid-door)
+    !allDoorsSealed(state, enc) // ...while the room hasn't sealed them in
+  ) {
+    deactivateRoom(state, enc, state.activeRoom); // fled before clearing → revert
+    return;
+  }
+  setDoors(state, enc, true);
+}
+
+/** True once every one of the room's doorway cells is solid (the room has fully
+ *  sealed — the player can no longer leave, so the leave-guard must not fire). */
+function allDoorsSealed(state: GameState, enc: RoomEncounter): boolean {
+  const room = state.room;
+  for (const c of enc.doorCells) {
+    if (!room.solid[c.ty * room.tilesX + c.tx]) return false;
+  }
+  return true;
+}
+
+/** True when the player's centre tile is one of the room's doorway cells — i.e. the
+ *  player is standing IN a doorway (mid-transition). A one-frame grace so a player
+ *  passing through the door isn't treated as "fled" until they're past it. */
+function playerOnActiveDoorCell(state: GameState, enc: RoomEncounter): boolean {
+  const ts = state.room.tileSize;
+  const tx = Math.floor(state.player.x / ts);
+  const ty = Math.floor(state.player.y / ts);
+  for (const c of enc.doorCells) if (c.tx === tx && c.ty === ty) return true;
+  return false;
+}
+
+/** Revert an active room the player FLED before clearing (softlock fix): unlock its
+ *  doors, set it back to idle, free the active slot, and despawn its (room-tagged)
+ *  enemies — a full reset so re-entry respawns fresh from enc.spawns (deterministic).
+ *  A fled BOSS room also drops the boss companion so a re-entry respawns it cleanly. */
+function deactivateRoom(state: GameState, enc: RoomEncounter, idx: number): void {
+  setDoors(state, enc, false); // unlock every door — the player is free
+  enc.phase = 'idle'; // re-arm: re-entering AND staying re-activates + re-seals
+  state.activeRoom = -1;
+  for (const e of state.enemies) {
+    if (e.active && e.roomIndex === idx) e.active = false; // despawn this room's fight
+  }
+  if (idx === state.bossRoom) state.boss = null; // a fled boss respawns on re-entry
 }
 
 /** Index of the encounter room containing the player, or -1 (corridor). */
