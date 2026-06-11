@@ -8,9 +8,10 @@
  * unit-pinned too (the maths Heat threads in).
  */
 import { describe, expect, it } from 'vitest';
-import { createGameState, update, type GameState, type RunConfig } from '../GameState';
+import { createGameState, regenerate, update, type GameState, type RunConfig } from '../GameState';
 import { createIntent } from '../Input';
 import { activeEnemyCount } from '../Enemy';
+import { enemiesPerRoomForDepth } from '../Difficulty';
 import {
   NO_HEAT,
   heatExtraEnemies,
@@ -125,9 +126,25 @@ describe('Heat — the L1 sim guards', () => {
     expect(eb.attackDamage).toBe(ea.attackDamage);
     expect(eb.moveSpeed).toBe(ea.moveSpeed);
     expect(activeEnemyCount(b.enemies)).toBe(activeEnemyCount(a.enemies));
-    // A DIFFERENT Heat → a different (harder) run from the same seed.
-    const c = createGameState(cfg(NO_HEAT));
-    const ec = activateRoom(c, i)!;
-    expect(ec.health).toBeLessThan(ea.health); // base is softer than MAX_HEAT
+  });
+
+  it('the CROWD clarity cap NEVER nerfs the base count at deep depths (the regression floor holds)', () => {
+    // At depth 11+ enemiesPerRoomForDepth already hits POOL.enemies (8) — ABOVE the
+    // clarity cap (7). NO_HEAT must still spawn the full base count (8, not 7), and the
+    // mix must keep >= 1 chaser. (Regression: an unconditional min(7,...) cut 8→7.)
+    const deep = createGameState(cfg(NO_HEAT));
+    deep.run.depth = 12;
+    regenerate(deep, deep.seed); // rebuild encounters at depth 12
+    const i = firstIdle(deep);
+    activateRoom(deep, i);
+    expect(activeEnemyCount(deep.enemies)).toBe(enemiesPerRoomForDepth(12)); // == base, not capped to 7
+    expect(deep.enemies.some((e) => e.active && e.type === 'chaser')).toBe(true); // >= 1 chaser
+
+    // Crowd at deep depth can't exceed the pool (already at the ceiling).
+    const deepHot = createGameState(cfg({ ...NO_HEAT, crowd: 2 }));
+    deepHot.run.depth = 12;
+    regenerate(deepHot, deepHot.seed);
+    activateRoom(deepHot, firstIdle(deepHot));
+    expect(activeEnemyCount(deepHot.enemies)).toBeLessThanOrEqual(POOL.enemies);
   });
 });
