@@ -135,6 +135,67 @@ describe('L1 integration: softlock regression guard (#39 / #42 / #43)', () => {
     expect(s.activeRoom).toBe(0);
   });
 
+  it('enter-then-LEAVE — a player who exits an active room BEFORE clearing is never sealed OUT', () => {
+    // The enter-then-leave softlock (Craig's repro): the room activated + the entry
+    // door deferred (occupancy-skip), then the player walked back OUT and the door
+    // sealed BEHIND them — stranding them outside a live, locked room forever.
+    const s = createGameState();
+    const room = s.rooms.findIndex((r, i) => i > 0 && r.phase === 'idle' && r.doorCells.length >= 1);
+    expect(room).toBeGreaterThan(0);
+    s.rooms[room].phase = 'active';
+    s.activeRoom = room;
+    for (const c of s.rooms[room].doorCells) s.room.solid[c.ty * s.room.tilesX + c.tx] = false;
+    // A living enemy keeps the room a real fight (roomEnemyCount > 0).
+    const rr = s.rooms[room].rect;
+    const ts = s.room.tileSize;
+    spawnEnemy(s.enemies, (rr.x + rr.w / 2) * ts, (rr.y + rr.h / 2) * ts, 1, 'chaser', room);
+
+    // Player in the doorway (the un-sealed window — the entry door deferred open).
+    const door = s.rooms[room].doorCells[0];
+    s.player.x = (door.tx + 0.5) * ts;
+    s.player.y = (door.ty + 0.5) * ts;
+    update(s, idle(), DT); // standing IN the door → grace; the room is still active
+    expect(s.rooms[room].phase).toBe('active');
+
+    // The player completes the exit — past the doorway, out to spawn.
+    s.player.x = s.spawn.x;
+    s.player.y = s.spawn.y;
+    update(s, idle(), DT);
+
+    // FIXED: the room DEACTIVATES instead of sealing behind the fleeing player.
+    expect(s.rooms[room].phase).toBe('idle'); // reverted (was 'active' + STUCK pre-fix)
+    expect(s.activeRoom).toBe(-1); // active slot freed
+    for (const c of s.rooms[room].doorCells) expect(isSolid(s.room, c.tx, c.ty)).toBe(false); // unlocked
+    expect(activeEnemyCount(s.enemies)).toBe(0); // its fight despawned (re-arms on re-entry)
+
+    // ...and re-entering AND staying re-activates it cleanly (fresh fight).
+    placeInRoom(s, room);
+    update(s, idle(), DT);
+    expect(s.rooms[room].phase).toBe('active');
+    expect(s.activeRoom).toBe(room);
+    expect(activeEnemyCount(s.enemies)).toBeGreaterThan(0); // respawned from enc.spawns
+  });
+
+  it('enter-and-STAY — staying inside still SEALS (all doors solid) and the fight gates → unlock on clear', () => {
+    // The inverse of the fix: it must NOT have broken the normal case. Walk in and
+    // STAY → the room seals around you, the fight gates, clearing unlocks.
+    const s = createGameState();
+    const room = s.rooms.findIndex((r, i) => i > 0 && r.phase === 'idle' && r.doorCells.length >= 1);
+    placeInRoom(s, room); // genuine body-floor entry, then stay
+    update(s, idle(), DT);
+    expect(s.rooms[room].phase).toBe('active');
+
+    for (let f = 0; f < 5; f++) update(s, idle(), DT); // stay a few frames
+    for (const c of s.rooms[room].doorCells) expect(isSolid(s.room, c.tx, c.ty)).toBe(true); // SEALED
+    expect(s.activeRoom).toBe(room); // still the single active room (no spurious deactivate)
+
+    killRoomEnemies(s, room);
+    update(s, idle(), DT);
+    expect(s.rooms[room].phase).toBe('cleared'); // clears on roomEnemyCount === 0
+    for (const c of s.rooms[room].doorCells) expect(isSolid(s.room, c.tx, c.ty)).toBe(false); // unlocked
+    expect(s.activeRoom).toBe(-1);
+  });
+
   it('#39 — a second room never double-activates while one is live', () => {
     const s = createGameState();
     const a = s.rooms.findIndex((r, i) => i > 0 && r.phase === 'idle');
