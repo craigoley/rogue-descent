@@ -93,6 +93,12 @@ export interface Enemy {
    *  burn-TICK kill on an enemy with this set is a WILDFIRE kill (Combat death choke).
    *  Pure feedback/attribution — never read by AI/movement. */
   ignitedByChain: boolean;
+  /** BRUISER lunge direction (unit vector), CAPTURED at telegraph-start and held
+   *  through the strike — the committed leap is fixed (you dodge ACROSS it, not just
+   *  back). Deterministic (derived from sim state, no RNG). Only the bruiser reads it;
+   *  reset on spawn. */
+  lungeDirX: number;
+  lungeDirY: number;
 }
 
 export function createEnemyPool(): Enemy[] {
@@ -120,6 +126,8 @@ export function createEnemyPool(): Enemy[] {
     slowTimer: 0,
     slowFactor: 1,
     ignitedByChain: false,
+    lungeDirX: 0,
+    lungeDirY: 0,
   }));
 }
 
@@ -170,6 +178,8 @@ export function spawnEnemy(
     e.slowTimer = 0; // ...nor a freeze/slow
     e.slowFactor = 1;
     e.ignitedByChain = false; // ...nor a stale wildfire-attribution flag
+    e.lungeDirX = 0; // ...nor a stale bruiser lunge vector
+    e.lungeDirY = 0;
     return true;
   }
   return false;
@@ -416,6 +426,68 @@ function updateSwarmer(e: Enemy, state: GameState, dt: number, dx: number, dy: n
   }
 }
 
+/**
+ * BRUISER AI (the HEAVY): the shared chase→telegraph→strike→recover machine, slow +
+ * heavy, with one new behaviour — a COMMITTED LUNGE on the slam. The lunge direction
+ * is captured at telegraph-START (so the player has the whole wind-up to step ACROSS
+ * it — a sidestep/dash whiffs the leap, a straight backstep doesn't escape it); the
+ * strike drives along that FIXED vector at lungeSpeed (unlike the swarmer's homing
+ * dart). Deterministic (the vector is sim state, no RNG); the lunge rides the shared
+ * integrate tail → collision-clamped (no wall tunnel, stays in-room). Writes _vel.
+ */
+function updateBruiser(e: Enemy, state: GameState, dt: number, dx: number, dy: number, d: number): void {
+  const B = ENEMY_TYPES.bruiser;
+  const { player } = state;
+  _vel.x = 0;
+  _vel.y = 0;
+  switch (e.phase) {
+    case 'chase':
+      if (player.alive && d <= B.attackRange && d > 0) {
+        // Plant + wind up — and COMMIT the lunge direction NOW (telegraph-start), so the
+        // leap is dodgeable across during the wind-up.
+        e.phase = 'telegraph';
+        e.timer = B.telegraph;
+        e.lungeDirX = dx / d;
+        e.lungeDirY = dy / d;
+      } else if (player.alive && d > 0) {
+        _vel.x = (dx / d) * e.moveSpeed; // slow approach (depth-scaled at spawn)
+        _vel.y = (dy / d) * e.moveSpeed;
+      }
+      break;
+    case 'telegraph':
+      // A heavy PLANTS its feet during the wind-up (no drift — the amber + scale-grow
+      // tell reads the incoming slam). Then it leaps.
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'strike';
+        e.timer = B.strike;
+        e.struck = false;
+      }
+      break;
+    case 'strike':
+      // THE LUNGE: drive along the COMMITTED direction (fixed since telegraph-start) at
+      // lungeSpeed — a readable forward leap, collision-clamped by the integrate tail.
+      _vel.x = e.lungeDirX * B.lungeSpeed;
+      _vel.y = e.lungeDirY * B.lungeSpeed;
+      // The slam connects ONCE if the player is within reach at any point in the window
+      // (the lunge can close the gap on a straight backstep; a sidestep leaves the line).
+      if (!e.struck && player.alive && d <= B.attackReach) {
+        e.struck = true;
+        damagePlayer(player, e.attackDamage, state); // depth-scaled at spawn
+      }
+      e.timer -= dt;
+      if (e.timer <= 0) {
+        e.phase = 'recover';
+        e.timer = B.recover; // LONG — the vulnerable punish window
+      }
+      break;
+    case 'recover':
+      e.timer -= dt;
+      if (e.timer <= 0) e.phase = 'chase';
+      break;
+  }
+}
+
 /** Advance every active enemy one fixed step against the shared game state. */
 export function updateEnemies(state: GameState, dt: number): void {
   const { player, room, enemies } = state;
@@ -468,6 +540,9 @@ export function updateEnemies(state: GameState, dt: number): void {
           break;
         case 'swarmer':
           updateSwarmer(e, state, dt, dx, dy, d);
+          break;
+        case 'bruiser':
+          updateBruiser(e, state, dt, dx, dy, d);
           break;
         case 'boss':
           updateBoss(e, state, dt, dx, dy, d, _vel);

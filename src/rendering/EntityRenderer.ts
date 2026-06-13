@@ -76,6 +76,7 @@ const ENEMY_FIGURE: Record<EnemyType, FigureDims> = {
   armored: FIGURE.armored,
   ranged: FIGURE.ranged,
   swarmer: FIGURE.swarmer,
+  bruiser: FIGURE.bruiser,
   // The boss is a BESPOKE single mesh (see makeBoss / syncBoss), NOT a pooled
   // figure — this entry only satisfies the Record<EnemyType> type; it's never
   // built (boss is excluded from ENEMY_KINDS).
@@ -87,12 +88,13 @@ const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
   armored: PALETTE.enemyArmored,
   ranged: PALETTE.enemyRanged,
   swarmer: PALETTE.enemySwarmer,
+  bruiser: PALETTE.enemyBruiser,
   boss: PALETTE.enemyBoss,
   bossadd: PALETTE.enemyBossAdd,
 };
 /** Pooled figure kinds — the boss is excluded (bespoke single mesh, not pooled);
  *  the boss-add (gimmick #2) IS pooled like the base enemies. */
-const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bossadd'];
+const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bruiser', 'bossadd'];
 
 /** Death-POP scale (juice PR-1/PR-5): a fast UP-phase to 1+overshoot, then an eased
  *  (accelerating) collapse to 0 — the figure "pops" out of existence. Pure: the
@@ -522,7 +524,7 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], boss: [], bossadd: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], bruiser: [], boss: [], bossadd: [] };
   /** Bespoke single boss mesh (Phase 8): a large armored body + head, an orbiting
    *  bright WEAK-POINT marker (gimmick #1 tell) and a floor ring. Not pooled. */
   private readonly bossGroup: Group;
