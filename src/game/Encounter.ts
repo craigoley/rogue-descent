@@ -100,14 +100,24 @@ function computeSpawns(
     unlocked.has('armored-chaser') && depth >= ENCOUNTER.armoredMinDepth
       ? Math.min(ENCOUNTER.armoredPerRoom, Math.max(0, chasers - 1))
       : 0;
-  const plainChasers = chasers - armored;
+  // BRUISER (the HEAVY, BASE roster — no unlock): substitute a chaser slot from
+  // bruiserMinDepth onward — never the leading slot AND never an armored slot (>= 1 plain
+  // chaser always remains). HARD-capped at bruiserPerRoom (1) → one Heavy is a threat, it
+  // can NEVER swarm (even when Heat-Crowd inflates the count). Shallow depth → 0 → spawns
+  // byte-identical to today (the regression floor).
+  const bruiser =
+    depth >= ENCOUNTER.bruiserMinDepth
+      ? Math.min(ENCOUNTER.bruiserPerRoom, Math.max(0, chasers - 1 - armored))
+      : 0;
+  const plainChasers = chasers - armored - bruiser;
   const spread = ENCOUNTER.spawnSpread;
   const out: { x: number; y: number; type: EnemyType }[] = [];
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2;
     let type: EnemyType;
     if (k < plainChasers) type = 'chaser';
-    else if (k < chasers) type = 'armored'; // tail of the chaser block (never slot 0)
+    else if (k < plainChasers + armored) type = 'armored'; // chaser-block tail (never slot 0)
+    else if (k < chasers) type = 'bruiser'; // ...then the Heavy (also never slot 0)
     else if (k < chasers + ranged) type = 'ranged';
     else type = 'swarmer';
     out.push({ x: cx + Math.cos(ang) * spread, y: cy + Math.sin(ang) * spread, type });

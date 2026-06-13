@@ -192,12 +192,13 @@ describe('Ranged spawn mix — deterministic count rule (no RNG)', () => {
     const live = activateRoomEnemies(createGameState(), depth);
     const ranged = live.filter((e) => e.type === 'ranged').length;
     const swarmers = live.filter((e) => e.type === 'swarmer').length;
+    const bruisers = live.filter((e) => e.type === 'bruiser').length; // base roster, depth >= 5
     const chasers = live.filter((e) => e.type === 'chaser').length;
     expect(live.length).toBe(enemiesPerRoomForDepth(depth));
     expect(ranged).toBe(rangedCountForDepth(depth));
-    // Generalised past the two-type assumption: chasers fill whatever the
-    // specials (ranged + swarmers) leave — and there's always >= 1 chaser.
-    expect(chasers).toBe(live.length - ranged - swarmers);
+    // Generalised: chasers fill whatever the specials (ranged + swarmers) AND the
+    // chaser-block substitutions (bruiser) leave — and there's always >= 1 chaser.
+    expect(chasers).toBe(live.length - ranged - swarmers - bruisers);
     expect(chasers).toBeGreaterThanOrEqual(1);
   });
 

@@ -31,6 +31,11 @@ export const PALETTE = {
    *  distinct from the chaser's pink-red and the ranged crimson. The SMALL
    *  scuttling silhouette is the primary tell; hue is secondary (crowded wheel). */
   enemySwarmer: 0xff4422,
+  /** BRUISER body (the HEAVY archetype) — a deep BRUISE-PURPLE: pulled OUT of the
+   *  warm enemy reds (chaser pink-red / armored steel / ranged crimson / swarmer
+   *  vermilion) so the big slow silhouette ALSO reads by hue. The SIZE is the primary
+   *  tell ("the dangerous slow one"); the bruise tone is the secondary cue. */
+  enemyBruiser: 0x8a4a9c,
   /** BOSS body (Phase 8) — dark armored maroon: clearly "boss", distinct from the
    *  three brighter enemy reds. The SIZE + HP bar are the primary tells. */
   enemyBoss: 0x7a1020,
@@ -719,7 +724,7 @@ export const ENEMY_PROJ = {
 /** Enemy roster (Phase 7.5). Adding a type = a new ENEMY_TYPES entry + an AI fn +
  *  a render figure/colour — no other plumbing. Per-type SIM stats live here;
  *  generic feedback/physics shared by every type lives in ENEMY_COMMON. */
-export type EnemyType = 'chaser' | 'armored' | 'ranged' | 'swarmer' | 'boss' | 'bossadd';
+export type EnemyType = 'chaser' | 'armored' | 'ranged' | 'swarmer' | 'bruiser' | 'boss' | 'bossadd';
 
 /** Shared across ALL enemy types (not per-type tuning). */
 export const ENEMY_COMMON = {
@@ -854,6 +859,45 @@ export const ENEMY_TYPES = {
      *  melee crowd-control against a surrounding pack). */
     knockbackMult: 2.2,
   },
+  /** The BRUISER — the roster's HEAVY archetype: big, SLOW, high-HP, with a
+   *  telegraphed melee SLAM that LUNGES forward on the strike. Distinct from the
+   *  armored chaser (fast-tanky, no special attack): the bruiser is slow-tanky-WITH-
+   *  a-committed-lunge. Reuses the shared chase→telegraph→strike→recover machine; the
+   *  ONLY new behaviour is the lunge (a fixed-direction leap captured at telegraph-
+   *  start — dodge ACROSS it, not just back). Rides Heat (heatStatMults at spawn) +
+   *  synergy (slow + high-HP = a great burn/crit/chain target). Base roster, depth-
+   *  gated (DIFFICULTY.bruiserMinDepth), 1/room cap. All by-feel. */
+  bruiser: {
+    /** TANKY — a wear-down target, tankier than armored (90); the slow HP sponge that
+     *  rewards sustained DPS / burn / chain. */
+    maxHealth: 140,
+    /** SLOW — well below the chaser (3.3); forces the player to kite it. */
+    moveSpeed: 2,
+    /** Distance at which it plants + begins the wind-up (a bit further than the
+     *  chaser since the slam + lunge reach far). */
+    attackRange: 1.9,
+    /** Wind-up before the slam, seconds — GENEROUS + readable (the dodge window). A
+     *  Heavy is FAIR because you clearly see the big hit coming. */
+    telegraph: 0.65,
+    /** Slam active window, seconds — the lunge drives over this window. */
+    strike: 0.15,
+    /** Post-slam pause before chasing again, seconds — LONG: the punish window (the
+     *  reward for dodging — hit it while it's vulnerable). */
+    recover: 0.8,
+    /** HIGH slam damage — respect its space (chaser is 18). */
+    attackDamage: 40,
+    /** The slam connects if the player is within this at strike time — a short-range
+     *  AOE ("don't be near it when it slams"), bigger than the chaser's 1.7. */
+    attackReach: 2.2,
+    /** Speed of the committed forward LUNGE during the strike, world units/sec — a
+     *  readable LEAP (fast over the strike window, collision-clamped by the tail). */
+    lungeSpeed: 11,
+    /** Collision/visual radius — the BIGGEST non-boss silhouette (the primary "slow
+     *  dangerous one" read). */
+    radius: 0.6,
+    /** HEAVY — barely shoved (lower than armored's 0.6). */
+    knockbackMult: 0.4,
+  },
   /** Phase 8 BOSS: a bespoke, large, two-phase enemy in the LAST room of every
    *  floor that gates descent. It's a pooled Enemy (reuses damage/clearing/
    *  gating) but its rich behaviour lives in state.boss (see Boss.ts); its
@@ -949,6 +993,14 @@ export const ENCOUNTER = {
    *  unchanged). Locked / shallower depth → 0 armored → spawns identical to today. */
   armoredMinDepth: 3,
   armoredPerRoom: 1,
+  /** BRUISER (the HEAVY) gating — BASE roster (always present, no unlock): substitute up
+   *  to `bruiserPerRoom` chaser slots for the bruiser from depth `bruiserMinDepth` onward
+   *  (never the leading slot — >= 1 plain chaser remains; total count unchanged). Deeper
+   *  than the armored gate (the player needs the toolkit to kite it), and HARD-CAPPED at 1
+   *  per room — one Heavy is a threat; it can NEVER swarm (even under Heat-Crowd). Shallower
+   *  depth → 0 bruisers → spawns identical to today. By-feel. */
+  bruiserMinDepth: 5,
+  bruiserPerRoom: 1,
 } as const;
 
 /**
@@ -1397,6 +1449,7 @@ export const ENEMY_DEATH_TINT: Record<EnemyType, number> = {
   armored: 0xc8d4e6, // bright steel (body 0x9aa6b8)
   ranged: 0xff5570, // bright crimson (body 0xcc1133)
   swarmer: 0xff8a55, // bright vermilion (body 0xff4422)
+  bruiser: 0xc77add, // bright bruise-purple (body 0x8a4a9c)
   boss: 0xff5a72, // bright maroon-red (body 0x7a1020) — boss death juiced later
   bossadd: 0xffb066, // bright ember (body 0xff8a3c)
 };
@@ -1571,6 +1624,15 @@ export const FIGURE = {
     bodyHeight: 0.5,
     headRadius: 0.2,
     visorSize: 0.14,
+  },
+  /** BRUISER silhouette — the BIGGEST non-boss figure: a wide, heavy, tall body so it
+   *  reads instantly as "the slow dangerous one" (the size IS the primary tell). */
+  bruiser: {
+    bodyRadiusTop: 0.6,
+    bodyRadiusBottom: 0.64,
+    bodyHeight: 1.05,
+    headRadius: 0.4,
+    visorSize: 0.24,
   },
   /** Boss-add silhouette (Phase 8, gimmick #2) — SMALL + spindly with a big head:
    *  a frail summoned thing. Reads as the weak, glowing minion (ember palette),
