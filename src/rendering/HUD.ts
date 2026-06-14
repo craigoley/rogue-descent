@@ -138,8 +138,11 @@ export class HUD {
   /** The title wordmark — present on spawn, then FADES on first room entry (HUD
    *  reduction); a render-side latch flips it once (.is-faded). */
   private readonly titleEl: HTMLDivElement;
+  /** The combat-bars block (health/dash/chips). On first room entry it COMPACTS UP
+   *  (.is-compact) into the space the faded title+depth vacate — closing the gap. */
+  private readonly barsEl: HTMLDivElement;
   /** Latched true the first time the player enters an encounter room (activeRoom >= 0),
-   *  so the title fades exactly once and never reappears. */
+   *  so the title+depth fade + the bars rise happen exactly once and never revert. */
   private titleFaded = false;
   /** Leveled-powerup chips (Phase 9): each shows up to POWERUP_MAX_LEVEL pips
    *  (filled = current level), lit when level > 0. */
@@ -195,6 +198,7 @@ export class HUD {
 
     // Combat HUD (always on): labelled health bar + dash-readiness bar.
     const bars = document.createElement('div');
+    this.barsEl = bars;
     bars.className = 'hud-bars';
     const makeBar = (label: string, rowMod: string, trackMod: string): HTMLDivElement => {
       const row = document.createElement('div');
@@ -645,15 +649,23 @@ export class HUD {
       this.bossWrap.style.display = 'none';
     }
 
-    // TITLE FADE (HUD reduction): the wordmark is a spawn flourish — fade it the first
-    // time the player enters an encounter room (activeRoom >= 0). Latched once so it
-    // never reappears. The fade itself is the CSS .is-faded transition (reduce-motion =
-    // an instant hide; see the CSS). State-triggered, so the frozen ?still spawn frame
-    // (activeRoom -1) keeps the title fully present → a stable, non-flaky baseline.
+    // HUD REFLOW (HUD reduction): the title+depth are a spawn flourish — on the first
+    // encounter-room entry (activeRoom >= 0) they FADE OUT and the combat bars (health/
+    // dash/chips) COMPACT UP into the reclaimed space (closing #99's gap). Latched once
+    // so it never reverts. The fade/rise are CSS transitions; reduce-motion makes them
+    // instant (transition:none inline). State-triggered, so the frozen ?still spawn frame
+    // (activeRoom -1) keeps the FULL, uncompacted HUD → a stable, non-flaky baseline.
     if (!this.titleFaded && state.activeRoom >= 0) {
       this.titleFaded = true;
-      if (this.reduceMotion) this.titleEl.style.transition = 'none'; // instant hide, no fade
+      if (this.reduceMotion) {
+        // Instant: snap to the compacted end-state, no fade/rise animation.
+        this.titleEl.style.transition = 'none';
+        this.depthEl.style.transition = 'none';
+        this.barsEl.style.transition = 'none';
+      }
       this.titleEl.classList.add('is-faded');
+      this.depthEl.classList.add('is-faded'); // depth fades WITH the title
+      this.barsEl.classList.add('is-compact'); // ...and the bars rise into the gap
     }
 
     // Depth (always): current floor this run.
