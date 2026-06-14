@@ -33,6 +33,7 @@ import {
   CSS_PALETTE,
   DASH,
   DESCENT,
+  HUD_UI,
   PLAYER_COMBAT,
   POWERUP_MAX_LEVEL,
   SOFTLOCK_DETECT,
@@ -41,15 +42,28 @@ import {
   VIGNETTE,
 } from '../utils/constants';
 
-/** A leveled-powerup chip (Phase 9): the chip element + its pip dots. */
+/** A leveled-powerup chip (Phase 9): the chip element + its pip dots, plus the render-
+ *  side change-diff state (HUD reduction): `prevLevel` to detect an increment and
+ *  `flareUntil` (wall-clock ms) so a leveled-up chip FLARES briefly out of its collapsed
+ *  state — the chip flare IS the pickup/level feedback. */
 interface LevelChip {
   chip: HTMLSpanElement;
   pips: HTMLSpanElement[];
+  prevLevel: number;
+  flareUntil: number;
 }
 
-/** Light the chip when held (level > 0) and fill `level` pips. */
-function setChipLevel(c: LevelChip, level: number): void {
+/** Light the chip when held (level > 0), fill `level` pips, and drive the collapsed→
+ *  flare→collapse change-feedback: an INCREMENT arms a brief flare (brighten + a slight
+ *  scale); reduce-motion keeps the brighten (info) but drops the scale (motion). The
+ *  chips' default collapsed/dim look is pure CSS — this only adds the transient flare. */
+function setChipLevel(c: LevelChip, level: number, now: number, reduceMotion: boolean): void {
+  if (level > c.prevLevel) c.flareUntil = now + HUD_UI.chipFlareMs; // leveled up → flare
+  c.prevLevel = level;
+  const flaring = now < c.flareUntil;
   c.chip.classList.toggle('is-on', level > 0);
+  c.chip.classList.toggle('is-flaring', flaring); // brighten (info — kept under reduce-motion)
+  c.chip.classList.toggle('is-flaring-scale', flaring && !reduceMotion); // the pop (motion — gated)
   for (let i = 0; i < c.pips.length; i++) c.pips[i].classList.toggle('is-filled', i < level);
 }
 
@@ -121,6 +135,12 @@ export class HUD {
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
   private readonly depthEl: HTMLDivElement;
+  /** The title wordmark — present on spawn, then FADES on first room entry (HUD
+   *  reduction); a render-side latch flips it once (.is-faded). */
+  private readonly titleEl: HTMLDivElement;
+  /** Latched true the first time the player enters an encounter room (activeRoom >= 0),
+   *  so the title fades exactly once and never reappears. */
+  private titleFaded = false;
   /** Leveled-powerup chips (Phase 9): each shows up to POWERUP_MAX_LEVEL pips
    *  (filled = current level), lit when level > 0. */
   private readonly meleeChip: LevelChip;
@@ -161,11 +181,11 @@ export class HUD {
     this.floorTransition.className = 'hud-floor-transition';
     container.appendChild(this.floorTransition);
 
-    const title = document.createElement('div');
-    title.className = 'hud-title';
-    title.textContent = 'ROGUE DESCENT';
-    title.style.color = CSS_PALETTE.player;
-    container.appendChild(title);
+    this.titleEl = document.createElement('div');
+    this.titleEl.className = 'hud-title';
+    this.titleEl.textContent = 'ROGUE DESCENT';
+    this.titleEl.style.color = CSS_PALETTE.player;
+    container.appendChild(this.titleEl);
 
     // Depth indicator (under the title) — how far down this run has reached.
     this.depthEl = document.createElement('div');
@@ -246,7 +266,7 @@ export class HUD {
       }
       chip.append(label, pipWrap);
       powersRow.appendChild(chip);
-      return { chip, pips };
+      return { chip, pips, prevLevel: 0, flareUntil: 0 };
     };
     this.meleeChip = makeChip('MELEE', 'is-melee', CSS_PALETTE.melee);
     this.rangedChip = makeChip('RANGED', 'is-ranged', CSS_PALETTE.projectile);
@@ -625,21 +645,33 @@ export class HUD {
       this.bossWrap.style.display = 'none';
     }
 
+    // TITLE FADE (HUD reduction): the wordmark is a spawn flourish — fade it the first
+    // time the player enters an encounter room (activeRoom >= 0). Latched once so it
+    // never reappears. The fade itself is the CSS .is-faded transition (reduce-motion =
+    // an instant hide; see the CSS). State-triggered, so the frozen ?still spawn frame
+    // (activeRoom -1) keeps the title fully present → a stable, non-flaky baseline.
+    if (!this.titleFaded && state.activeRoom >= 0) {
+      this.titleFaded = true;
+      if (this.reduceMotion) this.titleEl.style.transition = 'none'; // instant hide, no fade
+      this.titleEl.classList.add('is-faded');
+    }
+
     // Depth (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
 
-    // Active powerups (always): lit when held (level > 0), with filled pips = the
-    // tier. Persists across descent, so this is the only on-screen build reminder.
-    setChipLevel(this.meleeChip, state.player.meleeLevel);
-    setChipLevel(this.rangedChip, state.player.rangedLevel);
-    setChipLevel(this.pierceChip, state.player.pierceLevel);
-    setChipLevel(this.knockbackChip, state.player.knockbackLevel);
-    setChipLevel(this.lifestealChip, state.player.lifestealLevel);
-    setChipLevel(this.burnChip, state.player.burnLevel);
-    setChipLevel(this.chainChip, state.player.chainLevel);
-    setChipLevel(this.critChip, state.player.critLevel);
-    setChipLevel(this.freezeChip, state.player.freezeLevel);
-    setChipLevel(this.fireRateChip, state.player.fireRateLevel);
+    // Active powerups (collapsed/dim by default; a leveled-up chip FLARES = the pickup/
+    // level feedback). Persists across descent — the only on-screen build reminder.
+    const chipNow = performance.now();
+    setChipLevel(this.meleeChip, state.player.meleeLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.rangedChip, state.player.rangedLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.pierceChip, state.player.pierceLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.knockbackChip, state.player.knockbackLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.lifestealChip, state.player.lifestealLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.burnChip, state.player.burnLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.chainChip, state.player.chainLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.critChip, state.player.critLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.freezeChip, state.player.freezeLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.fireRateChip, state.player.fireRateLevel, chipNow, this.reduceMotion);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);
