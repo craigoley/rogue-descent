@@ -28,6 +28,11 @@
      centred, full-width DEPTH counter (which caused the "PTH 1" overlap when
      DEPTH was on the old --hud-title-clear row with the left bars). */
   --hud-band-clear: 84px;
+  /* Compacted top-band offset (HUD reflow): once the title+depth fade on room-entry,
+     BOTH sides land here — the left bars rise to it (#100) and the right minimap+gear
+     are anchored to it — so the whole top band compacts to the top SYMMETRICALLY. 12px
+     mirrors the title's old margin-top, clear of the safe-area inset. */
+  --hud-band-top: 12px;
   /* Width the top-right minimap + its insets + a gap reserve on the right, so the
      left-anchored powers (chip) row caps its width here and WRAPS within the left
      region instead of underlapping the minimap at narrow widths. Sized for the
@@ -145,7 +150,11 @@ body {
    canvas paints its own translucent panel + border, so no background here. */
 .minimap {
   position: fixed;
-  top: calc(var(--safe-top) + var(--hud-band-clear));
+  /* Raised to the compacted top band (HUD compact, right side) so it matches the left
+     bars' reclaim (#100) — both sides sit at the top, symmetric. Its TOP edge clears
+     the safe-area inset; the chip-row width cap (--hud-minimap-reserve) keeps the risen
+     left chips clear of it horizontally (the #75 reserve is position-independent). */
+  top: calc(var(--safe-top) + var(--hud-band-top));
   right: calc(var(--safe-right) + 10px);
   border-radius: 6px;
   pointer-events: none;
@@ -173,7 +182,7 @@ body {
    the title was) — a GPU-friendly transform, not a top/layout change. The minimap is
    corner-anchored + unaffected; the chip row's width cap keeps it clear of it. */
 .hud-bars.is-compact {
-  transform: translateY(calc(12px - var(--hud-band-clear)));
+  transform: translateY(calc(var(--hud-band-top) - var(--hud-band-clear)));
 }
 
 /* One labelled bar: a small right-aligned caption + the track, so a new player
@@ -986,7 +995,9 @@ body {
    "SOUND" / "MOTION ON" HUD buttons, decluttering the play HUD. */
 .hud-settings-btn {
   position: fixed;
-  top: calc(var(--safe-top) + var(--hud-band-clear) + 136px);
+  /* Below the minimap (+136px), raised with it to the compacted top band — the
+     gear/minimap relative arrangement is preserved, the group just shifts up. */
+  top: calc(var(--safe-top) + var(--hud-band-top) + 136px);
   right: calc(var(--safe-right) + 10px);
   width: 30px;
   height: 30px;
@@ -1008,8 +1019,8 @@ body {
 
 .hud-settings-panel {
   position: fixed;
-  /* Just below the gear button, right-aligned with it. */
-  top: calc(var(--safe-top) + var(--hud-band-clear) + 172px);
+  /* Just below the gear button, right-aligned with it (raised with the gear). */
+  top: calc(var(--safe-top) + var(--hud-band-top) + 172px);
   right: calc(var(--safe-right) + 10px);
   display: none;
   flex-direction: column;
