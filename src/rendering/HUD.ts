@@ -166,9 +166,14 @@ export class HUD {
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
   private readonly minimap: Minimap;
+  /** The HUD root (#app). Carries the at-rest→compacted layout state as classes so a
+   *  single toggle drives the right-side cluster (minimap + settings gear/panel) the way
+   *  the bars/title drive the left + centre — see the room-entry latch in update(). */
+  private readonly container: HTMLElement;
 
   constructor(container: HTMLElement) {
     this.debug = isDebugEnabled();
+    this.container = container;
     this.minimap = new Minimap(container);
 
     // Full-screen damage vignette — a red edge-glow over the canvas (below the
@@ -545,6 +550,10 @@ export class HUD {
    *  handled separately in main.ts's render loop. */
   setReduceMotion(on: boolean): void {
     this.reduceMotion = on;
+    // The right-side cluster (minimap + gear/panel) rises on room-entry via a CSS
+    // transform; reduce-motion snaps it instantly (the bars do this with an inline
+    // transition:none in the latch — this class is its right-side counterpart).
+    this.container.classList.toggle('is-reduce-motion', on);
   }
 
   /**
@@ -666,6 +675,9 @@ export class HUD {
       this.titleEl.classList.add('is-faded');
       this.depthEl.classList.add('is-faded'); // depth fades WITH the title
       this.barsEl.classList.add('is-compact'); // ...and the bars rise into the gap
+      // ...and the right-side cluster (minimap + gear/panel) rises into the title's
+      // vacated row via the shared .is-compacted transform (CSS) — symmetric reclaim.
+      this.container.classList.add('is-compacted');
     }
 
     // Depth (always): current floor this run.

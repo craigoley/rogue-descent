@@ -150,15 +150,34 @@ body {
    canvas paints its own translucent panel + border, so no background here. */
 .minimap {
   position: fixed;
-  /* Raised to the compacted top band (HUD compact, right side) so it matches the left
-     bars' reclaim (#100) — both sides sit at the top, symmetric. Its TOP edge clears
-     the safe-area inset; the chip-row width cap (--hud-minimap-reserve) keeps the risen
-     left chips clear of it horizontally (the #75 reserve is position-independent). */
-  top: calc(var(--safe-top) + var(--hud-band-top));
+  /* AT REST (pre-room) it sits on the lower band (--hud-band-clear), BELOW the title's
+     own top row — so the centred title never shares a row with the minimap corner (the
+     spawn-overlap fix). On first room-entry the title fades and its row collapses; the
+     minimap RISES into it via the same transform the left bars use (#100), landing at
+     --hud-band-top — both sides reclaim the top symmetrically. The chip-row width cap
+     (--hud-minimap-reserve) keeps the risen left chips clear horizontally at any
+     vertical minimap position (the #75 reserve is position-independent). */
+  top: calc(var(--safe-top) + var(--hud-band-clear));
   right: calc(var(--safe-right) + 10px);
   border-radius: 6px;
   pointer-events: none;
   user-select: none;
+  transition: transform 0.4s ease; /* the smooth rise (reduce-motion → none, below) */
+}
+/* RISEN: on room-entry the container gets .is-compacted (latched once in HUD.update,
+   same trigger as the title fade + bars rise). Raise the minimap + its gear cluster by
+   the band delta — a GPU-friendly transform, not a top/layout change — so they land at
+   --hud-band-top, the title's vacated row. */
+.is-compacted .minimap,
+.is-compacted .hud-settings-btn,
+.is-compacted .hud-settings-panel {
+  transform: translateY(calc(var(--hud-band-top) - var(--hud-band-clear)));
+}
+/* Reduce-motion: snap (no rise animation), matching the bars' instant compaction. */
+.is-reduce-motion .minimap,
+.is-reduce-motion .hud-settings-btn,
+.is-reduce-motion .hud-settings-panel {
+  transition: none;
 }
 
 /* Combat HUD — health + dash + chips, top-left. Always visible. At-rest it sits below
@@ -995,22 +1014,29 @@ body {
    "SOUND" / "MOTION ON" HUD buttons, decluttering the play HUD. */
 .hud-settings-btn {
   position: fixed;
-  /* Below the minimap (+136px), raised with it to the compacted top band — the
-     gear/minimap relative arrangement is preserved, the group just shifts up. */
-  top: calc(var(--safe-top) + var(--hud-band-top) + 136px);
+  /* A TAB that hangs off the minimap's bottom-right corner, reading as one tidy
+     cluster with it — NOT a detached floating box. It sits FLUSH against the minimap's
+     bottom edge (minimap top --hud-band-clear + its 128px height), right-aligned to the
+     same inset, sharing the minimap's translucent panel fill + teal border. The TOP
+     border is dropped so the tab merges into the minimap's edge; only the bottom corners
+     round (the tab silhouette). Anchored to the lower band so it RIDES the minimap's
+     room-entry rise (the shared .is-compacted transform above). */
+  top: calc(var(--safe-top) + var(--hud-band-clear) + 128px);
   right: calc(var(--safe-right) + 10px);
-  width: 30px;
-  height: 30px;
-  font: 400 16px/30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  width: 40px;
+  height: 26px;
+  font: 400 15px/24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   text-align: center;
   color: var(--player);
   background: rgba(10, 10, 18, 0.55);
-  border: 1px solid rgba(51, 255, 204, 0.25);
-  border-radius: 4px;
+  border: 1px solid rgba(51, 255, 204, 0.3); /* matches the minimap border */
+  border-top: none; /* merge into the minimap's bottom edge → one cluster */
+  border-radius: 0 0 6px 6px; /* round only the hanging bottom corners */
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.4s ease;
 }
 .hud-settings-btn.is-open {
   color: var(--player);
@@ -1019,8 +1045,10 @@ body {
 
 .hud-settings-panel {
   position: fixed;
-  /* Just below the gear button, right-aligned with it (raised with the gear). */
-  top: calc(var(--safe-top) + var(--hud-band-top) + 172px);
+  /* Just below the gear tab, right-aligned with it (rides the same room-entry rise).
+     Anchored to the lower band so the gear tab (--hud-band-clear + 128px minimap + its
+     26px height) clears it with a small gap. */
+  top: calc(var(--safe-top) + var(--hud-band-clear) + 160px);
   right: calc(var(--safe-right) + 10px);
   display: none;
   flex-direction: column;
@@ -1030,6 +1058,7 @@ body {
   border: 1px solid rgba(51, 255, 204, 0.25);
   border-radius: 6px;
   user-select: none;
+  transition: transform 0.4s ease;
 }
 .hud-settings-panel.is-open {
   display: flex;
