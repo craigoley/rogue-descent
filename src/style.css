@@ -1036,6 +1036,7 @@ body {
   touch-action: manipulation;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.4s ease;
 }
 .hud-settings-btn.is-open {
   color: var(--player);
@@ -1057,6 +1058,7 @@ body {
   border: 1px solid rgba(51, 255, 204, 0.25);
   border-radius: 6px;
   user-select: none;
+  transition: transform 0.4s ease;
 }
 .hud-settings-panel.is-open {
   display: flex;
