@@ -94,19 +94,25 @@ body {
 
 /* Depth indicator — centred just below the title, between the corner widgets.
    Violet (= PALETTE.stairs) ties it to the descent system. */
+/* DEPTH — low-frequency info (changes only on descent): shrunk + dimmed IN PLACE so it
+   recedes without leaving the centre band (HUD reduction). */
 .hud-depth {
   position: fixed;
   top: calc(var(--safe-top) + var(--hud-title-clear));
   left: 50%;
   transform: translateX(-50%);
-  font: 700 clamp(11px, 2.6vw, 14px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.22em;
+  font: 700 clamp(9px, 2vw, 11px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.18em;
   color: var(--stairs);
-  text-shadow: 0 0 8px currentColor;
+  opacity: 0.55; /* receded reference info */
+  text-shadow: 0 0 6px currentColor;
   pointer-events: none;
   user-select: none;
 }
 
+/* TITLE — a spawn flourish that FADES once the player enters the first room (HUD
+   reduction); the .is-faded class is latched on first room-entry (reduce-motion sets
+   transition:none inline → instant hide). Reclaims the centre-top. */
 .hud-title {
   position: fixed;
   /* Shares --safe-top with the corner widgets so --hud-title-clear measures the
@@ -121,6 +127,11 @@ body {
   text-shadow: 0 0 12px currentColor;
   pointer-events: none;
   user-select: none;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.hud-title.is-faded {
+  opacity: 0;
 }
 
 /* Minimap — TOP-RIGHT (the free corner: top-left has the bars, top-centre the
@@ -174,10 +185,12 @@ body {
   color: var(--player);
 }
 
+/* HEALTH/DASH bars — shrunk modestly (HUD reduction) but kept FULL opacity + clarity
+   (vital line-of-sight stays always-clear; NOT dynamic). */
 .hud-bar {
-  width: min(220px, 45vw);
-  height: 14px;
-  border-radius: 7px;
+  width: min(180px, 40vw);
+  height: 11px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.15);
   overflow: hidden;
@@ -198,8 +211,8 @@ body {
 .hud-dash-pips {
   display: flex;
   gap: 4px;
-  width: min(220px, 45vw);
-  height: 8px;
+  width: min(180px, 40vw);
+  height: 7px;
 }
 
 .hud-dash-pip {
@@ -234,6 +247,10 @@ body {
   max-width: calc(100vw - var(--hud-minimap-reserve) - var(--safe-right));
 }
 
+/* CHIPS (HUD reduction) — DYNAMIC. The build readout RECEDES during play: unheld slots
+   barely there, held chips dim-but-legible (you can still glance + read your build). On a
+   level-up the chip FLARES (brighten = the pickup/level feedback) + pops (scale, gated
+   under reduce-motion), then eases back to the collapsed/dim state. */
 .hud-chip {
   display: inline-flex;
   align-items: center;
@@ -246,14 +263,27 @@ body {
   font: 700 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.12em;
   white-space: nowrap;
-  opacity: 0.3; /* dimmed: slot visible but not held */
-  transition: opacity 0.15s linear;
+  opacity: 0.22; /* unheld: slot visible but receded */
+  transform-origin: left center;
+  transition: opacity 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
 
+/* HELD, collapsed (the default during play): dim-but-legible — recedes, no loud glow. */
 .hud-chip.is-on {
-  opacity: 1; /* held: full colour + glow */
+  opacity: 0.55;
+}
+
+/* FLARED (just leveled up): full colour + glow — the change-feedback (kept under
+   reduce-motion: brighten is INFORMATION, not motion). */
+.hud-chip.is-flaring {
+  opacity: 1;
   text-shadow: 0 0 6px currentColor;
-  box-shadow: 0 0 8px -3px var(--chip-color), inset 0 0 6px -3px var(--chip-color);
+  box-shadow: 0 0 9px -3px var(--chip-color), inset 0 0 6px -3px var(--chip-color);
+}
+
+/* The flare POP (motion) — added in JS only when reduce-motion is OFF. */
+.hud-chip.is-flaring-scale {
+  transform: scale(1.14);
 }
 
 /* CSS-drawn glyphs (currentColor) — mirror the drop icons' visual sense. */

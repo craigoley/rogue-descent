@@ -518,6 +518,13 @@ export const VIGNETTE = {
   reducedOpacity: 0.15,
 } as const;
 
+/** HUD surface-area reduction (render/UI). The dynamic-HUD timing dials. */
+export const HUD_UI = {
+  /** How long a leveled-up chip FLARES (brighten + pop) out of its collapsed state
+   *  before easing back, milliseconds. The chip flare = the pickup/level feedback. */
+  chipFlareMs: 900,
+} as const;
+
 /** Debug-only frame-time meter (?debug=1 readout). Surfaces min/avg/1%-low so the
  *  lighting arc can PROVE it didn't tank mobile FPS — a smoothed average hides the
  *  hitches bloom introduces. The meter must not itself cost FPS: a bounded ring
