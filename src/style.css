@@ -104,10 +104,16 @@ body {
   font: 700 clamp(9px, 2vw, 11px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.18em;
   color: var(--stairs);
-  opacity: 0.55; /* receded reference info */
+  opacity: 0.55; /* receded reference info (at-rest; unchanged from #99) */
   text-shadow: 0 0 6px currentColor;
   pointer-events: none;
   user-select: none;
+  transition: opacity 0.6s ease; /* fades WITH the title on room-entry */
+}
+/* Faded out on first room-entry (with the title), vacating the centre band so the
+   bars compact up. (reduce-motion sets transition:none inline → instant.) */
+.hud-depth.is-faded {
+  opacity: 0;
 }
 
 /* TITLE — a spawn flourish that FADES once the player enters the first room (HUD
@@ -146,7 +152,9 @@ body {
   user-select: none;
 }
 
-/* Combat HUD — health + dash bars, top-left. Always visible. */
+/* Combat HUD — health + dash + chips, top-left. Always visible. At-rest it sits below
+   the centred title+DEPTH band; on first room-entry it COMPACTS UP (.is-compact) into
+   the space the faded title+depth vacate (HUD reflow — closes #99's gap). */
 .hud-bars {
   position: fixed;
   /* Below the centred band (title + DEPTH), same row as the top-right minimap,
@@ -159,6 +167,13 @@ body {
   gap: 8px;
   pointer-events: none;
   user-select: none;
+  transition: transform 0.4s ease; /* the smooth rise (reduce-motion → none inline) */
+}
+/* RISEN: translate up so the block's top lands ~12px below the safe-area inset (where
+   the title was) — a GPU-friendly transform, not a top/layout change. The minimap is
+   corner-anchored + unaffected; the chip row's width cap keeps it clear of it. */
+.hud-bars.is-compact {
+  transform: translateY(calc(12px - var(--hud-band-clear)));
 }
 
 /* One labelled bar: a small right-aligned caption + the track, so a new player
