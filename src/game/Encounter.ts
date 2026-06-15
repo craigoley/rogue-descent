@@ -13,7 +13,7 @@
  * at a time — so "cleared = active room with zero live enemies".
  */
 
-import { DROP, ENCOUNTER, HEAT, PLAYER, PLAYER_COMBAT, POOL, ROOM, type EnemyType } from '../utils/constants';
+import { DROP, ENCOUNTER, HEAT, PLAYER, POOL, ROOM, type EnemyType } from '../utils/constants';
 import {
   NO_HEAT,
   heatExtraEnemies,
@@ -32,6 +32,7 @@ import type { Rng } from '../utils/rng';
 import { roomEnemyCount, spawnEnemy } from './Enemy';
 import { createBossState } from './Boss';
 import { currentPowerupLevel, rollDrop, spawnPickup } from './Pickup';
+import { playerMaxHealth } from './Player';
 import type { Floor, Rect } from './Dungeon';
 import type { RoomState } from './Room';
 import type { GameState } from './GameState';
@@ -367,7 +368,7 @@ export function rollAndSpawnDrop(state: GameState, x: number, y: number, rng: Rn
   // spawning it is useless litter (drop spam). The roll already happened above
   // (seed-deterministic); only the spawn is skipped. Drops feel meaningful: health
   // shows up when you're actually hurt.
-  if (kind === 'health' && state.player.health >= PLAYER_COMBAT.maxHealth * DROP.healthSuppressAboveFrac) {
+  if (kind === 'health' && state.player.health >= playerMaxHealth(state.player) * DROP.healthSuppressAboveFrac) {
     return;
   }
   // Phase 9 SCARCITY: thin HIGH-LEVEL powerup top-ups so reaching tier III is
