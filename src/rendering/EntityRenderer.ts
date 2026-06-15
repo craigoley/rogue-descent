@@ -25,6 +25,7 @@ import {
   CanvasTexture,
   CircleGeometry,
   CylinderGeometry,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   Line,
@@ -32,6 +33,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  RingGeometry,
   type Scene,
   SphereGeometry,
   Sprite,
@@ -45,6 +47,7 @@ import type { PickupKind } from '../game/Pickup';
 import {
   BARRIER,
   BLOB,
+  BOSS,
   BOSS_DEATH,
   BOSS_VFX,
   CHAIN_ARC,
@@ -525,14 +528,16 @@ export class EntityRenderer {
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
   private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], bruiser: [], boss: [], bossadd: [] };
-  /** Bespoke single boss mesh (Phase 8): a large armored body + head, an orbiting
-   *  bright WEAK-POINT marker (gimmick #1 tell) and a floor ring. Not pooled. */
+  /** Bespoke single boss mesh (Phase 8): a large armored body + head, a glowing
+   *  WEAK-SIDE ARC (gimmick #1 tell — a floor wedge tracking the vulnerable angle)
+   *  and a floor ring. Not pooled. */
   private readonly bossGroup: Group;
   private readonly bossInner: Group;
   private readonly bossBodyMat: MeshStandardMaterial;
-  private readonly bossWeak: Mesh;
-  private readonly bossWeakMat: MeshStandardMaterial;
-  private readonly bossWeakOrbit: number;
+  /** Weak-side floor wedge: spans BOSS.vulnerableArc, baked flat; tracks the rotating
+   *  vulnerableAngle each frame via rotation.y (gimmick #1 "hit the glowing side" tell). */
+  private readonly bossWeakArc: Mesh;
+  private readonly bossWeakArcMat: MeshBasicMaterial;
   /** Telegraph-tell tracking: the active attack's FULL telegraph duration, captured
    *  on entry so the wind-up scale ramp is correct for any attack (slam vs the
    *  longer cleave) AND phase 2's shortened wind-up. e.timer is monotonic, so its
@@ -891,27 +896,40 @@ export class EntityRenderer {
         this.bossBodyMat,
       );
       head.position.y = BOSS_VFX.bodyHeight + BOSS_VFX.headRadius * 0.6;
-      // The weak-point marker: a glowing box that orbits the body at the radius,
-      // placed each frame at the sim's vulnerableAngle so the player sees the side
-      // to hit. Lives in the (non-rotating) inner group; positioned in syncBoss.
-      this.bossWeakMat = new MeshStandardMaterial({
+      // The WEAK-SIDE ARC: a bright green floor wedge spanning the TRUE vulnerable arc
+      // (BOSS.vulnerableArc, 120°), so the player sees WHERE the weak side is AND HOW
+      // WIDE the hittable wedge is — "stand in the glow". RingGeometry's thetaStart/
+      // thetaLength make the annular sector; centred on local theta 0 (thetaStart =
+      // -arc/2) so a single rotation.y in syncBoss aims it at the sim's vulnerableAngle.
+      // The flatness is BAKED into the geometry (rotateX) so that per-frame rotation.y
+      // cleanly spins the wedge in the floor plane (no Euler-order coupling). Unlit +
+      // bright (MeshBasicMaterial) so it flares through the bloom like the other tells.
+      this.bossWeakArcMat = new MeshBasicMaterial({
         color: PALETTE.enemyBossWeak,
-        emissive: PALETTE.enemyBossWeak,
-        emissiveIntensity: VFX.visorEmissive,
-        roughness: 0.3,
+        transparent: true,
+        opacity: BOSS_VFX.weakArcOpacityMax,
+        side: DoubleSide,
+        depthWrite: false,
       });
-      this.bossWeak = new Mesh(
-        new BoxGeometry(BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize, BOSS_VFX.weakPointSize),
-        this.bossWeakMat,
+      const weakArcGeo = new RingGeometry(
+        BOSS_VFX.weakArcInner,
+        BOSS_VFX.weakArcOuter,
+        BOSS_VFX.weakArcSegments,
+        1,
+        -BOSS.vulnerableArc / 2,
+        BOSS.vulnerableArc,
       );
-      this.bossWeakOrbit = vr;
+      weakArcGeo.rotateX(-Math.PI / 2); // lay flat on the floor (baked, not via mesh.rotation)
+      this.bossWeakArc = new Mesh(weakArcGeo, this.bossWeakArcMat);
+      this.bossWeakArc.position.y = BOSS_VFX.weakArcHeight;
+      this.bossWeakArc.renderOrder = 1; // draw over the floor decal cleanly
       const ring = new Mesh(
         new TorusGeometry(BOSS_VFX.ringRadius, BOSS_VFX.ringTube, 8, 32),
         new MeshBasicMaterial({ color: PALETTE.enemyBoss, transparent: true, opacity: 0.5 }),
       );
       ring.rotation.x = -Math.PI / 2;
       this.bossInner = new Group();
-      this.bossInner.add(body, head, this.bossWeak, ring);
+      this.bossInner.add(body, head, this.bossWeakArc, ring);
       this.bossGroup = new Group();
       this.bossGroup.add(this.bossInner);
       this.bossGroup.visible = false;
@@ -1341,13 +1359,15 @@ export class EntityRenderer {
   }
 
   /** Position + recolour the bespoke boss mesh from state.boss + its pooled Enemy.
-   *  Shows the rotating weak-point (gimmick #1 tell), the phase-2 escalation tint,
-   *  the slam telegraph grow, and the hit / blocked-shield flashes. */
+   *  Shows the rotating weak-side ARC (gimmick #1 tell — the green floor wedge), the
+   *  phase-2 escalation tint, the slam telegraph grow, the clean-hit flash, and the
+   *  armored-side DEFLECT clink (off blockedFlash). */
   private syncBoss(state: GameState, alpha: number, px: number, py: number, now: number, frameDt: number): void {
     const boss = state.boss;
     const e = boss ? state.enemies[boss.slot] : null;
     if (!boss || !e || !e.active) {
       this.bossBlob.visible = false;
+      this.bossWeakArc.visible = false; // no weak-side tell once the boss is dead/popping
       // Boss death-POP (juice PR-5): the death frame nulls state.boss, so detect the
       // transition via bossWasAlive and play a grand pop at the captured position.
       if (this.bossWasAlive) {
@@ -1378,17 +1398,14 @@ export class EntityRenderer {
     const dy = py - ey;
     if (dx * dx + dy * dy > 1e-6) this.bossGroup.rotation.y = Math.atan2(-dy, dx);
 
-    // Weak-point marker orbits to the sim's vulnerableAngle. That angle is in
-    // WORLD space (game x/y); the group is rotated to face the player, so place
-    // the marker in the group's LOCAL frame by undoing the group rotation. Game
-    // (x, y) -> three (x, z); the figure faces +x, group.rotation.y = atan2(-dy,dx).
-    const wa = boss.vulnerableAngle;
-    const wx = Math.cos(wa) * this.bossWeakOrbit;
-    const wz = -Math.sin(wa) * this.bossWeakOrbit; // game y -> three z, with the -y map
-    const gr = this.bossGroup.rotation.y;
-    const cos = Math.cos(-gr);
-    const sin = Math.sin(-gr);
-    this.bossWeak.position.set(wx * cos - wz * sin, BOSS_VFX.weakPointHeight, wx * sin + wz * cos);
+    // WEAK-SIDE ARC tracks the sim's vulnerableAngle. The angle is WORLD-space (game
+    // x/y, with game-y -> three-z under the standard -y map, so a world direction maps
+    // to floor-plane angle = vulnerableAngle). The wedge lives under the player-facing
+    // group (rotation.y = gr), and its geometry is centred on local theta 0, so a single
+    // rotation.y = vulnerableAngle - gr lands the wedge centre on the world weak side and
+    // keeps it tracking as the angle rotates (the "reposition to the glow" skill).
+    this.bossWeakArc.visible = true;
+    this.bossWeakArc.rotation.y = boss.vulnerableAngle - this.bossGroup.rotation.y;
 
     const phase2 = boss.outerPhase === 2;
     const baseColor = phase2 ? PALETTE.enemyBossPhase2 : PALETTE.enemyBoss;
@@ -1398,11 +1415,18 @@ export class EntityRenderer {
     // below is correct for every attack. e.timer is monotonic within a telegraph.
     if (e.phase === 'telegraph' && this.bossPrevPhase !== 'telegraph') this.bossTeleMax = e.timer;
     this.bossPrevPhase = e.phase;
-    // Body recolour priority: hit flash > STAGGER (interrupt payoff) > telegraph >
-    // resting tint. Stagger outranks telegraph so a successful interrupt reads as
-    // "you broke its attack / shield's down" the instant it lands.
+    // Body recolour priority: clean-hit flash > DEFLECT clink > STAGGER (interrupt
+    // payoff) > telegraph > resting tint. A clean weak-side hit white-flashes (flashTimer,
+    // set only on a landed hit); an armored hit instead white-FLASHES nothing and trips
+    // blockedFlash — so flash the whole BODY the steel SHIELD colour: a bold "CLINK / that
+    // did nothing" that reads as clearly DIFFERENT from a clean hit (the deflect teach).
+    // Both come off existing sim signals (flashTimer / blockedFlash) — render-only.
     if (e.flashTimer > 0) {
       mat.color.setHex(PALETTE.hitFlash);
+      mat.emissiveIntensity = VFX.invulnEmissive;
+      this.bossGroup.scale.setScalar(1);
+    } else if (boss.blockedFlash > 0) {
+      mat.color.setHex(PALETTE.enemyBossShield);
       mat.emissiveIntensity = VFX.invulnEmissive;
       this.bossGroup.scale.setScalar(1);
     } else if (boss.staggerTimer > 0) {
@@ -1419,17 +1443,14 @@ export class EntityRenderer {
       mat.emissiveIntensity = BOSS_VFX.emissive;
       this.bossGroup.scale.setScalar(1);
     }
-    // Weak-point marker: flashes the SHIELD colour on a blocked (armored) hit,
-    // otherwise glows the weak-point amber (pulsing so it draws the eye).
-    if (boss.blockedFlash > 0) {
-      this.bossWeakMat.color.setHex(PALETTE.enemyBossShield);
-      this.bossWeakMat.emissive.setHex(PALETTE.enemyBossShield);
-    } else {
-      this.bossWeakMat.color.setHex(PALETTE.enemyBossWeak);
-      this.bossWeakMat.emissive.setHex(PALETTE.enemyBossWeak);
-    }
-    const pulse = 1 + BOSS_VFX.weakPointPulseAmp * (0.5 + 0.5 * Math.sin(now * BOSS_VFX.weakPointPulseRate));
-    this.bossWeak.scale.setScalar(pulse);
+    // WEAK-SIDE ARC glow: steady green "hit HERE" (the deflect read lives on the BODY
+    // clink above, so the arc stays a pure WHERE indicator). It BREATHES in opacity to
+    // draw the eye — cosmetic motion, so reduce-motion holds the ceiling (steady, still
+    // fully legible: the arc is INFORMATION, kept; only the breathe is gated. The arc's
+    // ROTATION is the gimmick state and always tracks, above).
+    const breathe = this.reduceMotion ? 1 : 0.5 + 0.5 * Math.sin(now * BOSS_VFX.weakArcPulseRate);
+    this.bossWeakArcMat.opacity =
+      BOSS_VFX.weakArcOpacityMin + (BOSS_VFX.weakArcOpacityMax - BOSS_VFX.weakArcOpacityMin) * breathe;
   }
 
   private syncEnemyProjectiles(state: GameState, alpha: number): void {

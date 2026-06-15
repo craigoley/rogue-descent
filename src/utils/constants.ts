@@ -41,9 +41,12 @@ export const PALETTE = {
   enemyBoss: 0x7a1020,
   /** BOSS phase-2 escalation tint — hotter/brighter so "it got angrier" reads. */
   enemyBossPhase2: 0xc81830,
-  /** BOSS weak-point glow — bright amber: the VULNERABLE side you must hit
-   *  (positioning gimmick). Reuses the telegraph-warning language. */
-  enemyBossWeak: 0xffcc33,
+  /** BOSS weak-side glow — bright mint-green ("hit HERE"): the VULNERABLE wedge you
+   *  must stand in (positioning gimmick). DELIBERATELY distinct from the amber attack
+   *  telegraph (enemyTelegraph 0xffcc33) — the old amber weak glow COLLIDED with the
+   *  wind-up colour, merging "hit here" with "about to attack". Green reads "go / hit"
+   *  and shares the stagger/"shield-down" language (enemyBossStagger). */
+  enemyBossWeak: 0x66ffd0,
   /** BOSS shield "blocked" flash — cold steel: a hit from the armored side did
    *  nothing (reposition to the weak-point). */
   enemyBossShield: 0x88aacc,
@@ -1900,10 +1903,17 @@ export const BOSS_VFX = {
   bodyRadiusScale: 0.85,
   /** Head sphere radius. */
   headRadius: 0.4,
-  /** Bright weak-point marker size (the box that orbits to the vulnerable side). */
-  weakPointSize: 0.55,
-  /** Height (y) of the orbiting weak-point marker. */
-  weakPointHeight: 1.2,
+  /** WEAK-SIDE ARC (gimmick #1 tell) — a glowing FLOOR WEDGE spanning the true
+   *  BOSS.vulnerableArc (120°), tracking the rotating vulnerableAngle. It replaces the
+   *  old tiny orbiting box (which marked a POINT not the arc, occluded behind the body,
+   *  and used the telegraph amber). Inner/outer radii (world units) frame the boss base
+   *  so the hittable wedge reads from ABOVE — "stand in the glow / hit the glowing side". */
+  weakArcInner: 1.5,
+  weakArcOuter: 2.35,
+  /** Height (y) of the floor wedge — just above the floor so it reads as a decal. */
+  weakArcHeight: 0.06,
+  /** Radial segments along the wedge (smooth curved band). */
+  weakArcSegments: 48,
   /** Floor ring radius around the base (reads "arena boss"). */
   ringRadius: 1.3,
   /** Floor ring tube thickness. */
@@ -1912,8 +1922,11 @@ export const BOSS_VFX = {
   emissive: 0.55,
   /** Extra scale at the peak of a slam telegraph (grows then strikes). */
   telegraphScale: 0.22,
-  /** Weak-point marker pulse amplitude (0 = no pulse, 0.15 = ±15% scale). */
-  weakPointPulseAmp: 0.15,
-  /** Weak-point marker pulse rate (per-ms frequency for performance.now()). */
-  weakPointPulseRate: 0.006,
+  /** Weak-arc glow BREATHE: opacity floor↔ceiling the steady glow pulses between (it
+   *  draws the eye). The pulse is cosmetic MOTION → reduce-motion holds the ceiling
+   *  (steady, still fully legible — the arc is INFORMATION, kept). */
+  weakArcOpacityMin: 0.5,
+  weakArcOpacityMax: 0.88,
+  /** Weak-arc breathe rate (per-ms frequency for performance.now()). */
+  weakArcPulseRate: 0.006,
 } as const;
