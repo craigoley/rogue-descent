@@ -17,7 +17,11 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const SEED = 12345;
+const PRIMARY_SEED = 12345;
+/** Multi-seed soak coverage — distinct seeds = distinct floor layouts / enemy mixes, so the
+ *  canaries get broader exposure (a seed-specific NaN/leak/softlock surfaces with its seed). Each
+ *  seed is its own isolated test so a hang is identifiable by WHICH seed (harness-vs-game). */
+const SOAK_SEEDS = [12345, 2, 777, 424242] as const;
 
 /** Fixed pool caps — MIRROR `POOL` in src/utils/constants.ts. Active counts must never exceed
  *  these (the pools are fixed-size; a breach means the hook or a pool changed). */
@@ -85,7 +89,8 @@ async function gcHeapBytes(page: Page): Promise<number> {
 const DIRS = ['d', 's', 'a', 'w'] as const;
 
 test.describe('@validation live sweep', () => {
-  test('@validation seeded soak — NaN / pool / progress / render / memory / console', async ({ page }) => {
+  for (const SEED of SOAK_SEEDS) {
+   test(`@validation seeded soak [seed ${SEED}] — NaN / pool / progress / render / memory / console`, async ({ page }) => {
     const SOAK_MS = 90_000;
     const SAMPLE_MS = 2500;
     const FLOOR_TARGET = 4; // depth starts at 1; reaching 4 = 3 floors descended → early-exit
@@ -180,11 +185,12 @@ test.describe('@validation live sweep', () => {
     // 3c / 4. The softlock detector never fired, and no UNEXPECTED console errors across the soak.
     expect(softlock, `softlock detector fired — ${softlock.join('\n')} (seed=${SEED})`).toHaveLength(0);
     expect(errors, errors.join('\n')).toHaveLength(0);
-  });
+   });
+  }
 
   test('@validation live flow — settings gear opens + closes, no error', async ({ page }) => {
     const { errors } = trackConsole(page);
-    await page.goto(`/?seed=${SEED}`);
+    await page.goto(`/?seed=${PRIMARY_SEED}`);
     await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
 
     await page.locator('.hud-settings-btn').click(); // gear toggles the panel (pointerdown)
@@ -200,7 +206,7 @@ test.describe('@validation live sweep', () => {
   }, testInfo) => {
     test.setTimeout(120_000);
     const { errors } = trackConsole(page);
-    await page.goto(`/?debug=1&seed=${SEED}`);
+    await page.goto(`/?debug=1&seed=${PRIMARY_SEED}`);
     await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
 
     // Drive into combat to provoke damage. Blind input can't GUARANTEE death (no aim), so this is
@@ -233,7 +239,7 @@ test.describe('@validation live sweep', () => {
     } else {
       testInfo.annotations.push({
         type: 'note',
-        description: `death not reached in 80s on seed=${SEED} (blind input) — summary→restart flow unverified this run; a follow-up can pin a deadlier seed. Console was clean.`,
+        description: `death not reached in 80s on seed=${PRIMARY_SEED} (blind input) — summary→restart flow unverified this run; a follow-up can pin a deadlier seed. Console was clean.`,
       });
     }
 
