@@ -27,6 +27,14 @@ describe('Depth-1 boss carve-out (gentle intro)', () => {
     expect(bossDamageForDepth(1)).toBe(BOSS.depth1Damage);
   });
 
+  it('pins the gentle teaching-boss values concretely (HP 140, damage 9 — the feel tune)', () => {
+    // Concrete literals (not self-referential) so an accidental drift of the carve-out
+    // constants fails here. Damage was nudged 12 -> 9 (#103 fixed readability; this gives
+    // a fresh player survival headroom to LEARN the weak-side dance). HP is unchanged.
+    expect(BOSS.depth1Health).toBe(140);
+    expect(BOSS.depth1Damage).toBe(9);
+  });
+
   it('createBossState.maxHealth at depth 1 is the gentle value (HP bar / 50% gate source)', () => {
     expect(createBossState(0, 1).maxHealth).toBe(BOSS.depth1Health);
   });
@@ -66,7 +74,7 @@ function placeInRoom(s: GameState, i: number): void {
 }
 
 describe('Spawned depth-1 boss carries the gentle stats', () => {
-  it('the live boss Enemy at depth 1 has HP 140 and damage 12 (overrides applied at spawn)', () => {
+  it('the live boss Enemy at depth 1 has HP 140 and damage 9 (overrides applied at spawn)', () => {
     const s = createGameState(); // depth 1
     expect(s.run.depth).toBe(1);
     for (let i = 1; i < s.rooms.length; i++) if (i !== s.bossRoom) s.rooms[i].phase = 'cleared';

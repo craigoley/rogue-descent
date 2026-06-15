@@ -1809,7 +1809,7 @@ export const BOSS = {
    *  attackDamage × the 7c mults (see bossHpForDepth / bossDamageForDepth). Both
    *  by-feel — tuned on replay. */
   depth1Health: 140, // vs the would-be 220 at depth 1 — less of a slog
-  depth1Damage: 12, // vs the would-be 20 at depth 1 — less lethal
+  depth1Damage: 9, // vs the would-be 20 at depth 1 — survival headroom to LEARN the weak-side dance (was 12; #103 fixed readability, this is the residual feel nudge)
   /** GIMMICK #1 — directional shield. Damage only counts when the hit comes from
    *  within this arc (radians, full width) centred on the VULNERABLE angle; hits
    *  from outside are blocked. ~120° vulnerable wedge — generous but you must get
