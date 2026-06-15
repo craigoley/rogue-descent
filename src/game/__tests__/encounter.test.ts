@@ -78,12 +78,16 @@ describe('Drops — deterministic, two kinds, correct effects', () => {
     for (let k = 0; k < 30; k++) expect(rollDrop(a)).toBe(rollDrop(b));
   });
 
-  it('rollDrop yields only null | health | the eleven powerups', () => {
-    const kinds = ['null', 'health', 'melee', 'ranged', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike', 'lifesteal', 'burn', 'chain', 'crit'];
+  it('rollDrop yields only null | health | the thirteen base powerups', () => {
+    // Eleven offense/utility kinds + the two BASE defensive tracks (maxHp, damageReduction).
+    // freeze/fireRate are LOCKABLE (absent from the base pool), so they're not expected here.
+    const kinds = ['null', 'health', 'melee', 'ranged', 'pierce', 'knockback', 'extraCharge', 'fasterRecharge', 'dashStrike', 'lifesteal', 'burn', 'chain', 'crit', 'maxHp', 'damageReduction'];
     const allowed = new Set(kinds);
     const rng = createRng(99);
     const seen = new Set<string>();
-    for (let k = 0; k < 1000; k++) {
+    // 4000 rolls: only ~15% are powerups, split across 13 kinds with the effect axes at the
+    // smaller effectWeight, so a rare effect needs a healthy sample to be reliably reached.
+    for (let k = 0; k < 4000; k++) {
       const d = rollDrop(rng);
       expect(allowed.has(String(d))).toBe(true);
       seen.add(String(d));

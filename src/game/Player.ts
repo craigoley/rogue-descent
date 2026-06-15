@@ -12,7 +12,7 @@
  * alongside the current one; the renderer lerps between them by the frame alpha.
  */
 
-import { DASH, ENEMY_COMMON, ISO_YAW, PLAYER, PLAYER_COMBAT, TUNING } from '../utils/constants';
+import { DASH, DEFENSE, ENEMY_COMMON, ISO_YAW, PLAYER, PLAYER_COMBAT, TUNING } from '../utils/constants';
 import { clamp } from '../utils/math';
 import { resolveX, resolveY } from './Collision';
 import type { RoomState } from './Room';
@@ -121,6 +121,15 @@ export interface PlayerState {
    *  the run config's unlocked set. Power-neutral re: meta (an in-run track). Reset to 0
    *  on death; carried across descent. */
   fireRateLevel: number;
+  /** MAX-HP defensive track LEVEL (0..3, within-run; BASE pool). 0 = base 100 HP cap
+   *  (unchanged); each level raises the cap by DEFENSE.hpPerLevel (see playerMaxHealth) and
+   *  heals the added amount on gain. A power-neutral TRADEOFF vs offense (the finite pool).
+   *  Reset to 0 on death; carried across descent. */
+  hpLevel: number;
+  /** DAMAGE-REDUCTION defensive track LEVEL (0..3, within-run; BASE pool). 0 = full damage
+   *  (unchanged); each level cuts incoming damage by DEFENSE.drPerLevel (linear, max 24% at
+   *  III), applied in damagePlayer after Heat scaling. Reset to 0 on death; carried. */
+  drLevel: number;
   /** Enemy-pool indices hit by the CURRENT dash — so one dash damages each enemy
    *  at most once (mirrors Projectile.hits). Allocated once; cleared on each dash. */
   dashHits: Set<number>;
@@ -167,8 +176,18 @@ export function createPlayer(x: number, y: number): PlayerState {
     critLevel: 0,
     freezeLevel: 0,
     fireRateLevel: 0,
+    hpLevel: 0,
+    drLevel: 0,
     dashHits: new Set<number>(),
   };
+}
+
+/** The player's current MAX HP: the base cap plus the MAX-HP track bonus (DEFENSE.hpPerLevel
+ *  per level). The single source of truth for the cap — used by createPlayer (level 0 = base),
+ *  the health-pickup + lifesteal clamps, and the HUD bar fraction, so a raised cap never lets
+ *  current HP exceed it and the bar never overflows past 100%. */
+export function playerMaxHealth(player: PlayerState): number {
+  return PLAYER_COMBAT.maxHealth + DEFENSE.hpPerLevel * player.hpLevel;
 }
 
 /** Max dash charges given the player's powerups (base + extra-charge bonus). */

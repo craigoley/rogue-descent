@@ -38,10 +38,12 @@ function arena(): GameState {
   return s;
 }
 
-/** The kind-pick fraction that lands on POWERUP_KINDS index k under the WEIGHTED
- *  roll (synergy arc): stat-tracks (indices 0..6) weight DROP.trackWeight, the
- *  effect axes 'lifesteal' (7) + 'burn' (8) weight DROP.effectWeight. Mirrors
- *  rollDrop's cumulative-weight walk; returns the midpoint fraction of index k's band. */
+/** The kind-pick fraction that lands on the BASE-pool index k under the WEIGHTED roll:
+ *  stat-tracks (indices 0..6) weight DROP.trackWeight, the effect axes lifesteal/burn/chain/
+ *  crit (7..10) weight DROP.effectWeight, and the two BASE defensive tracks maxHp (11) +
+ *  damageReduction (12) weight DROP.trackWeight. (freeze/fireRate are LOCKABLE → absent from
+ *  the base pool, so they don't appear here even though they sit earlier in POWERUP_KINDS.)
+ *  Mirrors rollDrop's cumulative-weight walk; returns the midpoint fraction of index k's band. */
 const KIND_WEIGHTS = [
   DROP.trackWeight, // melee
   DROP.trackWeight, // ranged
@@ -54,6 +56,8 @@ const KIND_WEIGHTS = [
   DROP.effectWeight, // burn (effect axis)
   DROP.effectWeight, // chain (effect axis)
   DROP.effectWeight, // crit (effect axis)
+  DROP.trackWeight, // maxHp (defensive track)
+  DROP.trackWeight, // damageReduction (defensive track)
 ];
 const WEIGHT_TOTAL = KIND_WEIGHTS.reduce((a, b) => a + b, 0);
 const pickFor = (k: number): number => {

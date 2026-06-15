@@ -15,7 +15,7 @@ import type { GameState } from '../game/GameState';
 import type { RoomEncounter } from '../game/Encounter';
 import { isoRotate, type InputIntent } from '../game/Input';
 import { isSolid } from '../game/Room';
-import { dashMaxCharges } from '../game/Player';
+import { dashMaxCharges, playerMaxHealth } from '../game/Player';
 import type { Controls } from '../input/Controls';
 import {
   damageMultForDepth,
@@ -162,6 +162,10 @@ export class HUD {
   private readonly freezeChip: LevelChip;
   /** Meta PR2: the FIRE-RATE track chip (lime; unlockable — dimmed until earned). */
   private readonly fireRateChip: LevelChip;
+  /** Defensive axis: the MAX-HP track chip (vital green; BASE). */
+  private readonly maxHpChip: LevelChip;
+  /** Defensive axis: the DAMAGE-REDUCTION / ARMOR track chip (steel-blue; BASE). */
+  private readonly armorChip: LevelChip;
   private readonly tutorialEl: HTMLDivElement;
   private tutorialState: 'idle' | 'showing' | 'done' = 'idle';
   private tutorialShownAt = 0;
@@ -290,6 +294,9 @@ export class HUD {
     this.critChip = makeChip('CRIT', 'is-crit', CSS_PALETTE.crit);
     this.freezeChip = makeChip('FREEZE', 'is-freeze', CSS_PALETTE.freeze);
     this.fireRateChip = makeChip('FIRE RATE', 'is-fire-rate', CSS_PALETTE.fireRate);
+    // Defensive build axis (BASE) — the two new tracks, vital-green + steel-blue.
+    this.maxHpChip = makeChip('MAX HP', 'is-maxhp', CSS_PALETTE.maxHp);
+    this.armorChip = makeChip('ARMOR', 'is-armor', CSS_PALETTE.armor);
     bars.appendChild(powersRow);
 
     container.appendChild(bars);
@@ -626,8 +633,10 @@ export class HUD {
 
     this.updateFloorTransition(state.seed);
 
-    // Combat HUD (always): health fraction + dash charge pips.
-    const hp = Math.max(0, p.health) / PLAYER_COMBAT.maxHealth;
+    // Combat HUD (always): health fraction + dash charge pips. Divide by the player's
+    // ACTUAL max (MAX-HP track raises it) so the bar reads 0..100% of the real cap and
+    // never overflows past full when the cap is leveled.
+    const hp = Math.max(0, p.health) / playerMaxHealth(p);
     this.healthFill.style.width = `${(hp * 100).toFixed(1)}%`;
 
     // Dash pips: show `maxCharges` of them; full = available charge, the next pip
@@ -696,6 +705,8 @@ export class HUD {
     setChipLevel(this.critChip, state.player.critLevel, chipNow, this.reduceMotion);
     setChipLevel(this.freezeChip, state.player.freezeLevel, chipNow, this.reduceMotion);
     setChipLevel(this.fireRateChip, state.player.fireRateLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.maxHpChip, state.player.hpLevel, chipNow, this.reduceMotion);
+    setChipLevel(this.armorChip, state.player.drLevel, chipNow, this.reduceMotion);
 
     // Minimap (always on) — rebuilds itself on floor-change (seed change).
     this.minimap.update(state, alpha);
