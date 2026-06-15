@@ -81,6 +81,10 @@ if (bootParams.get('scene') === 'boss') {
 }
 const stillMode = bootParams.get('still') === '1';
 let firstFramePainted = false;
+// Debug-only frame counter for the VALIDATION SEAM (below): advances once per rendered
+// frame so the live-validation sweep can confirm the loop is still drawing. Only touched
+// under ?debug=1 (see the increment in frame() + the window.__validation hook).
+let validationFrame = 0;
 
 const settings: Settings = loadSettings();
 
@@ -428,7 +432,10 @@ function frame(nowMs: number): void {
   scene.render();
   hud.update(game, fps, steps, alpha, controls.intent, scene, controls, perfStats);
   summary.update(game);
-  if (debug) logEncounters();
+  if (debug) {
+    logEncounters();
+    validationFrame++; // advances the still-rendering canary the validation seam reads
+  }
 
   // E2E readiness: flag the first painted frame so Playwright can wait on a
   // deterministic state instead of a sleep. In ?still mode, halt here (one frame
@@ -443,3 +450,45 @@ function frame(nowMs: number): void {
 }
 
 requestAnimationFrame(frame);
+
+// VALIDATION SEAM (debug-only, READ-ONLY). Exposes a structured live-state snapshot for the
+// live-validation sweep (a separate Playwright PR) to read + assert on — player/enemy NaN, pool
+// active-counts (leak canary), runOver, depth/room (progress), and the frame counter (advancing =
+// the loop is still drawing). It READS `game` and mutates NOTHING — the pure sim doesn't know it
+// exists, so src/game/ is untouched. Attached ONLY under ?debug=1, so normal play pays nothing
+// (no attachment, no per-frame work). DEFENSIVE: every read is guarded + wrapped so the hook can
+// never THROW mid-transition (e.g. a floor swap) and become a false "game error" the sweep would
+// misread — the harness-vs-game principle applies to the hook itself.
+if (debug) {
+  const finite = (n: number): boolean => Number.isFinite(n);
+  const activeCount = (pool: ReadonlyArray<{ active: boolean }> | undefined): number =>
+    Array.isArray(pool) ? pool.reduce((n, e) => n + (e && e.active ? 1 : 0), 0) : -1;
+  (window as Window & { __validation?: () => unknown }).__validation = () => {
+    try {
+      const p = game.player;
+      const enemies = game.enemies;
+      const anyEnemyNaN = Array.isArray(enemies)
+        ? enemies.some((e) => e && e.active && (!finite(e.x) || !finite(e.y)))
+        : false;
+      return {
+        frame: validationFrame,
+        seed: game.seed,
+        depth: game.run ? game.run.depth : -1,
+        activeRoom: game.activeRoom,
+        runOver: game.runOver,
+        player: { x: p ? p.x : NaN, y: p ? p.y : NaN, health: p ? p.health : NaN },
+        counts: {
+          enemies: activeCount(enemies),
+          projectiles: activeCount(game.projectiles),
+          enemyProjectiles: activeCount(game.enemyProjectiles),
+          particles: activeCount(game.particles),
+          pickups: activeCount(game.pickups),
+        },
+        anyNaN: !p || !finite(p.x) || !finite(p.y) || anyEnemyNaN,
+      };
+    } catch (err) {
+      // The hook must never be the source of an error the sweep misreads — return a safe marker.
+      return { error: String(err) };
+    }
+  };
+}
