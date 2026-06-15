@@ -1,0 +1,55 @@
+name: Validation sweep (live soak)
+
+# L3 — the LIVE-VALIDATION sweep (tests/e2e/validation.spec.ts, tagged @validation). Runs the
+# UNFROZEN game loop + the live WebGL canvas + the console over a sustained seeded soak — the
+# layer L1 (pure sim) and L2 (frozen-frame HUD baselines, canvas hidden) structurally can't see:
+# NaN, pool leaks, softlocks, runtime exceptions, memory growth.
+#
+# NON-BLOCKING: this is informational — do NOT add it to branch-protection required checks. It
+# runs on PRs (so a finding surfaces pre-merge), nightly, and on manual dispatch (replay a seed).
+# FIND, DON'T FIX: a red here is a REPRODUCIBLE finding (the seed replays via ?seed=<S>) for a
+# SEPARATE triage PR — never an auto-fix.
+#
+# It ONLY uploads artifacts; it NEVER commits/pushes back, so it cannot trip the
+# GITHUB_TOKEN-not-triggering-CI / bot-commit merge-race the baseline-update job is exposed to.
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 7 * * *' # nightly (07:30 UTC; staggered after the e2e smoke at 07:00)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: Live-validation sweep (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Chromium + OS deps (pinned via the @playwright/test version in the lockfile).
+      - run: npx playwright install --with-deps chromium
+      # The seeded soak + the live-flow specs (@validation only — the lean e2e smoke job runs the
+      # rest). Build+preview is handled by the playwright webServer config.
+      - run: npm run test:e2e:validation
+      # Artifacts on failure (reproducibility): the HTML report + traces carry the [VALIDATION]
+      # sample log, a screenshot, and the seed so a finding replays via ?seed=<S>.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: validation-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

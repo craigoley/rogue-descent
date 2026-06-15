@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --grep-invert @validation",
+    "test:e2e:validation": "playwright test --grep @validation"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
