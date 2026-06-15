@@ -179,7 +179,7 @@ jobs:
           git checkout -B "$BRANCH"
           git branch --set-upstream-to="origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 
-      - uses: anthropics/claude-code-action@fbda2eb1bdc90d319b8d853f5deb53bca199a7c1  # v1
+      - uses: anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102  # v1
         if: steps.check-author.outputs.skip != 'true'
         with:
           # OAuth via Craig's Max subscription — same auth ClawApp uses.
