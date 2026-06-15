@@ -8,12 +8,12 @@
  * import cycle with Enemy/Projectile/GameState (which import it).
  */
 
-import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, ENEMY_COMMON, ENEMY_DEATH_TINT, ENEMY_TYPES, FREEZE_LEVELS, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
+import { BOSS, BURN_LEVELS, CHAIN_LEVELS, CRIT, CRIT_LEVELS, DASH_STRIKE, DEFENSE, ENEMY_COMMON, ENEMY_DEATH_TINT, ENEMY_TYPES, FREEZE_LEVELS, KNOCKBACK_LEVELS, LIFESTEAL_LEVELS, MELEE, MELEE_LEVELS, PARTICLE, PLAYER_COMBAT, SHAKE, TUNING } from '../utils/constants';
 import { spawnParticles } from './Particle';
 import { spawnChainArc } from './ChainArc';
 import { isoRotate, type InputIntent } from './Input';
 import type { Enemy } from './Enemy';
-import type { PlayerState } from './Player';
+import { playerMaxHealth, type PlayerState } from './Player';
 import type { GameState } from './GameState';
 import type { Vec2 } from '../utils/math';
 
@@ -158,9 +158,10 @@ export function damageEnemy(
     // lifesteal per-jump (bound E). Auto-multiplies with melee/multishot/pierce/dash.
     if (kind === 'direct' && dmg > 0) {
       const frac = LIFESTEAL_LEVELS.frac[state.player.lifestealLevel];
-      if (frac > 0 && state.player.health < PLAYER_COMBAT.maxHealth) {
+      const maxHp = playerMaxHealth(state.player); // MAX-HP track raises the lifesteal ceiling too
+      if (frac > 0 && state.player.health < maxHp) {
         const heal = Math.min(dmg * frac, LIFESTEAL_LEVELS.maxPerHit);
-        state.player.health = Math.min(PLAYER_COMBAT.maxHealth, state.player.health + heal);
+        state.player.health = Math.min(maxHp, state.player.health + heal);
       }
     }
     // SYNERGY ARC PR2 — BURN: IGNITE (refresh-not-stack). Direct AND chain hits ignite
@@ -276,7 +277,10 @@ export function damagePlayer(player: PlayerState, amount: number, state: GameSta
     return;
   }
   if (player.hitInvulnTimer > 0) return; // post-hit i-frames: silent
-  player.health -= amount;
+  // DAMAGE-REDUCTION defensive track: cut the incoming hit by drPerLevel × level (linear,
+  // max 24% at tier III). `amount` already carries Heat's spawn-time damage scaling, so this
+  // mitigates the Heat-boosted hit — the natural order, no special-casing.
+  player.health -= amount * (1 - DEFENSE.drPerLevel * player.drLevel);
   player.hitFlashTimer = PLAYER_COMBAT.hitFlash;
   player.hitInvulnTimer = PLAYER_COMBAT.hitInvuln;
   state.shakeTimer = SHAKE.duration;

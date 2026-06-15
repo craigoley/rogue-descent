@@ -194,6 +194,8 @@ export interface GameState {
     crit: number;
     freeze: number;
     fireRate: number;
+    maxHp: number;
+    damageReduction: number;
   };
   /** Global freeze-frame on impact, seconds. While > 0 the sim is paused. */
   hitstopTimer: number;
@@ -245,7 +247,7 @@ export function createGameState(config?: RunConfig): GameState {
     dropRng: createRng(dropSeed(DUNGEON.defaultSeed)),
     combatRng: createRng(combatSeed(DUNGEON.defaultSeed)),
     chestRng: createRng(chestSeed(DUNGEON.defaultSeed)),
-    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0, freeze: 0, fireRate: 0 },
+    dropCounts: { health: 0, melee: 0, ranged: 0, pierce: 0, knockback: 0, extraCharge: 0, fasterRecharge: 0, dashStrike: 0, lifesteal: 0, burn: 0, chain: 0, crit: 0, freeze: 0, fireRate: 0, maxHp: 0, damageReduction: 0 },
     hitstopTimer: 0,
     shakeTimer: 0,
     deathTimer: 0,
@@ -317,6 +319,8 @@ function loadFloor(state: GameState, seed: number): void {
   state.dropCounts.crit = 0;
   state.dropCounts.freeze = 0;
   state.dropCounts.fireRate = 0;
+  state.dropCounts.maxHp = 0;
+  state.dropCounts.damageReduction = 0;
   for (let i = 0; i < state.enemies.length; i++) state.prevEnemyActive[i] = false;
   state.hitstopTimer = 0;
   state.shakeTimer = 0;
@@ -423,6 +427,8 @@ function descendIfReady(state: GameState): boolean {
     critLevel: p.critLevel,
     freezeLevel: p.freezeLevel,
     fireRateLevel: p.fireRateLevel,
+    hpLevel: p.hpLevel,
+    drLevel: p.drLevel,
     health: p.health,
   };
   loadFloor(state, nextFloorSeed(state.seed, state.run.depth));
@@ -439,6 +445,8 @@ function descendIfReady(state: GameState): boolean {
   state.player.critLevel = carried.critLevel;
   state.player.freezeLevel = carried.freezeLevel;
   state.player.fireRateLevel = carried.fireRateLevel;
+  state.player.hpLevel = carried.hpLevel;
+  state.player.drLevel = carried.drLevel;
   state.player.health = carried.health;
   // Arrive on the new floor with dash FULL (charges reflect the carried cap).
   state.player.dashCharges = dashMaxCharges(state.player);

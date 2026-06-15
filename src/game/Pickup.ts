@@ -12,9 +12,9 @@
  * RNG, applied immediately on touch.
  */
 
-import { DROP, PICKUP, PLAYER, PLAYER_COMBAT, POOL, POWERUP_MAX_LEVEL } from '../utils/constants';
+import { DROP, PICKUP, PLAYER, POOL, POWERUP_MAX_LEVEL } from '../utils/constants';
 import type { Rng } from '../utils/rng';
-import { dashMaxCharges, type PlayerState } from './Player';
+import { dashMaxCharges, playerMaxHealth, type PlayerState } from './Player';
 import type { GameState } from './GameState';
 
 export type PickupKind =
@@ -31,7 +31,9 @@ export type PickupKind =
   | 'chain'
   | 'crit'
   | 'freeze'
-  | 'fireRate';
+  | 'fireRate'
+  | 'maxHp'
+  | 'damageReduction';
 
 /** The powerup kinds (everything except health), picked uniformly when a drop is
  *  a powerup. Order is irrelevant to determinism (index is a pure fn of the roll).
@@ -51,6 +53,8 @@ const POWERUP_KINDS: readonly PickupKind[] = [
   'crit',
   'freeze', // meta PR1 — LOCKABLE: only enters the pool when unlocked (see LOCKABLE_KINDS)
   'fireRate', // meta PR2 — LOCKABLE track: enters the pool only when 'fireRate' is unlocked
+  'maxHp', // DEFENSIVE track — BASE (always in the pool): the +max-HP build axis
+  'damageReduction', // DEFENSIVE track — BASE: the damage-reduction (armor) build axis
 ];
 
 /** On-hit EFFECT axes (synergy arc) — picked UNCOMMONLY (DROP.effectWeight) vs the
@@ -254,6 +258,10 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
       return player.freezeLevel;
     case 'fireRate':
       return player.fireRateLevel;
+    case 'maxHp':
+      return player.hpLevel;
+    case 'damageReduction':
+      return player.drLevel;
     case 'fasterRecharge':
       return player.fasterRecharge ? POWERUP_MAX_LEVEL : 0;
     case 'dashStrike':
@@ -265,7 +273,7 @@ export function currentPowerupLevel(player: PlayerState, kind: PickupKind): numb
 
 export function applyPickup(player: PlayerState, kind: PickupKind): void {
   if (kind === 'health') {
-    player.health = Math.min(PLAYER_COMBAT.maxHealth, player.health + DROP.healAmount);
+    player.health = Math.min(playerMaxHealth(player), player.health + DROP.healAmount);
   } else if (kind === 'melee') {
     player.meleeLevel = levelUp(player.meleeLevel);
   } else if (kind === 'ranged') {
@@ -292,6 +300,15 @@ export function applyPickup(player: PlayerState, kind: PickupKind): void {
     player.freezeLevel = levelUp(player.freezeLevel);
   } else if (kind === 'fireRate') {
     player.fireRateLevel = levelUp(player.fireRateLevel);
+  } else if (kind === 'maxHp') {
+    // Raise the HP cap AND heal the added amount, so the bigger pool is felt on pickup
+    // (mirrors extra-charge's refill). The delta is exactly DEFENSE.hpPerLevel — 0 once
+    // maxed, so a capped repeat is a clean no-op.
+    const before = playerMaxHealth(player);
+    player.hpLevel = levelUp(player.hpLevel);
+    player.health += playerMaxHealth(player) - before;
+  } else if (kind === 'damageReduction') {
+    player.drLevel = levelUp(player.drLevel);
   } else if (kind === 'fasterRecharge') {
     player.fasterRecharge = true;
   } else {

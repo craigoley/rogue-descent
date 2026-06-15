@@ -88,6 +88,12 @@ export const PALETTE = {
    *  chip + world drop. A "rapid / fast" hue distinct from the projectile blue (ranged/
    *  pierce), the verb oranges, and every effect colour. */
   fireRate: 0xb6ff4d,
+  /** MAX-HP defensive track chip — vital green (a "vitality / +health" hue, distinct from
+   *  the offense oranges/blues and the effect tier). */
+  maxHp: 0x55dd88,
+  /** DAMAGE-REDUCTION (ARMOR) defensive track chip — cool steel-blue (reads "armor / plate",
+   *  sharing the boss-shield steel language). */
+  armor: 0x88aacc,
   /** GOLDEN CHEST body (golden chests) — warm amber-gold, distinct from the brighter
    *  crit gold, so a chest reads as "treasure" from across the room. */
   chest: 0xffb300,
@@ -164,6 +170,10 @@ export const CSS_PALETTE = {
   freeze: '#66ccff',
   /** FIRE-RATE track chip colour (meta PR2) — bright lime (mirrors PALETTE.fireRate). */
   fireRate: '#b6ff4d',
+  /** MAX-HP defensive track chip colour — vital green (mirrors PALETTE.maxHp). */
+  maxHp: '#55dd88',
+  /** DAMAGE-REDUCTION (ARMOR) defensive track chip colour — steel-blue (mirrors PALETTE.armor). */
+  armor: '#88aacc',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the sim updates at 60 Hz). The render
@@ -1342,6 +1352,22 @@ export const KNOCKBACK_LEVELS = {
    *  slightly wider than the swing (MELEE.range 1.7) that shoves + stuns ALL
    *  in-range enemies (out-of-arc ones take NO damage — crowd-control). By-feel. */
   aoeRadius: 2.5,
+} as const;
+
+/** DEFENSIVE TRACKS — the in-run defensive build axis (BASE pool) filling the all-offense
+ *  powerup gap. POWER-NEUTRAL by the finite pool: you level defense INSTEAD of offense
+ *  (the can't-max-both guardrail), so it's a LEAN, not added power. Both reset to 0 on
+ *  death and carry across descent, like every track. */
+export const DEFENSE = {
+  /** DAMAGE-REDUCTION per level (LINEAR, not compounding): incoming damage is scaled by
+   *  (1 − drPerLevel × drLevel). Capped by POWERUP_MAX_LEVEL (3) → max 24% at tier III —
+   *  a meaningful lean, never an off-switch. Applied in damagePlayer AFTER Heat's spawn-time
+   *  damage scaling, so it mitigates the Heat-boosted hit (the natural order, no special-case). */
+  drPerLevel: 0.08,
+  /** MAX-HP per level: playerMaxHealth = PLAYER_COMBAT.maxHealth + hpPerLevel × hpLevel →
+   *  +45 at tier III (100 → 145). On gain the added amount is also healed onto current HP so
+   *  it's felt immediately (mirrors the extra-charge refill). */
+  hpPerLevel: 15,
 } as const;
 
 /** Hard cap on every powerup level (tier III). applyPickup clamps to this. */

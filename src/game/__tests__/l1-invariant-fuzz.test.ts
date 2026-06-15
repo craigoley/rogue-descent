@@ -14,7 +14,8 @@ import { activeProjectileCount } from '../Projectile';
 import { activeEnemyProjectileCount } from '../EnemyProjectile';
 import { activePickupCount } from '../Pickup';
 import { createRng } from '../../utils/rng';
-import { POOL, PLAYER_COMBAT, SIM_DT } from '../../utils/constants';
+import { POOL, SIM_DT } from '../../utils/constants';
+import { playerMaxHealth } from '../Player';
 import { intent } from './l1-harness';
 
 const DT = SIM_DT;
@@ -24,7 +25,7 @@ function assertInvariants(s: GameState): void {
   const p = s.player;
   expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true); // no NaN/Infinity drift
   expect(p.health).toBeGreaterThanOrEqual(0); // death clamps to 0
-  expect(p.health).toBeLessThanOrEqual(PLAYER_COMBAT.maxHealth); // pickups clamp to max
+  expect(p.health).toBeLessThanOrEqual(playerMaxHealth(p)); // pickups clamp to actual max (MAX-HP track may raise it)
   for (const e of s.enemies) {
     if (e.active) expect(Number.isFinite(e.x) && Number.isFinite(e.y)).toBe(true);
   }

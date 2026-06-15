@@ -166,6 +166,23 @@ function drawCross(g: CanvasRenderingContext2D, s: number, color: string): void 
   g.fillRect(m, s / 2 - t / 2, s - 2 * m, t); // horizontal
 }
 
+/** ARMOR / DAMAGE-REDUCTION (defensive axis): a heraldic shield — flat top, tapering
+ *  to a point (reads "plate / mitigation"). */
+function drawShield(g: CanvasRenderingContext2D, s: number, color: string): void {
+  const m = s * 0.18;
+  const w = s - 2 * m;
+  const cx = s / 2;
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(m, m); // top-left
+  g.lineTo(s - m, m); // top-right
+  g.lineTo(s - m, m + w * 0.42); // right shoulder
+  g.lineTo(cx, s - m); // taper to the point
+  g.lineTo(m, m + w * 0.42); // left shoulder
+  g.closePath();
+  g.fill();
+}
+
 /** LIFESTEAL (synergy arc): a heart — two top lobes + a point (heal-on-hit). */
 function drawHeart(g: CanvasRenderingContext2D, s: number, color: string): void {
   const m = s * 0.18;
@@ -430,6 +447,8 @@ const DROP_COLOR: Record<PickupKind, number> = {
   crit: PALETTE.crit,
   freeze: PALETTE.enemyFrozen,
   fireRate: PALETTE.fireRate,
+  maxHp: PALETTE.maxHp,
+  damageReduction: PALETTE.armor,
 };
 const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, color: string) => void> = {
   health: drawCross,
@@ -446,6 +465,8 @@ const DROP_GLYPH: Record<PickupKind, (g: CanvasRenderingContext2D, s: number, co
   crit: drawStar,
   freeze: drawSnowflake,
   fireRate: drawFireRate,
+  maxHp: drawCross, // +HP-capacity — the medical cross (toast label disambiguates from health)
+  damageReduction: drawShield,
 };
 const DROP_LABEL: Record<PickupKind, string> = {
   health: '+HP',
@@ -462,6 +483,8 @@ const DROP_LABEL: Record<PickupKind, string> = {
   crit: 'CRIT',
   freeze: 'FREEZE',
   fireRate: 'FIRE RATE',
+  maxHp: 'MAX HP',
+  damageReduction: 'ARMOR',
 };
 const DROP_KINDS: PickupKind[] = [
   'health',
@@ -478,6 +501,8 @@ const DROP_KINDS: PickupKind[] = [
   'crit',
   'freeze',
   'fireRate',
+  'maxHp',
+  'damageReduction',
 ];
 
 /** Geometry + child Y offsets for one figure type (shared across a pool). */
