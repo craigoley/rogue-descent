@@ -38,7 +38,6 @@ export class SceneManager {
   readonly scene = new Scene();
   readonly camera: OrthographicCamera;
   private readonly renderer: WebGLRenderer;
-  private readonly container: HTMLElement;
   private readonly target = new Vector3(0, 0, 0);
   /** Camera focus point on the floor plane (game x, game y). */
   private focusX = 0;
@@ -55,7 +54,6 @@ export class SceneManager {
   private bloomBelowSec = 0;
 
   constructor(container: HTMLElement) {
-    this.container = container;
     this.scene.background = new Color(PALETTE.background);
 
     const { offsetX, offsetY, offsetZ, near, far } = CAMERA;
@@ -89,7 +87,18 @@ export class SceneManager {
 
     this.initBloom();
     this.resize();
+    // RE-FIRE after layout settles so an early measurement (slow connection: the render-blocking
+    // CSS <link> / first layout can arrive AFTER construction) is CORRECTED rather than locked:
+    //  - rAF: the fast-path post-layout re-measure (next frame);
+    //  - 'load': fires only after ALL render-blocking resources (incl. the stylesheet) have landed
+    //    — the direct fix for the slow-network case.
+    requestAnimationFrame(this.resize);
+    window.addEventListener('load', this.resize);
     window.addEventListener('resize', this.resize);
+    // Mobile belt-and-suspenders (cheap, event-driven — not a rAF loop): re-fire when the toolbar
+    // or orientation changes the visible viewport. visualViewport may be absent (older engines).
+    window.addEventListener('orientationchange', this.resize);
+    window.visualViewport?.addEventListener('resize', this.resize);
   }
 
   /** Build the post chain: RenderPass (scene → linear RT) → UnrealBloom (threshold
@@ -148,8 +157,7 @@ export class SceneManager {
   private readonly _screenPx = { x: 0, y: 0 };
   worldToScreenPx(worldX: number, worldY: number): { x: number; y: number } {
     this._projP.set(worldX, 0, worldY).project(this.camera);
-    const w = this.container.clientWidth || window.innerWidth;
-    const h = this.container.clientHeight || window.innerHeight;
+    const { w, h } = this.viewportSize(); // same source the canvas is sized to → aim stays aligned
     this._screenPx.x = (this._projP.x * 0.5 + 0.5) * w;
     this._screenPx.y = (-this._projP.y * 0.5 + 0.5) * h;
     return this._screenPx;
@@ -197,8 +205,7 @@ export class SceneManager {
   /** Size the composer + bloom pass to the viewport at the current tier's capped
    *  pixel ratio (below the renderer's DPR-2 — the #1 mobile cost control). */
   private sizeComposer(): void {
-    const w = this.container.clientWidth || window.innerWidth;
-    const h = this.container.clientHeight || window.innerHeight;
+    const { w, h } = this.viewportSize();
     const cap = this.bloomQuality === 'half' ? BLOOM.halfPixelRatio : BLOOM.fullPixelRatio;
     this.composer.setPixelRatio(Math.min(window.devicePixelRatio, cap));
     this.composer.setSize(w, h);
@@ -245,9 +252,26 @@ export class SceneManager {
     this.camera.lookAt(this.target);
   }
 
+  /** The viewport the canvas must fill. #app is `position:fixed; inset:0` = the viewport, so we
+   *  measure the WINDOW directly rather than `#app.clientHeight`. window.innerWidth/innerHeight is
+   *  available EARLY — it does NOT depend on the render-blocking CSS `<link>` having arrived — so
+   *  it can't be raced + locked small the way the old `#app.clientHeight` read was on a slow
+   *  connection (the CSS/layout landed late → #app measured unstyled → ~40% canvas that stuck).
+   *  (visualViewport is only a re-fire TRIGGER below, not the size: the canvas should cover the
+   *  layout viewport #app spans, which is innerHeight.) */
+  private viewportSize(): { w: number; h: number } {
+    return { w: window.innerWidth, h: window.innerHeight };
+  }
+
   private resize = (): void => {
-    const w = this.container.clientWidth || window.innerWidth;
-    const h = this.container.clientHeight || window.innerHeight;
+    const { w, h } = this.viewportSize();
+    // PLAUSIBILITY GUARD: never LOCK a degenerate measurement. If the window reports a zero/garbage
+    // size (can happen if this fires absurdly early), skip applying it and retry next frame so a bad
+    // early read self-CORRECTS instead of sticking — sticking was the whole slow-network squish bug.
+    if (w < 1 || h < 1) {
+      requestAnimationFrame(this.resize);
+      return;
+    }
     const aspect = w / h;
     const v = CAMERA.viewSize;
     // Shift the frustum window up by frameBiasY*v so the focus (player) renders

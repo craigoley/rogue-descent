@@ -65,3 +65,48 @@ test('the boss scene boots (?scene=boss) without errors', async ({ page }) => {
   expect(shot.byteLength).toBeGreaterThan(3000); // the boss room rendered
   expect(errors, errors.join('\n')).toHaveLength(0);
 });
+
+/** Read the game canvas (the full-viewport WebGL one — NOT the minimap) CSS size + the viewport. */
+async function canvasVsViewport(
+  page: import('@playwright/test').Page,
+): Promise<{ cw: number; ch: number; iw: number; ih: number }> {
+  return page.evaluate(() => {
+    const c = document.querySelector('canvas:not(.minimap)') as HTMLCanvasElement;
+    return { cw: c.clientWidth, ch: c.clientHeight, iw: window.innerWidth, ih: window.innerHeight };
+  });
+}
+
+// FILL-THE-VIEWPORT GUARD (the squish regression net). The game canvas is designed to fill the
+// viewport (#app is position:fixed; inset:0). A squish — like the slow-network bug where the canvas
+// sized to an unstyled #app and locked at ~40% — shows up here as canvas height << viewport height.
+// (smoke's other checks only assert canvas height > 0, which a 40%-tall canvas PASSES.)
+test('the canvas FILLS the viewport (no squish regression)', async ({ page }) => {
+  await page.goto('/?seed=12345');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+  const { cw, ch, iw, ih } = await canvasVsViewport(page);
+  expect(Math.abs(ch - ih), `canvas height ${ch} ≠ viewport ${ih} (squished)`).toBeLessThanOrEqual(2);
+  expect(Math.abs(cw - iw), `canvas width ${cw} ≠ viewport ${iw}`).toBeLessThanOrEqual(2);
+});
+
+// SLOW-NETWORK race reproduction: DELAY the stylesheet so #app is still UNSTYLED when SceneManager
+// first measures the viewport — the exact slow-connection timing that locked a ~40% canvas when the
+// sizing read #app.clientHeight. The fix sizes to window.innerHeight (available regardless of the
+// CSS <link> arriving) + re-fires on 'load', so the canvas must STILL fill the viewport. Pre-fix this
+// would RED (canvas ≈ the 150px default-canvas height); post-fix it's GREEN. The general guard above
+// is the reliable net — this variant targets the specific race; note data-ready fires on the first
+// rAF frame, independent of CSS, so the measurement happens during the CSS delay.
+test('the canvas fills the viewport even when the stylesheet loads LATE (slow-network race)', async ({
+  page,
+}) => {
+  await page.route(/\.css(\?|$)/, async (route) => {
+    await new Promise((r) => setTimeout(r, 1500)); // stylesheet arrives well after first layout/frame
+    await route.continue();
+  });
+  await page.goto('/?seed=12345');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 20_000 });
+  const { ch, ih } = await canvasVsViewport(page);
+  expect(
+    Math.abs(ch - ih),
+    `canvas height ${ch} ≠ viewport ${ih} under delayed CSS (the slow-network squish)`,
+  ).toBeLessThanOrEqual(2);
+});
