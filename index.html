@@ -40,9 +40,68 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Rogue Descent" />
+
+    <!-- Structured data (Schema.org VideoGame) in the INITIAL HTML so crawlers/AI
+         that don't run JS still get a machine-readable description of the game. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Rogue Descent",
+        "description": "A real-time twin-stick isometric roguelike dungeon crawler. Descend through procedurally generated floors, dodge and fight, and build your run with stacking powerups.",
+        "url": "https://rogue-descent.vercel.app",
+        "image": "https://rogue-descent.vercel.app/og-image.png",
+        "genre": ["Roguelike", "Action"],
+        "applicationCategory": "Game",
+        "operatingSystem": "Web browser",
+        "gamePlatform": "Web browser",
+        "playMode": "SinglePlayer",
+        "creator": { "@type": "Organization", "name": "OleyArcade" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- The game renders into a WebGL <canvas> appended here by the app. A canvas is
+         opaque to crawlers, no-JS visitors, and screen readers, so #app carries an
+         accessible name (JS-on SR users) and the <noscript> below describes the game
+         in plain DOM text (crawlers / no-JS). Both are non-visual / JS-hidden, so the
+         rendered game is unchanged. -->
+    <div
+      id="app"
+      role="application"
+      aria-label="Rogue Descent — a twin-stick isometric roguelike, playable in your browser"
+    >
+      <noscript>
+        <section
+          style="
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 2rem;
+            text-align: center;
+            background: #0a0a12;
+            color: #cfe;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          "
+        >
+          <h1 style="color: #33ffcc; letter-spacing: 0.2em; margin: 0">ROGUE DESCENT</h1>
+          <p style="max-width: 42rem; line-height: 1.6; margin: 0">
+            Rogue Descent is a real-time twin-stick isometric roguelike dungeon crawler.
+            Descend through procedurally generated floors, dodge and fight enemies in fast
+            melee-and-ranged combat, and build your run with stacking powerups. Death is
+            permanent — every run is different.
+          </p>
+          <p style="margin: 0; opacity: 0.8">
+            This game runs in your browser. Please enable JavaScript to play.
+          </p>
+        </section>
+      </noscript>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
