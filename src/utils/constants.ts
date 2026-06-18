@@ -1420,6 +1420,48 @@ export const TOAST = {
   startOffset: 0.8,
 } as const;
 
+/**
+ * PICKUP POP (juice, render-only) — on the collect frame-diff (active true→false +
+ * collected) the pickup mesh plays a brief kind-coloured pop (a quick scale-overshoot-
+ * then-collapse, like the kill-pop, + an emissive flare that fades) instead of an
+ * instant hide. ⚠️ Deliberately SUBTLE — a powerup collect ALSO fires the rising toast
+ * (co-located) + the HUD chip flare, so the pop must be a PUNCTUATING accent that
+ * LAYERS with them, not a showy burst that competes at the same spot. For health
+ * pickups (no chip, toast-only) it's the main punchy collect cue. Gated by reduce-motion
+ * (the scale-up is motion → stilled to a brief emissive flash, which is INFORMATION).
+ */
+export const PICKUP_POP = {
+  /** On-collect pop duration, seconds. SHORT (a quick accent, not a lingering burst). */
+  popDuration: 0.2,
+  /** Peak overshoot above full size during the up-phase (subtle on purpose). */
+  popOvershoot: 0.5,
+  /** Fraction of the duration spent popping UP before the collapse to 0. */
+  popUpFrac: 0.35,
+  /** Emissive intensity at the pop's peak (fades back to VFX.pickupEmissive) — the
+   *  flare that reads even under reduce-motion (where the scale is gated). */
+  flashEmissive: 2.6,
+} as const;
+
+/**
+ * WILDFIRE discovery cue (juice, render-only) — the ONE invisible synergy that lacks
+ * its own world tell: burn × chain (fire SPREAD by a chain arc, finishing an enemy).
+ * The first wildfire kill of a run (state.run.wildfireKills 0→1) flashes a one-shot,
+ * world-space "WILDFIRE!" label at the kill — teaching the combo ONCE, then quiet (a
+ * burn+chain build triggers it constantly; re-armed on run reset). World-space (not a
+ * HUD element) so it reads at the combo location, never fills the screen, and can't
+ * shift the HUD baseline. Reduce-motion keeps the label (info) + fade, gates the rise.
+ */
+export const WILDFIRE_CUE = {
+  /** Lifetime of the one-shot label, seconds (fade-in / hold / fade-out within this). */
+  lifetime: 1.4,
+  /** Rise speed, world units per second (gated under reduce-motion — fade only). */
+  rise: 1.2,
+  /** Initial height above the wildfire kill, world units. */
+  startOffset: 1.0,
+  /** Label height (world units); width follows the texture aspect. */
+  size: 1.1,
+} as const;
+
 /** Locked-door barrier visuals (render-only). */
 export const BARRIER = {
   /** Pooled barrier boxes (>= max doorway cells of any single room). */
@@ -1471,6 +1513,19 @@ export const KILL = {
   popOvershoot: 0.35,
   /** Fraction of the duration spent popping UP before the collapse to 0. */
   popUpFrac: 0.32,
+} as const;
+
+/**
+ * SPAWN scale-IN (juice, render-only) — an enemy SCALES in (0→full) on the
+ * active false→true frame-diff instead of popping in at full size. FAST + ease-out
+ * so most of the size lands in the first couple frames: the enemy reads as
+ * present-and-incoming instantly, so the scale-in NEVER hides a threat (a telegraph
+ * wind-up is a separate, longer, GROWING tell that still reads). Gated by
+ * reduce-motion (instant full size — the scale-in is pure motion).
+ */
+export const SPAWN = {
+  /** Enemy spawn scale-in duration, seconds (~9 frames @60). */
+  scaleInDuration: 0.15,
 } as const;
 
 /**

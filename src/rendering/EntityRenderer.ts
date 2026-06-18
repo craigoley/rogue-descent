@@ -62,15 +62,19 @@ import {
   MELEE,
   PALETTE,
   PICKUP,
+  PICKUP_POP,
   POOL,
   RANGED,
   ROOM,
+  SPAWN,
   STAIRS,
   TOAST,
   VFX,
+  WILDFIRE_CUE,
   type EnemyType,
 } from '../utils/constants';
 import { lerp, type Vec2 } from '../utils/math';
+import { pickupPopScale, shouldCueWildfire, spawnInScale } from './feedbackFx';
 
 /** Per-enemy-type render presentation: silhouette dims + body colour. Adding a
  *  type = one entry here (mirrors the ENEMY_TYPES sim table). */
@@ -596,6 +600,11 @@ export class EntityRenderer {
    *  dead figure scale-overshoots-then-vanishes before it's hidden. Render-only. */
   private readonly enemyPrevActive: boolean[] = [];
   private readonly enemyDyingTimer: number[] = [];
+  /** Spawn SCALE-IN (juice, B): per enemy-slot, frame-diff active→true sets this to
+   *  SPAWN.scaleInDuration; it counts down so the figure scales 0→full (ease-out).
+   *  Multiplied on top of the slot's base render scale. Render-only; reduce-motion
+   *  leaves it at 0 (instant full size). */
+  private readonly enemySpawnTimer: number[] = [];
   /** Boss death-POP (juice PR-5): the bespoke boss mesh isn't a pooled figure, so it
    *  gets its own frame-diff. `bossWasAlive` + the captured last position drive a
    *  grander pop when the boss vanishes (state.boss is nulled the death frame). */
@@ -622,14 +631,29 @@ export class EntityRenderer {
   private readonly pickupIcons: Sprite[] = [];
   /** One shared icon material per drop kind (cross / arrow / burst). */
   private iconMats!: Record<PickupKind, SpriteMaterial>;
-  /** Render-side snapshot of pickup liveness, to detect collection (-> toast). */
+  /** Render-side snapshot of pickup liveness, to detect collection (-> toast + pop). */
   private readonly prevPickupActive: boolean[] = [];
+  /** Pickup POP (juice, C): per pickup-slot, the collect frame-diff (active→false +
+   *  collected) sets this to PICKUP_POP.popDuration; while >0 the pickup mesh plays a
+   *  kind-coloured scale-overshoot-then-collapse + emissive flare instead of an instant
+   *  hide. Render-only; reduce-motion keeps the emissive flash but skips the scale. */
+  private readonly pickupPopTimer: number[] = [];
   // On-collect toasts ("+HP" / "PIERCE" / "KNOCKBACK") — pooled, per-toast material.
   private readonly toasts: Sprite[] = [];
   private readonly toastLife: number[] = [];
   /** One shared toast texture per drop kind. */
   private toastTex!: Record<PickupKind, CanvasTexture>;
   private toastAspect = 4;
+  /** WILDFIRE discovery cue (juice, A): a single world-space "WILDFIRE!" label, fired
+   *  ONCE per run on the first wildfire kill (state.run.wildfireKills 0→1) at the kill
+   *  position, then quiet until the counter resets (new run). `wildfireLabel` is the
+   *  pooled sprite; `wildfireLife` counts its rise+fade; `prevWildfireKills` + `wildfireCued`
+   *  drive the once-per-run latch (re-armed when the counter drops on a new run). */
+  private wildfireLabel!: Sprite;
+  private wildfireAspect = 4;
+  private wildfireLife = 0;
+  private prevWildfireKills = 0;
+  private wildfireCued = false;
   // CHEST CHOICE legibility (#chest-clarity): per-pair tether LINE + "CHOOSE ONE"
   // billboard, keyed off two active pickups sharing a pairId. Pooled to the max
   // simultaneous pairs (floor(POOL.pickups / 2)). Driven purely by sim state — when
@@ -871,6 +895,20 @@ export class EntityRenderer {
       this.toasts.push(sp);
       this.toastLife.push(0);
       scene.add(sp);
+    }
+
+    // --- WILDFIRE discovery cue (A): one world-space label, fired once per run on the
+    // first wildfire kill. Hot-ember text (reusing the toast pill texture), drawn above
+    // everything so it reads through the fight; hidden until triggered. ---
+    {
+      const t = textTexture('WILDFIRE!', cssHex(PALETTE.enemyBurning));
+      this.wildfireAspect = t.aspect;
+      const mat = new SpriteMaterial({ map: t.tex, transparent: true, opacity: 0, depthTest: false });
+      this.wildfireLabel = new Sprite(mat);
+      this.wildfireLabel.scale.set(WILDFIRE_CUE.size * this.wildfireAspect, WILDFIRE_CUE.size, 1);
+      this.wildfireLabel.visible = false;
+      this.wildfireLabel.renderOrder = 11; // above toasts
+      scene.add(this.wildfireLabel);
     }
 
     // --- Locked-door barriers (pooled; shared translucent material) ---
@@ -1129,7 +1167,7 @@ export class EntityRenderer {
     this.syncChainArcs(state);
     this.syncChests(state, now);
     this.syncMelee(p, px, py, aim.x, aim.y);
-    this.syncPickups(state, now);
+    this.syncPickups(state, now, frameDt);
     this.syncPairChoice(state, now);
     this.syncToasts(frameDt);
     this.syncBarriers(state);
@@ -1148,7 +1186,7 @@ export class EntityRenderer {
     this.stairsLabel.position.set(s.x, STAIRS.glyphHeight, s.y);
   }
 
-  private syncPickups(state: GameState, now: number): void {
+  private syncPickups(state: GameState, now: number, frameDt: number): void {
     const bob = Math.sin(now * 0.001 * PICKUP.bobRate) * PICKUP.bob;
     for (let i = 0; i < this.pickups.length; i++) {
       const pk = state.pickups[i];
@@ -1157,19 +1195,43 @@ export class EntityRenderer {
 
       // Collection = active last frame, inactive now. A pickup deactivates two ways:
       // COLLECTED (taken → pk.collected) or DISCARDED (a rejected pair-sibling, the
-      // #70 1-of-2 link). Toast ONLY the collected one — else the discarded sibling
+      // #70 1-of-2 link). Toast + POP ONLY the collected one — else the discarded sibling
       // also announces itself ("both toasts" bug). Fire a rising "+HP" / "PIERCE" toast.
       if (this.prevPickupActive[i] && !pk.active && pk.collected) {
         this.spawnToast(pk.x, pk.y, pk.kind);
+        // Pickup POP (C): arm the on-collect pop (kind-coloured). A SUBTLE accent that
+        // layers with the toast (co-located) + the HUD chip flare — not a competing burst.
+        this.pickupPopTimer[i] = PICKUP_POP.popDuration;
       }
       this.prevPickupActive[i] = pk.active;
 
       if (!pk.active) {
-        m.visible = false;
-        icon.visible = false;
-        this.pickupBlobs[i].visible = false;
+        // Pickup POP (C): while the pop runs, keep the mesh visible playing a kind-
+        // coloured scale-overshoot-then-collapse + an emissive flare that fades, instead
+        // of an instant hide. reduce-motion pins the scale (motion gated) but keeps the
+        // emissive flash (information). pk.kind / pk.x / pk.y persist until the slot recycles.
+        if (this.pickupPopTimer[i] > 0) {
+          this.pickupPopTimer[i] = Math.max(0, this.pickupPopTimer[i] - frameDt);
+          const tr = this.pickupPopTimer[i];
+          const frac = tr / PICKUP_POP.popDuration; // 1 → 0
+          const color = DROP_COLOR[pk.kind];
+          m.visible = true;
+          m.position.set(pk.x, PICKUP.height + bob, pk.y);
+          m.scale.setScalar(this.reduceMotion ? 1 : pickupPopScale(tr));
+          const mat = this.pickupMats[i];
+          mat.color.setHex(color);
+          mat.emissive.setHex(color);
+          mat.emissiveIntensity = VFX.pickupEmissive + (PICKUP_POP.flashEmissive - VFX.pickupEmissive) * frac;
+          icon.visible = false;
+          this.pickupBlobs[i].visible = false;
+        } else {
+          m.visible = false;
+          icon.visible = false;
+          this.pickupBlobs[i].visible = false;
+        }
         continue;
       }
+      this.pickupPopTimer[i] = 0; // live again → cancel any lingering pop on this slot
       const color = DROP_COLOR[pk.kind];
       m.visible = true;
       m.position.set(pk.x, PICKUP.height + bob, pk.y);
@@ -1184,6 +1246,7 @@ export class EntityRenderer {
       const mat = this.pickupMats[i];
       mat.color.setHex(color);
       mat.emissive.setHex(color);
+      mat.emissiveIntensity = VFX.pickupEmissive; // resting (restore after a pop left it raised)
 
       // Floating type-icon (the legibility win): cross = health, arrow = pierce,
       // burst = knockback.
@@ -1273,13 +1336,30 @@ export class EntityRenderer {
     frameDt: number,
   ): void {
     const list = state.enemies;
+    // WILDFIRE cue (A): captured position of a chain-lit enemy that died THIS frame
+    // (the wildfire kill), used to place the one-shot label. -1 = none captured.
+    let wfX = NaN;
+    let wfY = NaN;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       // Death-POP trigger (frame-diff active→false). The boss is excluded (its
       // death is juiced separately); reduce-motion skips the pop (motion) — the
       // colored burst (information) still fires from the sim regardless.
-      if (this.enemyPrevActive[i] && !e.active && e.type !== 'boss' && !this.reduceMotion) {
+      const justDied = this.enemyPrevActive[i] && !e.active;
+      if (justDied && e.type !== 'boss' && !this.reduceMotion) {
         this.enemyDyingTimer[i] = KILL.popDuration;
+      }
+      // WILDFIRE cue (A): a chain-SPREAD enemy (ignitedByChain) dying this frame IS the
+      // wildfire kill that ticks state.run.wildfireKills — capture where to flash the label.
+      if (justDied && e.ignitedByChain) {
+        wfX = e.x;
+        wfY = e.y;
+      }
+      // Spawn SCALE-IN trigger (B): a genuine inactive→active edge (=== false, so the
+      // frame-1 undefined state never false-triggers). Render-only motion → gated by
+      // reduce-motion (enemies appear at full size instantly, like the kill-pop skip).
+      if (this.enemyPrevActive[i] === false && e.active && !this.reduceMotion) {
+        this.enemySpawnTimer[i] = SPAWN.scaleInDuration;
       }
       this.enemyPrevActive[i] = e.active;
 
@@ -1380,7 +1460,54 @@ export class EntityRenderer {
         mat.emissiveIntensity = VFX.enemyEmissive;
         fig.group.scale.setScalar(1);
       }
+
+      // Spawn SCALE-IN (B): multiply the ease-out factor (0→1) ON TOP of whatever base
+      // scale the branch above set, so the enemy scales in from nothing on spawn. Fast
+      // (SPAWN.scaleInDuration) → done well before any telegraph/strike, so it never
+      // hides an incoming threat. reduce-motion never arms the timer (full size at once).
+      if (this.enemySpawnTimer[i] > 0) {
+        this.enemySpawnTimer[i] = Math.max(0, this.enemySpawnTimer[i] - frameDt);
+        fig.group.scale.multiplyScalar(spawnInScale(this.enemySpawnTimer[i]));
+      }
     }
+
+    // WILDFIRE discovery cue (A): re-arm on a run reset (the counter drops to 0), then
+    // fire ONCE on the first wildfire kill of the run at the captured kill position
+    // (fallback: the player, if somehow no chain-lit death was seen this frame).
+    const wk = state.run.wildfireKills;
+    if (wk < this.prevWildfireKills) this.wildfireCued = false; // new run → re-arm
+    if (shouldCueWildfire(this.prevWildfireKills, wk, this.wildfireCued)) {
+      this.spawnWildfireLabel(Number.isNaN(wfX) ? px : wfX, Number.isNaN(wfY) ? py : wfY);
+      this.wildfireCued = true;
+    }
+    this.prevWildfireKills = wk;
+    this.syncWildfireLabel(frameDt);
+  }
+
+  /** Fire the one-shot WILDFIRE label at (x, y) — the world position of the wildfire
+   *  kill. Resets its life so the rise+fade replays. */
+  private spawnWildfireLabel(x: number, y: number): void {
+    this.wildfireLabel.position.set(x, PICKUP.height + WILDFIRE_CUE.startOffset, y);
+    this.wildfireLabel.visible = true;
+    this.wildfireLife = WILDFIRE_CUE.lifetime;
+  }
+
+  /** Advance the WILDFIRE label: fade-in / hold / fade-out across its lifetime, rising
+   *  as it goes. reduce-motion keeps the fade (info) but pins the height (no rise). */
+  private syncWildfireLabel(frameDt: number): void {
+    if (this.wildfireLife <= 0) return;
+    this.wildfireLife -= frameDt;
+    const mat = this.wildfireLabel.material as SpriteMaterial;
+    if (this.wildfireLife <= 0) {
+      this.wildfireLabel.visible = false;
+      mat.opacity = 0;
+      return;
+    }
+    const age = 1 - this.wildfireLife / WILDFIRE_CUE.lifetime; // 0 → 1
+    // Quick fade-in (first 15%), hold, fade-out (last 35%) — readable then leaves.
+    const opacity = age < 0.15 ? age / 0.15 : age > 0.65 ? (1 - age) / 0.35 : 1;
+    mat.opacity = Math.max(0, Math.min(1, opacity));
+    if (!this.reduceMotion) this.wildfireLabel.position.y += WILDFIRE_CUE.rise * frameDt;
   }
 
   /** Position + recolour the bespoke boss mesh from state.boss + its pooled Enemy.
