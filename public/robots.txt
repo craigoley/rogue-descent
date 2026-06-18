@@ -1,0 +1,6 @@
+# Rogue Descent — a static web game. All crawlers welcome; nothing to hide.
+User-agent: *
+Allow: /
+
+# No sitemap / canonical / ranking machinery — this is a single-page personal game,
+# not a content site. The page describes itself via JSON-LD + a <noscript> fallback.
