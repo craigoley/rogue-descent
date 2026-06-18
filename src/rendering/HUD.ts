@@ -28,6 +28,7 @@ import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
 import { nearestLiveEnemyInRoom } from './softlock';
+import { depthFadeAction } from './depthFade';
 import type { FrameStats } from '../utils/perfMeter';
 import {
   CSS_PALETTE,
@@ -142,8 +143,16 @@ export class HUD {
    *  (.is-compact) into the space the faded title+depth vacate — closing the gap. */
   private readonly barsEl: HTMLDivElement;
   /** Latched true the first time the player enters an encounter room (activeRoom >= 0),
-   *  so the title+depth fade + the bars rise happen exactly once and never revert. */
+   *  so the TITLE fade + the #100 bars-rise/minimap-rise happen exactly once and never
+   *  revert (a one-time game-open flourish). The DEPTH is DECOUPLED from this — it
+   *  re-shows/fades PER FLOOR via prevDepth + depthFaded below. */
   private titleFaded = false;
+  /** Per-floor depth re-arm: the last depth the HUD saw (NaN = first frame). A change
+   *  means a new floor was loaded (entry room, activeRoom === -1) → re-SHOW the depth. */
+  private prevDepth = NaN;
+  /** Per-floor latch: true once the depth has faded on THIS floor (entering its first
+   *  combat room). Reset to false on each new-floor arrival so the depth re-shows. */
+  private depthFaded = false;
   /** Leveled-powerup chips (Phase 9): each shows up to POWERUP_MAX_LEVEL pips
    *  (filled = current level), lit when level > 0. */
   private readonly meleeChip: LevelChip;
@@ -678,18 +687,37 @@ export class HUD {
       if (this.reduceMotion) {
         // Instant: snap to the compacted end-state, no fade/rise animation.
         this.titleEl.style.transition = 'none';
-        this.depthEl.style.transition = 'none';
         this.barsEl.style.transition = 'none';
       }
       this.titleEl.classList.add('is-faded');
-      this.depthEl.classList.add('is-faded'); // depth fades WITH the title
       this.barsEl.classList.add('is-compact'); // ...and the bars rise into the gap
       // ...and the right-side cluster (minimap + gear/panel) rises into the title's
       // vacated row via the shared .is-compacted transform (CSS) — symmetric reclaim.
       this.container.classList.add('is-compacted');
     }
 
-    // Depth (always): current floor this run.
+    // PER-FLOOR depth show/fade — DECOUPLED from the title's one-time latch above.
+    // The "DEPTH N" readout re-shows on each new floor's entry room (pre-combat) and
+    // fades when the player enters that floor's first combat room, then re-arms on the
+    // next descent. (Floor 1 is just the first instance of this general pattern.) It's
+    // opacity-only on a position:fixed element, so the re-show moves NOTHING — the #100
+    // bars-compact / minimap-rise stay latched and are never disturbed.
+    const depthChanged = state.run.depth !== this.prevDepth;
+    switch (depthFadeAction(depthChanged, state.activeRoom, this.depthFaded)) {
+      case 'show': // new floor's entry room → re-display "DEPTH N" + re-arm the fade
+        if (this.reduceMotion) this.depthEl.style.transition = 'none'; // instant (matches #99)
+        this.depthEl.classList.remove('is-faded');
+        this.depthFaded = false;
+        break;
+      case 'fade': // first combat room of this floor → fade out (same fade as floor 1)
+        if (this.reduceMotion) this.depthEl.style.transition = 'none'; // instant hide (matches #99)
+        this.depthEl.classList.add('is-faded');
+        this.depthFaded = true;
+        break;
+    }
+    this.prevDepth = state.run.depth;
+
+    // Depth text (always): current floor this run.
     this.depthEl.textContent = `DEPTH ${state.run.depth}`;
 
     // Active powerups (collapsed/dim by default; a leveled-up chip FLARES = the pickup/
