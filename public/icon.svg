@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Rogue Descent app icon: the descending-chevron motif (the game's name +
+       verb) in neon-mint (#33ffcc = PALETTE.player) on the dark bg (#0a0a12).
+       Full-bleed square so it works as a maskable PWA icon — the chevrons sit
+       well inside the inner-80% safe zone. Soft glow under-layer for the neon/
+       bloom feel; crisp shape on top. Pure SVG, zero raster. -->
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="#0a0a12" />
+  <g fill="none" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#33ffcc" opacity="0.5" filter="url(#glow)">
+      <polyline points="156,160 256,224 356,160" />
+      <polyline points="156,236 256,300 356,236" />
+      <polyline points="156,312 256,376 356,312" />
+    </g>
+    <g stroke="#33ffcc">
+      <polyline points="156,160 256,224 356,160" />
+      <polyline points="156,236 256,300 356,236" />
+      <polyline points="156,312 256,376 356,312" stroke="#66ffd0" />
+    </g>
+  </g>
+</svg>

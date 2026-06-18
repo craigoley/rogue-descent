@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Open Graph / Twitter share image (1200x630, the OG standard). The chevron
+       mark + wordmark + tagline on the dark bg, in the brand neon-mint. Rendered
+       to og-image.png for the actual unfurl (most scrapers want raster). -->
+  <defs>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" />
+    </filter>
+    <radialGradient id="vign" cx="32%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#12121f" />
+      <stop offset="100%" stop-color="#0a0a12" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#vign)" />
+
+  <!-- chevron mark, left -->
+  <g fill="none" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" transform="translate(150,180)">
+    <g stroke="#33ffcc" opacity="0.5" filter="url(#glow)">
+      <polyline points="0,0 90,58 180,0" />
+      <polyline points="0,70 90,128 180,70" />
+      <polyline points="0,140 90,198 180,140" />
+    </g>
+    <g stroke="#33ffcc">
+      <polyline points="0,0 90,58 180,0" />
+      <polyline points="0,70 90,128 180,70" />
+      <polyline points="0,140 90,198 180,140" stroke="#66ffd0" />
+    </g>
+  </g>
+
+  <!-- wordmark + tagline, right of the mark -->
+  <text x="470" y="300" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="78" font-weight="700" letter-spacing="6" fill="#33ffcc">ROGUE DESCENT</text>
+  <text x="472" y="356" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="30" font-weight="500" letter-spacing="2" fill="#9fb3ad">A twin-stick isometric roguelike.</text>
+  <text x="472" y="398" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="30" font-weight="500" letter-spacing="2" fill="#9fb3ad">Descend, dodge, build your run.</text>
+</svg>
