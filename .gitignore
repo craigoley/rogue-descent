@@ -29,3 +29,6 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Lighthouse CI scratch output (autorun writes reports here)
+.lighthouseci/
