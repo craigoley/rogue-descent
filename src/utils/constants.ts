@@ -1460,6 +1460,10 @@ export const WILDFIRE_CUE = {
   startOffset: 1.0,
   /** Label height (world units); width follows the texture aspect. */
   size: 1.1,
+  /** Fraction of lifetime spent fading IN (quick reveal). */
+  fadeInFrac: 0.15,
+  /** Fraction of lifetime at which fade-OUT begins (hold ends). */
+  fadeOutStart: 0.65,
 } as const;
 
 /** Locked-door barrier visuals (render-only). */

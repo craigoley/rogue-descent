@@ -74,7 +74,7 @@ import {
   type EnemyType,
 } from '../utils/constants';
 import { lerp, type Vec2 } from '../utils/math';
-import { pickupPopScale, shouldCueWildfire, spawnInScale } from './feedbackFx';
+import { pickupPopScale, popScale, shouldCueWildfire, spawnInScale } from './feedbackFx';
 
 /** Per-enemy-type render presentation: silhouette dims + body colour. Adding a
  *  type = one entry here (mirrors the ENEMY_TYPES sim table). */
@@ -103,15 +103,6 @@ const ENEMY_BODY_COLOR: Record<EnemyType, number> = {
  *  the boss-add (gimmick #2) IS pooled like the base enemies. */
 const ENEMY_KINDS: EnemyType[] = ['chaser', 'armored', 'ranged', 'swarmer', 'bruiser', 'bossadd'];
 
-/** Death-POP scale (juice PR-1/PR-5): a fast UP-phase to 1+overshoot, then an eased
- *  (accelerating) collapse to 0 — the figure "pops" out of existence. Pure: the
- *  remaining timer + its full duration/shape params → scale, no state. */
-function popScale(timerRemaining: number, duration: number, overshoot: number, upFrac: number): number {
-  const t = 1 - timerRemaining / duration; // 0 at death → 1 at end
-  if (t < upFrac) return 1 + overshoot * (t / upFrac);
-  const u = (t - upFrac) / (1 - upFrac);
-  return (1 + overshoot) * (1 - u * u); // → 0
-}
 /** Trash-kill pop (PR-1). */
 function killPopScale(timerRemaining: number): number {
   return popScale(timerRemaining, KILL.popDuration, KILL.popOvershoot, KILL.popUpFrac);
@@ -698,10 +689,11 @@ export class EntityRenderer {
         scene.add(fig.group);
       }
     }
-    // Seed per-slot death-pop state (one entry per enemy pool slot).
+    // Seed per-slot death-pop + spawn scale-in state (one entry per enemy pool slot).
     for (let i = 0; i < POOL.enemies; i++) {
       this.enemyPrevActive.push(false);
       this.enemyDyingTimer.push(0);
+      this.enemySpawnTimer.push(0);
     }
 
     // --- Projectiles (pooled, shared material) ---
@@ -876,6 +868,7 @@ export class EntityRenderer {
       sp.visible = false;
       this.pickupIcons.push(sp);
       this.prevPickupActive.push(false);
+      this.pickupPopTimer.push(0);
       scene.add(sp);
     }
 
@@ -1504,8 +1497,9 @@ export class EntityRenderer {
       return;
     }
     const age = 1 - this.wildfireLife / WILDFIRE_CUE.lifetime; // 0 → 1
-    // Quick fade-in (first 15%), hold, fade-out (last 35%) — readable then leaves.
-    const opacity = age < 0.15 ? age / 0.15 : age > 0.65 ? (1 - age) / 0.35 : 1;
+    const fi = WILDFIRE_CUE.fadeInFrac;
+    const fo = WILDFIRE_CUE.fadeOutStart;
+    const opacity = age < fi ? age / fi : age > fo ? (1 - age) / (1 - fo) : 1;
     mat.opacity = Math.max(0, Math.min(1, opacity));
     if (!this.reduceMotion) this.wildfireLabel.position.y += WILDFIRE_CUE.rise * frameDt;
   }
