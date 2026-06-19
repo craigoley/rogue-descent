@@ -1539,14 +1539,37 @@ export const SPAWN = {
  * FLARE through the bloom. Plain hex numbers (no three/DOM) → the pure sim can read
  * them deterministically. Tint 0 elsewhere = the default white spark (hits/dodge).
  */
+const liftColorTowardWhite = (color: number, amount: number): number => {
+  const clamped = Math.max(0, Math.min(1, amount));
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const lr = Math.round(r + (255 - r) * clamped);
+  const lg = Math.round(g + (255 - g) * clamped);
+  const lb = Math.round(b + (255 - b) * clamped);
+  return (lr << 16) | (lg << 8) | lb;
+};
+
+const ENEMY_DEATH_TINT_SOURCE: Record<EnemyType, number> = {
+  chaser: PALETTE.enemy,
+  armored: PALETTE.enemyArmored,
+  ranged: PALETTE.enemyRanged,
+  swarmer: PALETTE.enemySwarmer,
+  bruiser: PALETTE.enemyBruiser,
+  boss: PALETTE.enemyBoss,
+  bossadd: PALETTE.enemyBossAdd,
+};
+
+const ENEMY_DEATH_TINT_LIFT = 0.35;
+
 export const ENEMY_DEATH_TINT: Record<EnemyType, number> = {
-  chaser: 0xff8095, // bright pink-red (body 0xff4466)
-  armored: 0xc8d4e6, // bright steel (body 0x9aa6b8)
-  ranged: 0xff5570, // bright crimson (body 0xcc1133)
-  swarmer: 0xff8a55, // bright vermilion (body 0xff4422)
-  bruiser: 0xc77add, // bright bruise-purple (body 0x8a4a9c)
-  boss: 0xff5a72, // bright maroon-red (body 0x7a1020) — boss death juiced later
-  bossadd: 0xffb066, // bright ember (body 0xff8a3c)
+  chaser: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.chaser, ENEMY_DEATH_TINT_LIFT),
+  armored: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.armored, ENEMY_DEATH_TINT_LIFT),
+  ranged: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.ranged, ENEMY_DEATH_TINT_LIFT),
+  swarmer: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.swarmer, ENEMY_DEATH_TINT_LIFT),
+  bruiser: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.bruiser, ENEMY_DEATH_TINT_LIFT),
+  boss: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.boss, ENEMY_DEATH_TINT_LIFT),
+  bossadd: liftColorTowardWhite(ENEMY_DEATH_TINT_SOURCE.bossadd, ENEMY_DEATH_TINT_LIFT),
 };
 
 /** CHAIN-arc bolt render (synergy arc PR3). Cosmetic-in-sim like particles: the sim
