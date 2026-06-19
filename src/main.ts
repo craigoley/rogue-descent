@@ -461,7 +461,7 @@ requestAnimationFrame(frame);
 // misread — the harness-vs-game principle applies to the hook itself.
 if (debug) {
   const finite = (n: number): boolean => Number.isFinite(n);
-  const activeCount = (pool: ReadonlyArray<{ active: boolean }> | undefined): number =>
+  const activeCount = (pool: ReadonlyArray<{ active: boolean } | null | undefined> | undefined): number =>
     Array.isArray(pool) ? pool.reduce((n, e) => n + (e && e.active ? 1 : 0), 0) : -1;
   (window as Window & { __validation?: () => unknown }).__validation = () => {
     try {
