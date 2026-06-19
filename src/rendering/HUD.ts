@@ -28,7 +28,8 @@ import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
 import { nearestLiveEnemyInRoom } from './softlock';
-import { depthFadeAction, depthTarget } from './depthFade';
+import { playerRoomIndex } from '../game/Encounter';
+import { depthFadeAction, shouldFadeTitle } from './depthFade';
 import type { FrameStats } from '../utils/perfMeter';
 import {
   CSS_PALETTE,
@@ -135,23 +136,16 @@ export class HUD {
   private readonly bossPhaseMark: HTMLDivElement;
   private readonly dashPips: HTMLDivElement[] = [];
   private readonly dashPipFills: HTMLDivElement[] = [];
-  private readonly depthEl: HTMLDivElement;
-  /** LATER-FLOOR (depth > 1) depth surface: a CENTER-SCREEN arrival announce on the
-   *  clean entry-room playfield, shown on a later-floor arrival and faded on combat
-   *  entry. Replaces the HUD-band `.hud-depth` re-show on floor 2+ (where the
-   *  #100-compacted chip grid has risen into the HUD band → the band re-show collided).
-   *  Floor 1 (uncompacted) keeps the HUD-band depth; this stays hidden there. */
+  /** The "DEPTH N" center announce (child of `.hud-arrival`) — shown on every floor's
+   *  arrival, faded on leaving the entry room. Re-shows per floor (prevDepth/depthFaded). */
   private readonly depthAnnounceEl: HTMLDivElement;
-  /** The title wordmark — present on spawn, then FADES on first room entry (HUD
-   *  reduction); a render-side latch flips it once (.is-faded). */
+  /** The "ROGUE DESCENT" title (child of `.hud-arrival`) — a one-time game-start
+   *  centerpiece (floor 1 only; display:none on later floors), faded on leaving the
+   *  entry room via the titleFaded latch below. */
   private readonly titleEl: HTMLDivElement;
-  /** The combat-bars block (health/dash/chips). On first room entry it COMPACTS UP
-   *  (.is-compact) into the space the faded title+depth vacate — closing the gap. */
-  private readonly barsEl: HTMLDivElement;
-  /** Latched true the first time the player enters an encounter room (activeRoom >= 0),
-   *  so the TITLE fade + the #100 bars-rise/minimap-rise happen exactly once and never
-   *  revert (a one-time game-open flourish). The DEPTH is DECOUPLED from this — it
-   *  re-shows/fades PER FLOOR via prevDepth + depthFaded below. */
+  /** Latched true the first time the player LEAVES the entry room (playerRoomIndex !== 0),
+   *  so the title centerpiece fades exactly once (game-start flourish) and never reverts.
+   *  The DEPTH announce re-shows/fades PER FLOOR via prevDepth + depthFaded below. */
   private titleFaded = false;
   /** Per-floor depth re-arm: the last depth the HUD saw (NaN = first frame). A change
    *  means a new floor was loaded (entry room, activeRoom === -1) → re-SHOW the depth. */
@@ -208,28 +202,26 @@ export class HUD {
     this.floorTransition.className = 'hud-floor-transition';
     container.appendChild(this.floorTransition);
 
+    // ARRIVAL BEAT — a centered playfield stack: the "ROGUE DESCENT" title (floor 1,
+    // game-start only) ABOVE the "DEPTH N" announce (every floor). Both shown at full
+    // opacity on arrival (created VISIBLE — no fade-in — so the ?still frame-1 baseline
+    // is deterministic) and faded out on LEAVING the entry room (playerRoomIndex !== 0,
+    // pre-combat). The title is one-time (display:none on later floors); the depth
+    // re-shows per floor. pointer-events:none — never blocks the playfield.
+    const arrival = document.createElement('div');
+    arrival.className = 'hud-arrival';
     this.titleEl = document.createElement('div');
-    this.titleEl.className = 'hud-title';
+    this.titleEl.className = 'hud-arrival-title';
     this.titleEl.textContent = 'ROGUE DESCENT';
     this.titleEl.style.color = CSS_PALETTE.player;
-    container.appendChild(this.titleEl);
-
-    // Depth indicator (under the title) — how far down this run has reached.
-    this.depthEl = document.createElement('div');
-    this.depthEl.className = 'hud-depth';
-    this.depthEl.textContent = 'DEPTH 1';
-    container.appendChild(this.depthEl);
-
-    // Later-floor depth ANNOUNCE — a center-screen arrival beat for floor 2+ (the
-    // HUD band is compacted there, so the band depth would collide with the chips).
-    // Created HIDDEN (.is-faded); floor 1 never shows it, so it's inert at frame-1.
     this.depthAnnounceEl = document.createElement('div');
-    this.depthAnnounceEl.className = 'hud-depth-announce is-faded';
-    container.appendChild(this.depthAnnounceEl);
+    this.depthAnnounceEl.className = 'hud-arrival-depth';
+    this.depthAnnounceEl.textContent = 'DEPTH 1';
+    arrival.append(this.titleEl, this.depthAnnounceEl);
+    container.appendChild(arrival);
 
     // Combat HUD (always on): labelled health bar + dash-readiness bar.
     const bars = document.createElement('div');
-    this.barsEl = bars;
     bars.className = 'hud-bars';
     const makeBar = (label: string, rowMod: string, trackMod: string): HTMLDivElement => {
       const row = document.createElement('div');
@@ -689,58 +681,42 @@ export class HUD {
       this.bossWrap.style.display = 'none';
     }
 
-    // HUD REFLOW (HUD reduction): the title+depth are a spawn flourish — on the first
-    // encounter-room entry (activeRoom >= 0) they FADE OUT and the combat bars (health/
-    // dash/chips) COMPACT UP into the reclaimed space (closing #99's gap). Latched once
-    // so it never reverts. The fade/rise are CSS transitions; reduce-motion makes them
-    // instant (transition:none inline). State-triggered, so the frozen ?still spawn frame
-    // (activeRoom -1) keeps the FULL, uncompacted HUD → a stable, non-flaky baseline.
-    if (!this.titleFaded && state.activeRoom >= 0) {
+    // UNIFIED ARRIVAL BEAT — the title ("ROGUE DESCENT", floor 1 / game-start only) +
+    // the depth ("DEPTH N", every floor) as a centered stack, both faded on LEAVING the
+    // ENTRY ROOM (playerRoomIndex !== 0 — the player's centre crossed out of the always-
+    // room-0 spawn room, PRE-combat, so it clears as you move rather than waiting for
+    // enemies). The #100 on-combat compaction latch is RETIRED: the bars/minimap now sit
+    // at the compacted top band from spawn (CSS), since the title no longer occupies the
+    // HUD band. reduce-motion: instant hide (transition:none inline). Reads playerRoomIndex
+    // (an existing pure sim fn) — no sim mutation.
+    const leftEntryRoom = playerRoomIndex(state) !== 0;
+
+    // Title: one-time game-start centerpiece. Hidden entirely on later floors (so the
+    // depth centres alone in the flex stack); faded once on first leaving the entry room.
+    this.titleEl.style.display = state.run.depth > 1 ? 'none' : '';
+    if (shouldFadeTitle(leftEntryRoom, this.titleFaded)) {
       this.titleFaded = true;
-      if (this.reduceMotion) {
-        // Instant: snap to the compacted end-state, no fade/rise animation.
-        this.titleEl.style.transition = 'none';
-        this.barsEl.style.transition = 'none';
-      }
+      if (this.reduceMotion) this.titleEl.style.transition = 'none'; // instant (matches #99)
       this.titleEl.classList.add('is-faded');
-      this.barsEl.classList.add('is-compact'); // ...and the bars rise into the gap
-      // ...and the right-side cluster (minimap + gear/panel) rises into the title's
-      // vacated row via the shared .is-compacted transform (CSS) — symmetric reclaim.
-      this.container.classList.add('is-compacted');
     }
 
-    // PER-FLOOR depth show/fade — DECOUPLED from the title's one-time latch above. The
-    // "DEPTH N" readout re-shows on each new floor's entry room (pre-combat) and fades on
-    // entering that floor's first combat room, then re-arms on the next descent.
-    // ⚠️ The cue ROUTES BY FLOOR (depthCue): FLOOR 1 uses the HUD-band .hud-depth (clear
-    // in the uncompacted layout — title above, bars below). FLOOR 2+ uses a CENTER-SCREEN
-    // announce instead, because the HUD is #100-compacted there (chips risen INTO the HUD
-    // band), so a band re-show collided with the chip grid. The unused surface is kept
-    // hidden so there's never a double-shown / colliding depth.
+    // Depth: per-floor center announce — show on arrival (depth changed), fade on leaving
+    // the entry room, re-arm on the next descent.
     const depthChanged = state.run.depth !== this.prevDepth;
-    const action = depthFadeAction(depthChanged, state.activeRoom, this.depthFaded);
-    const target = depthTarget(state.run.depth);
-    const active = target === 'announce' ? this.depthAnnounceEl : this.depthEl;
-    const idle = target === 'announce' ? this.depthEl : this.depthAnnounceEl;
-    switch (action) {
-      case 'show': // new floor's entry room → display "DEPTH N" on the routed surface + re-arm
-        if (this.reduceMotion) active.style.transition = 'none'; // instant (matches #99)
-        if (target === 'announce') this.depthAnnounceEl.textContent = `DEPTH ${state.run.depth}`;
-        active.classList.remove('is-faded');
-        idle.classList.add('is-faded'); // keep the OTHER surface hidden — no double/colliding depth
+    switch (depthFadeAction(depthChanged, leftEntryRoom, this.depthFaded)) {
+      case 'show': // new floor's arrival (entry room) → display "DEPTH N" + re-arm
+        if (this.reduceMotion) this.depthAnnounceEl.style.transition = 'none'; // instant (matches #99)
+        this.depthAnnounceEl.textContent = `DEPTH ${state.run.depth}`;
+        this.depthAnnounceEl.classList.remove('is-faded');
         this.depthFaded = false;
         break;
-      case 'fade': // first combat room of this floor → fade out (same trigger as floor 1)
-        if (this.reduceMotion) active.style.transition = 'none'; // instant hide (matches #99)
-        active.classList.add('is-faded');
+      case 'fade': // left the entry room → fade out (pre-combat)
+        if (this.reduceMotion) this.depthAnnounceEl.style.transition = 'none'; // instant (matches #99)
+        this.depthAnnounceEl.classList.add('is-faded');
         this.depthFaded = true;
         break;
     }
     this.prevDepth = state.run.depth;
-
-    // HUD-band depth text (always): the floor-1 surface. On later floors it's hidden
-    // (the announce is used) but kept correct — harmless.
-    this.depthEl.textContent = `DEPTH ${state.run.depth}`;
 
     // Active powerups (collapsed/dim by default; a leveled-up chip FLARES = the pickup/
     // level feedback). Persists across descent — the only on-screen build reminder.
