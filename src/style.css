@@ -16,22 +16,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  /* Vertical space the centred title wordmark occupies (margin + max font +
-     line). The corner widgets — minimap (top-right) AND health/dash bars
-     (top-left) — sit BELOW this, so the centred, letter-spaced title (which
-     reaches toward both corners on a narrow portrait) never shares the top band
-     with them. Measured from --safe-top (the title shares that origin). */
-  --hud-title-clear: 60px;
-  /* Clearance for everything BELOW the centred top band (title + the DEPTH
-     readout under it). The corner widgets — top-left health/dash bars and
-     top-right minimap — drop below THIS line so they never share a row with the
-     centred, full-width DEPTH counter (which caused the "PTH 1" overlap when
-     DEPTH was on the old --hud-title-clear row with the left bars). */
-  --hud-band-clear: 84px;
-  /* Compacted top-band offset (HUD reflow): once the title+depth fade on room-entry,
-     BOTH sides land here — the left bars rise to it (#100) and the right minimap+gear
-     are anchored to it — so the whole top band compacts to the top SYMMETRICALLY. 12px
-     mirrors the title's old margin-top, clear of the safe-area inset. */
+  /* Top-band offset: the corner widgets (bars, minimap, gear) sit this far below
+     --safe-top. The title/depth are a centre-screen arrival beat (not in the band),
+     so the band is compact from spawn — no rise-on-combat. */
   --hud-band-top: 12px;
   /* Width the top-right minimap + its insets + a gap reserve on the right, so the
      left-anchored powers (chip) row caps its width here and WRAPS within the left
