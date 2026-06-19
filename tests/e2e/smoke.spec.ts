@@ -51,8 +51,9 @@ test('the canvas is NOT blank (something rendered)', async ({ page }) => {
 test('?debug overlay shows sane initial state (depth 1)', async ({ page }) => {
   await page.goto('/?debug=1&seed=12345&still=1');
   await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
-  // The always-on depth indicator — a non-visual smoke signal that state booted.
-  await expect(page.locator('.hud-depth')).toHaveText(/DEPTH 1/);
+  // The depth announce (now the center-screen arrival beat) — a non-visual smoke
+  // signal that state booted. "DEPTH 1" shows on the floor-1 spawn (entry room).
+  await expect(page.locator('.hud-arrival-depth')).toHaveText(/DEPTH 1/);
 });
 
 test('the boss scene boots (?scene=boss) without errors', async ({ page }) => {
