@@ -547,7 +547,8 @@ export class EntityRenderer {
 
   /** One figure pool PER enemy type (slot i mirrors enemy-pool slot i); the
    *  matching-type figure is shown, the other-type figure at i is hidden. */
-  private readonly enemyFigs: Record<EnemyType, Figure[]> = { chaser: [], armored: [], ranged: [], swarmer: [], bruiser: [], boss: [], bossadd: [] };
+  private readonly enemyFigs: Record<EnemyType, Figure[]> =
+    Object.fromEntries(ENEMY_TYPES.map((type) => [type, []])) as Record<EnemyType, Figure[]>;
   /** Bespoke single boss mesh (Phase 8): a large armored body + head, a glowing
    *  WEAK-SIDE ARC (gimmick #1 tell — a floor wedge tracking the vulnerable angle)
    *  and a floor ring. Not pooled. */
