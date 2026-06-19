@@ -28,7 +28,7 @@ import { loadBest } from '../state/Best';
 import type { SceneManager } from './SceneManager';
 import { Minimap } from './Minimap';
 import { nearestLiveEnemyInRoom } from './softlock';
-import { depthCue } from './depthFade';
+import { depthFadeAction, depthTarget } from './depthFade';
 import type { FrameStats } from '../utils/perfMeter';
 import {
   CSS_PALETTE,
@@ -718,13 +718,14 @@ export class HUD {
     // band), so a band re-show collided with the chip grid. The unused surface is kept
     // hidden so there's never a double-shown / colliding depth.
     const depthChanged = state.run.depth !== this.prevDepth;
-    const cue = depthCue(depthChanged, state.run.depth, state.activeRoom, this.depthFaded);
-    const active = cue.target === 'announce' ? this.depthAnnounceEl : this.depthEl;
-    const idle = cue.target === 'announce' ? this.depthEl : this.depthAnnounceEl;
-    switch (cue.action) {
+    const action = depthFadeAction(depthChanged, state.activeRoom, this.depthFaded);
+    const target = depthTarget(state.run.depth);
+    const active = target === 'announce' ? this.depthAnnounceEl : this.depthEl;
+    const idle = target === 'announce' ? this.depthEl : this.depthAnnounceEl;
+    switch (action) {
       case 'show': // new floor's entry room → display "DEPTH N" on the routed surface + re-arm
         if (this.reduceMotion) active.style.transition = 'none'; // instant (matches #99)
-        if (cue.target === 'announce') this.depthAnnounceEl.textContent = `DEPTH ${state.run.depth}`;
+        if (target === 'announce') this.depthAnnounceEl.textContent = `DEPTH ${state.run.depth}`;
         active.classList.remove('is-faded');
         idle.classList.add('is-faded'); // keep the OTHER surface hidden — no double/colliding depth
         this.depthFaded = false;
