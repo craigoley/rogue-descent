@@ -1,0 +1,44 @@
+name: Semgrep (architectural-invariant gate)
+
+# A GATING CI CHECK — NOT a code-scanner. Runs the LOCAL semgrep.yml rules that codify
+# the pure/render split + determinism invariants on src/game/ (no three / cross-layer /
+# DOM-storage / Math.random / wall-clock / timers), and FAILS the job on any finding
+# (--error → non-zero exit), exactly like the lint gate. ⚠️ Deliberately NO SARIF, NO
+# Security tab, NO security-events:write — findings gate the PR; they do NOT become
+# code-scanning alerts. Blocking from the start: the rules are proven zero-false-positive
+# on the current code, and the lint gate is already blocking → consistent.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: only reads the repo to lint the source. NOT a scanner, so NO
+# security-events:write (that permission is for SARIF uploads, which this does not do).
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch / PR (mirrors ci.yml).
+concurrency:
+  group: semgrep-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep arch-invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Pinned for a DETERMINISTIC gate — a future Semgrep release must not silently
+      # change rule behavior (e.g. the Semgrepignore path-anchoring migration). Bump
+      # deliberately + re-prove. This is the version the rules were authored/proven on.
+      - run: pip install semgrep==1.167.0
+      # Run the LOCAL config (no Semgrep Cloud / login / SARIF). `--error` makes any
+      # finding exit non-zero → fails the job → gates the PR. `--metrics=off` = no
+      # telemetry. Scans the repo root; the rules' `paths: include: /src/game/` scope
+      # the checks to the pure sim (src/rendering/ etc. are never evaluated).
+      - run: semgrep scan --config semgrep.yml --error --metrics=off .

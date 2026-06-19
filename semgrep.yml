@@ -1,0 +1,102 @@
+# Architectural-invariant gate (Semgrep) — codifies the pure/render split +
+# determinism invariants the recons check by hand on every PR. These rules run as a
+# GATING CI CHECK (semgrep scan --config semgrep.yml --error), NOT a code-scanner: no
+# SARIF, no Security tab, no security-events:write — a failure just fails the job, like
+# the lint gate. All rules are SCOPED to src/game/ (the pure sim); src/rendering/ is
+# SUPPOSED to import three / touch the DOM, so the rules must never fire there.
+#
+# Every rule was proven before landing: a known-bad snippet → flagged (RED), the real
+# src/game/ → zero findings (GREEN). The current codebase passes all of them; they catch
+# FUTURE drift.
+rules:
+  # ── PURE / RENDER SPLIT ──────────────────────────────────────────────────────────
+  - id: game-no-three-import
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    patterns:
+      - pattern-either:
+          # `import … from 'three'` / `'three/addons/…'` (default, named, namespace, type)
+          - pattern-regex: "(?m)^\\s*import\\b[^\\n]*\\bfrom\\s+['\"]three(/[^'\"]*)?['\"]"
+          # bare side-effect import: `import 'three'` (no `from`)
+          - pattern-regex: "(?m)^\\s*import\\s+['\"]three(/[^'\"]*)?['\"]"
+    message: >-
+      src/game/ must not import 'three' (the pure/render split). Game logic is
+      render-agnostic + Node-testable; three.js belongs in src/rendering/.
+
+  - id: game-no-cross-layer-import
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    patterns:
+      - pattern-either:
+          # `import … from '…/(rendering|state|audio|input|ui)/…'`
+          - pattern-regex: "(?m)^\\s*import\\b[^\\n]*\\bfrom\\s+['\"][^'\"]*\\.\\./(rendering|state|audio|input|ui)/[^'\"]*['\"]"
+          # bare side-effect import of those layers
+          - pattern-regex: "(?m)^\\s*import\\s+['\"][^'\"]*\\.\\./(rendering|state|audio|input|ui)/[^'\"]*['\"]"
+    message: >-
+      src/game/ must not import the render/state/audio/input layers (the pure/render
+      split). The sim reads pure data (../utils is fine); the app layers depend on the
+      sim, never the reverse.
+
+  - id: game-no-dom-or-storage
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    pattern-either:
+      # window/document via MEMBER ACCESS (precise — won't false-positive on a local
+      # identifier named `window`/`document`; all real DOM use is property/method access).
+      - pattern: window.$X
+      - pattern: document.$X
+      # storage globals — any reference is a violation, so match the bare identifier.
+      - pattern: localStorage
+      - pattern: sessionStorage
+    message: >-
+      src/game/ must not touch the DOM or storage (window./document./localStorage/
+      sessionStorage). The sim is pure; DOM lives in src/rendering/, persistence in
+      src/state/ (which the sim receives as pure input, never reads directly).
+
+  # ── DETERMINISM (seeded + fixed-timestep) ────────────────────────────────────────
+  - id: game-no-math-random
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    pattern: Math.random(...)
+    message: >-
+      src/game/ must not use Math.random() — the sim is seeded + deterministic (same
+      seed → same run). Use the seeded Rng (createRng / Rng.next from src/utils/rng).
+
+  - id: game-no-wallclock
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    pattern-either:
+      - pattern: Date.now(...)
+      - pattern: performance.now(...)
+      - pattern: new Date(...)
+    message: >-
+      src/game/ must not read wall-clock time (Date.now/performance.now/new Date) — the
+      sim is deterministic + fixed-timestep; time advances via the dt passed to update().
+
+  - id: game-no-timers
+    languages: [typescript]
+    severity: ERROR
+    paths:
+      include:
+        - /src/game/
+    pattern-either:
+      - pattern: setTimeout(...)
+      - pattern: setInterval(...)
+    message: >-
+      src/game/ must not use setTimeout/setInterval — the sim is fixed-timestep (driven
+      by update(dt)), not wall-clock timers.
