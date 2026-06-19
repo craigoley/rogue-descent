@@ -95,7 +95,7 @@ const scene = new SceneManager(app);
 const dungeon = new DungeonRenderer(scene.scene);
 dungeon.build(game.room);
 const entities = new EntityRenderer(scene.scene);
-const hud = new HUD(app);
+const hud = new HUD(app, loadMeta().hasWon); // W=8 climax — surface the won-badge if ever won
 
 // Fresh per-run seed (impure — keeps the sim pure). The counter guarantees
 // distinct seeds even on rapid restarts within the same millisecond.

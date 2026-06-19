@@ -1898,6 +1898,15 @@ export const BOSS = {
    *  by-feel — tuned on replay. */
   depth1Health: 140, // vs the would-be 220 at depth 1 — less of a slog
   depth1Damage: 9, // vs the would-be 20 at depth 1 — survival headroom to LEARN the weak-side dance (was 12; #103 fixed readability, this is the residual feel nudge)
+  /** FINAL BOSS carve-out at the win-depth W (HEAT.unlockDepth) — the INVERSE of the
+   *  depth-1 gentle override: a distinguished, climactic test. Beefier than the depth-8
+   *  curve (which would be 220 × 2.26 ≈ 497 HP / 20 × 1.84 ≈ 37 dmg) so the final fight
+   *  reads as THE climax, not just another boss — paired with the 'final' COMBINED
+   *  gimmick (summon + cleave) for the difficulty, with the stats supporting a longer
+   *  hard-but-fair fight (a maxed depth-8 build can win it). Both by-feel — Craig tunes
+   *  on replay (play to 8 + win). */
+  finalHealth: 620, // ~+25% over the depth-8 curve (497) — the longest, climactic fight
+  finalDamage: 40, // a modest bump over the curve (37) — hard but survivable; the gimmick is the test, not raw damage
   /** GIMMICK #1 — directional shield. Damage only counts when the hit comes from
    *  within this arc (radians, full width) centred on the VULNERABLE angle; hits
    *  from outside are blocked. ~120° vulnerable wedge — generous but you must get
