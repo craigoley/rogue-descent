@@ -121,6 +121,35 @@ body {
   opacity: 0;
 }
 
+/* LATER-FLOOR depth ANNOUNCE — the floor-2+ depth surface. On a later-floor arrival the
+   HUD band is already #100-compacted (chips risen into it), so the HUD-band .hud-depth
+   re-show collided with the chip grid (unreadable). Instead, floor 2+ announces "DEPTH N"
+   CENTER-SCREEN on the clean entry-room playfield — a proper arrival beat — then fades on
+   combat entry. Floor 1 (uncompacted, clear) keeps the HUD-band depth; this stays hidden
+   there. BIGGER + BRIGHTER than the receded HUD depth (it owns the moment, on a clean
+   background). Opacity-only transition → reduce-motion (transition:none inline) = instant,
+   no motion to gate. pointer-events:none so it never blocks the playfield. */
+.hud-depth-announce {
+  position: fixed;
+  top: 40%; /* just above centre — announces over the entry room, clear of the player */
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font: 700 clamp(22px, 6vw, 42px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.3em;
+  color: var(--stairs);
+  opacity: 0.92; /* bright: the focus for a beat (vs the receded HUD-band 0.55) */
+  text-shadow: 0 0 18px currentColor;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  text-align: center;
+  z-index: 3; /* above the floor-transition cover so the arrival beat reads on top */
+  transition: opacity 0.6s ease;
+}
+.hud-depth-announce.is-faded {
+  opacity: 0;
+}
+
 /* TITLE — a spawn flourish that FADES once the player enters the first room (HUD
    reduction); the .is-faded class is latched on first room-entry (reduce-motion sets
    transition:none inline → instant hide). Reclaims the centre-top. */

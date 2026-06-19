@@ -36,3 +36,38 @@ export function depthFadeAction(
   if (!depthFaded && activeRoom >= 0) return 'fade';
   return 'none';
 }
+
+/**
+ * Which surface the per-floor depth cue uses:
+ *   - 'hud'      — FLOOR 1 (depth === 1): the HUD-band `.hud-depth`, shown at spawn in
+ *                  the UNcompacted layout where it sits clear (title above, bars below).
+ *   - 'announce' — FLOOR 2+ (depth > 1): a CENTER-SCREEN arrival announce on the clean
+ *                  entry-room playfield. On later floors the HUD is already #100-compacted
+ *                  (chips risen into the HUD band), so re-showing the HUD-band depth there
+ *                  COLLIDES with the chip grid — the center announce replaces it.
+ */
+export type DepthTarget = 'hud' | 'announce';
+
+/** Route the depth cue to its surface by floor (pure). */
+export function depthTarget(depth: number): DepthTarget {
+  return depth > 1 ? 'announce' : 'hud';
+}
+
+/** The full per-floor depth cue: the show/fade action AND which surface it drives. The
+ *  caller applies `action` to whichever element `target` names (and keeps the OTHER
+ *  surface hidden, so there's never a double-shown / colliding depth). Pure. */
+export interface DepthCue {
+  action: DepthAction;
+  target: DepthTarget;
+}
+export function depthCue(
+  depthChanged: boolean,
+  depth: number,
+  activeRoom: number,
+  depthFaded: boolean,
+): DepthCue {
+  return {
+    action: depthFadeAction(depthChanged, activeRoom, depthFaded),
+    target: depthTarget(depth),
+  };
+}
