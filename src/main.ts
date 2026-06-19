@@ -60,10 +60,11 @@ const game = createGameState(runConfig());
 // restart setup); no renderer mutates state in the loop.
 const bootParams = new URLSearchParams(window.location.search);
 const seedParam = bootParams.get('seed');
-if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0, runConfig());
+const hasValidSeedParam = seedParam !== null && /^\d+$/.test(seedParam);
+if (hasValidSeedParam) startNewRun(game, Number(seedParam) >>> 0, runConfig());
 // E2E seam boots (deterministic baselines) bypass the run-start lean card; real-play
 // boots route through beginRun() below (the card shows only once something's unlocked).
-const isE2EBoot = (seedParam !== null && /^\d+$/.test(seedParam)) || bootParams.get('scene') === 'boss' || bootParams.get('still') === '1';
+const isE2EBoot = hasValidSeedParam || bootParams.get('scene') === 'boss' || bootParams.get('still') === '1';
 if (bootParams.get('scene') === 'boss') {
   const rect = game.rooms[game.bossRoom]?.rect;
   if (rect) {
@@ -174,7 +175,9 @@ const audioMgr = new AudioManager(audio, game);
 audio.setMuted(settings.muted);
 audioMgr.setMuted(settings.muted);
 const unlockAudio = (): void => {
-  void audio.resume();
+  void audio.resume().catch((err) => {
+    console.warn('Audio resume failed:', err);
+  });
   window.removeEventListener('pointerdown', unlockAudio);
   window.removeEventListener('keydown', unlockAudio);
 };
@@ -461,7 +464,7 @@ requestAnimationFrame(frame);
 // misread — the harness-vs-game principle applies to the hook itself.
 if (debug) {
   const finite = (n: number): boolean => Number.isFinite(n);
-  const activeCount = (pool: ReadonlyArray<{ active: boolean }> | undefined): number =>
+  const activeCount = (pool: ReadonlyArray<{ active: boolean } | null | undefined> | undefined): number =>
     Array.isArray(pool) ? pool.reduce((n, e) => n + (e && e.active ? 1 : 0), 0) : -1;
   (window as Window & { __validation?: () => unknown }).__validation = () => {
     try {
