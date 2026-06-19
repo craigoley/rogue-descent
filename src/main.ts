@@ -174,7 +174,9 @@ const audioMgr = new AudioManager(audio, game);
 audio.setMuted(settings.muted);
 audioMgr.setMuted(settings.muted);
 const unlockAudio = (): void => {
-  void audio.resume();
+  void audio.resume().catch((err) => {
+    console.warn('Audio resume failed:', err);
+  });
   window.removeEventListener('pointerdown', unlockAudio);
   window.removeEventListener('keydown', unlockAudio);
 };
