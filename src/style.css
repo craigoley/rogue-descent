@@ -126,8 +126,21 @@ body {
   white-space: nowrap;
   transition: opacity 0.5s ease;
 }
+/* WON-BADGE (W=8 climax) — a small mint mark between the title + depth, shown only when
+   the save has ever won (set display:none otherwise in JS). Rides the title beat + fades
+   with it. Subtle: smaller, letter-spaced, the player-mint glow. */
+.hud-arrival-badge {
+  font: 700 clamp(9px, 2.4vw, 13px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.34em;
+  color: var(--player);
+  text-shadow: 0 0 10px currentColor;
+  opacity: 0.85;
+  white-space: nowrap;
+  transition: opacity 0.5s ease;
+}
 .hud-arrival-title.is-faded,
-.hud-arrival-depth.is-faded {
+.hud-arrival-depth.is-faded,
+.hud-arrival-badge.is-faded {
   opacity: 0;
 }
 
@@ -675,6 +688,18 @@ body {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-shadow: 0 0 16px currentColor;
+}
+
+/* VICTORY variant (W=8 climax) — the win-only flourish: a bigger, brighter title bloom +
+   a soft mint aura behind the card so the "you DID it" beat lands more celebratory than
+   the death screen. The title COLOUR is set inline (player-mint) in RunSummary; this adds
+   the extra glow. Gated to .is-victory so the death screen is unchanged. reduce-motion:
+   the glow is a static box-shadow/text-shadow (no animation), so nothing to gate. */
+.run-summary.is-victory {
+  background: radial-gradient(ellipse at center, rgba(20, 40, 34, 0.97) 0%, rgba(10, 10, 18, 0.98) 70%);
+}
+.run-summary.is-victory .run-summary-title {
+  text-shadow: 0 0 28px currentColor, 0 0 8px currentColor;
 }
 
 .run-summary-stats {

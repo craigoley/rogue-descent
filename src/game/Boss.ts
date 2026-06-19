@@ -33,9 +33,11 @@ import type { Vec2 } from '../utils/math';
 // spawnEnemy). So the runtime graph is one-directional — Enemy -> Boss (the
 // updateBoss dispatch) and GameState -> {Boss, Enemy} — with no Enemy<->Boss cycle.
 
-/** Boss gimmicks (the rotation roster in Difficulty.BOSS_GIMMICKS). All three are
- *  built: #1 positioning, #2 adds, #3 knockback (interrupt the CLEAVE windup). */
-export type BossGimmick = 'positioning' | 'adds' | 'knockback';
+/** Boss gimmicks. The three rotation entries (#1 positioning, #2 adds, #3 knockback —
+ *  interrupt the CLEAVE windup) PLUS 'final': the DISTINCT win-depth boss that COMBINES
+ *  the summon (#2) AND cleave (#3) entries on the weak-side baseline — the climax that
+ *  tests the whole toolkit at once. */
+export type BossGimmick = 'positioning' | 'adds' | 'knockback' | 'final';
 
 /** A recorded SUMMON request (gimmick #2): the boss's SUMMON strike sets this on
  *  BossState (data + intent only — no spawn), and GameState consumes it by
@@ -178,8 +180,16 @@ const CLEAVE: BossAttack = {
 const TABLE_SLAM: BossAttack[] = [SLAM];
 const TABLE_SLAM_SUMMON: BossAttack[] = [SLAM, SUMMON];
 const TABLE_SLAM_CLEAVE: BossAttack[] = [SLAM, CLEAVE];
+/** FINAL boss ('final' gimmick), phase 2: the COMBINED table — slam + summon + cleave,
+ *  the whole toolkit. Phase 1 stays SLAM+CLEAVE (the cleave-interrupt test); the SUMMON
+ *  joins only at the 50% escalation, so it COMBINES (escalates), it doesn't spam from the
+ *  start (mirrors how 'adds' gates its summon to phase 2). */
+const TABLE_SLAM_SUMMON_CLEAVE: BossAttack[] = [SLAM, SUMMON, CLEAVE];
 
-function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
+/** The attack TABLE for a gimmick + phase (exported for tests — pure). */
+export function attacksFor(gimmick: BossGimmick, phase2: boolean): BossAttack[] {
+  // FINAL (win-depth): cleave from the start, +summon at the phase-2 escalation.
+  if (gimmick === 'final') return phase2 ? TABLE_SLAM_SUMMON_CLEAVE : TABLE_SLAM_CLEAVE;
   if (gimmick === 'adds' && phase2) return TABLE_SLAM_SUMMON;
   if (gimmick === 'knockback') return TABLE_SLAM_CLEAVE;
   return TABLE_SLAM;

@@ -9,7 +9,7 @@
  * block in constants.ts for the curve + tuning rationale.
  */
 
-import { BOSS, DIFFICULTY, ENEMY_TYPES, ENCOUNTER, POOL } from '../utils/constants';
+import { BOSS, DIFFICULTY, ENEMY_TYPES, ENCOUNTER, HEAT, POOL } from '../utils/constants';
 
 /** Enemies spawned per room at `depth`: a little more early, capped at the pool. */
 export function enemiesPerRoomForDepth(depth: number): number {
@@ -60,20 +60,24 @@ export function speedMultForDepth(depth: number): number {
 }
 
 /** Boss HP at `depth` (Phase 8). DEPTH 1 uses the flat gentle override (BOSS
- *  .depth1Health — the single-phase intro); depth >= 2 keeps the EXACT 7c curve
- *  (base × healthMultForDepth), so the carve-out can't flatten the curve. */
+ *  .depth1Health — the single-phase intro); the WIN-DEPTH W (HEAT.unlockDepth) uses the
+ *  FINAL-boss carve-out (BOSS.finalHealth — the distinguished climax, the inverse of
+ *  depth 1); every other depth keeps the EXACT 7c curve (base × healthMultForDepth), so
+ *  neither carve-out can flatten the curve between. */
 export function bossHpForDepth(depth: number): number {
-  return Math.max(1, depth) === 1
-    ? BOSS.depth1Health
-    : ENEMY_TYPES.boss.maxHealth * healthMultForDepth(depth);
+  const d = Math.max(1, depth);
+  if (d === 1) return BOSS.depth1Health;
+  if (d === HEAT.unlockDepth) return BOSS.finalHealth;
+  return ENEMY_TYPES.boss.maxHealth * healthMultForDepth(d);
 }
 
-/** Boss slam damage at `depth` (Phase 8). DEPTH 1 uses the flat gentle override
- *  (BOSS.depth1Damage); depth >= 2 keeps the EXACT 7c curve (base × damageMult). */
+/** Boss slam damage at `depth` (Phase 8). DEPTH 1 = the gentle override; the WIN-DEPTH W
+ *  = the FINAL-boss carve-out (BOSS.finalDamage); every other depth keeps the 7c curve. */
 export function bossDamageForDepth(depth: number): number {
-  return Math.max(1, depth) === 1
-    ? BOSS.depth1Damage
-    : ENEMY_TYPES.boss.attackDamage * damageMultForDepth(depth);
+  const d = Math.max(1, depth);
+  if (d === 1) return BOSS.depth1Damage;
+  if (d === HEAT.unlockDepth) return BOSS.finalDamage;
+  return ENEMY_TYPES.boss.attackDamage * damageMultForDepth(d);
 }
 
 /** How many PHASES the boss runs at `depth` (Phase 8): 1 (single-phase, lighter
@@ -92,11 +96,14 @@ export function bossPhasesForDepth(depth: number): 1 | 2 {
  *  first manifest at depth 5 (summon is gated to phase 2, which needs depth >=
  *  bossTwoPhaseMinDepth) and the knockback-interrupt boss first appears at depth 3. */
 const BOSS_GIMMICKS = ['positioning', 'adds', 'knockback'] as const;
-export type BossGimmickId = (typeof BOSS_GIMMICKS)[number];
+/** Includes 'final' — the win-depth (W) carve-out, NOT part of the rotation roster. */
+export type BossGimmickId = (typeof BOSS_GIMMICKS)[number] | 'final';
 
-/** Which boss GIMMICK is active at `depth` (Phase 8): rotates through the roster
- *  by depth so successive floors vary. With one entry it's always 'positioning';
- *  it diversifies automatically as #2/#3 are added to BOSS_GIMMICKS. */
+/** Which boss GIMMICK is active at `depth` (Phase 8): the WIN-DEPTH W (HEAT.unlockDepth)
+ *  is the DISTINCT FINAL boss ('final' — the combined summon+cleave gimmick, the climax);
+ *  every other depth rotates through the roster by depth so successive floors vary. */
 export function bossGimmickForDepth(depth: number): BossGimmickId {
-  return BOSS_GIMMICKS[(Math.max(1, depth) - 1) % BOSS_GIMMICKS.length];
+  const d = Math.max(1, depth);
+  if (d === HEAT.unlockDepth) return 'final';
+  return BOSS_GIMMICKS[(d - 1) % BOSS_GIMMICKS.length];
 }

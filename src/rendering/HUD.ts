@@ -35,6 +35,7 @@ import {
   CSS_PALETTE,
   DASH,
   DESCENT,
+  HEAT,
   HUD_UI,
   PLAYER_COMBAT,
   POWERUP_MAX_LEVEL,
@@ -143,6 +144,11 @@ export class HUD {
    *  centerpiece (floor 1 only; display:none on later floors), faded on leaving the
    *  entry room via the titleFaded latch below. */
   private readonly titleEl: HTMLDivElement;
+  /** The won-badge under the title (W=8 climax) — shown only when hasWon; rides the title
+   *  (floor-1 game-start beat, fades with it). Hidden on a fresh save → no baseline change. */
+  private readonly wonBadgeEl: HTMLDivElement;
+  /** Whether this session's save has ever WON (drives the won-badge). Fixed at construct. */
+  private readonly hasWon: boolean;
   /** Latched true the first time the player LEAVES the entry room (playerRoomIndex !== 0),
    *  so the title centerpiece fades exactly once (game-start flourish) and never reverts.
    *  The DEPTH announce re-shows/fades PER FLOOR via prevDepth + depthFaded below. */
@@ -184,7 +190,8 @@ export class HUD {
    *  the bars/title drive the left + centre — see the room-entry latch in update(). */
   private readonly container: HTMLElement;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, hasWon = false) {
+    this.hasWon = hasWon;
     this.debug = isDebugEnabled();
     this.container = container;
     this.minimap = new Minimap(container);
@@ -214,10 +221,18 @@ export class HUD {
     this.titleEl.className = 'hud-arrival-title';
     this.titleEl.textContent = 'ROGUE DESCENT';
     this.titleEl.style.color = CSS_PALETTE.player;
+    // WON-BADGE (W=8 climax): a subtle "you've beaten the final boss" mark under the
+    // title, on the game-start beat. Shown ONLY when hasWon — a FRESH save (the ?still
+    // baseline / a new player) has hasWon=false, so it's hidden there → frame-1 + the L2
+    // baseline are unchanged (no regen). It rides the title (floor 1 only, fades together).
+    this.wonBadgeEl = document.createElement('div');
+    this.wonBadgeEl.className = 'hud-arrival-badge';
+    this.wonBadgeEl.textContent = '✦ CHAMPION OF THE DEPTHS';
+    if (!hasWon) this.wonBadgeEl.style.display = 'none';
     this.depthAnnounceEl = document.createElement('div');
     this.depthAnnounceEl.className = 'hud-arrival-depth';
     this.depthAnnounceEl.textContent = 'DEPTH 1';
-    arrival.append(this.titleEl, this.depthAnnounceEl);
+    arrival.append(this.titleEl, this.wonBadgeEl, this.depthAnnounceEl);
     container.appendChild(arrival);
 
     // Combat HUD (always on): labelled health bar + dash-readiness bar.
@@ -691,13 +706,20 @@ export class HUD {
     // (an existing pure sim fn) — no sim mutation.
     const leftEntryRoom = playerRoomIndex(state) !== 0;
 
-    // Title: one-time game-start centerpiece. Hidden entirely on later floors (so the
-    // depth centres alone in the flex stack); faded once on first leaving the entry room.
-    this.titleEl.style.display = state.run.depth > 1 ? 'none' : '';
+    // Title (+ won-badge): one-time game-start centerpiece. Hidden entirely on later floors
+    // (so the depth centres alone in the stack); faded once on first leaving the entry room.
+    // The badge only ever shows when hasWon (a fresh save never shows it → baseline clean).
+    const onTitleFloor = state.run.depth <= 1;
+    this.titleEl.style.display = onTitleFloor ? '' : 'none';
+    this.wonBadgeEl.style.display = this.hasWon && onTitleFloor ? '' : 'none';
     if (shouldFadeTitle(leftEntryRoom, this.titleFaded)) {
       this.titleFaded = true;
-      if (this.reduceMotion) this.titleEl.style.transition = 'none'; // instant (matches #99)
+      if (this.reduceMotion) {
+        this.titleEl.style.transition = 'none'; // instant (matches #99)
+        this.wonBadgeEl.style.transition = 'none';
+      }
       this.titleEl.classList.add('is-faded');
+      this.wonBadgeEl.classList.add('is-faded'); // fade the badge WITH the title
     }
 
     // Depth: per-floor center announce — show on arrival (depth changed), fade on leaving
@@ -706,7 +728,10 @@ export class HUD {
     switch (depthFadeAction(depthChanged, leftEntryRoom, this.depthFaded)) {
       case 'show': // new floor's arrival (entry room) → display "DEPTH N" + re-arm
         if (this.reduceMotion) this.depthAnnounceEl.style.transition = 'none'; // instant (matches #99)
-        this.depthAnnounceEl.textContent = `DEPTH ${state.run.depth}`;
+        // W=8 climax: the win-depth announces "FINAL DESCENT" (not "DEPTH 8") to prime
+        // the climactic final-boss floor — same announce machinery, just the string.
+        this.depthAnnounceEl.textContent =
+          state.run.depth >= HEAT.unlockDepth ? 'FINAL DESCENT' : `DEPTH ${state.run.depth}`;
         this.depthAnnounceEl.classList.remove('is-faded');
         this.depthFaded = false;
         break;

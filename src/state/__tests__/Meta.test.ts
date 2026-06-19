@@ -79,6 +79,19 @@ describe('Meta — unlock rules (pure, no I/O)', () => {
     expect(after.stats.deepestDepth).toBe(1);
   });
 
+  it('hasWon: false by default, set true ONLY on a win (won), then monotonic; a death-at-8 does NOT set it', () => {
+    expect(defaultMeta().hasWon).toBe(false);
+    // reaching/dying at the win-depth without winning does not set hasWon
+    const died = applyRunResult(defaultMeta(), { depth: 8, bossDefeated: false, wildfireKills: 0, heat: 3, reachedWinDepth: true });
+    expect(died.hasWon).toBe(false);
+    // a true WIN sets it
+    const won = applyRunResult(defaultMeta(), { depth: 8, bossDefeated: true, wildfireKills: 0, heat: 3, reachedWinDepth: true, won: true });
+    expect(won.hasWon).toBe(true);
+    // monotonic: a later non-win run keeps hasWon
+    const after = applyRunResult(won, { depth: 2, bossDefeated: false, wildfireKills: 0, heat: 0, reachedWinDepth: false });
+    expect(after.hasWon).toBe(true);
+  });
+
   it('a run with NO boss kill (shallow, no wildfire) unlocks nothing', () => {
     const after = applyRunResult(defaultMeta(), { depth: 2, bossDefeated: false, wildfireKills: 0, heat: 0, reachedWinDepth: false });
     expect(after.unlocked).toEqual([]);

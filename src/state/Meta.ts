@@ -45,6 +45,10 @@ export interface MetaState {
   /** Layer 3 — chosen HEAT: the per-modifier ranks for the next run (the menu persists
    *  the last pick here). NO_HEAT = no challenge selected. */
   heat: HeatConfig;
+  /** W=8 climax — has the player ever WON (beaten the FINAL boss at the win-depth)? More
+   *  precise than `deepestDepth >= W` (which only means "reached the floor"); set only on
+   *  a true victory. Drives the won-badge. Monotonic (once true, stays true). */
+  hasWon: boolean;
 }
 
 /** The milestone stat a given unlock tracks (a key of MetaState.stats). */
@@ -125,6 +129,7 @@ export function defaultMeta(): MetaState {
     stats: { deepestDepth: 0, bossKills: 0, wildfireKills: 0, highestHeatWin: 0 },
     runStart: null,
     heat: { ...NO_HEAT },
+    hasWon: false,
   };
 }
 
@@ -148,6 +153,9 @@ export function applyRunResult(
     heat: number;
     /** META L3 — did this run reach the win-depth W (deepestDepth >= HEAT.unlockDepth)? */
     reachedWinDepth: boolean;
+    /** W=8 climax — did this run WIN (beat the FINAL boss)? Optional + defaults false so
+     *  existing callers (death summary) are unchanged; only the victory path passes true. */
+    won?: boolean;
   },
 ): MetaState {
   const stats = {
@@ -170,6 +178,7 @@ export function applyRunResult(
     stats,
     runStart: meta.runStart,
     heat: meta.heat,
+    hasWon: meta.hasWon || (outcome.won ?? false), // monotonic — once won, stays won
   };
 }
 
@@ -248,6 +257,7 @@ export function loadMeta(): MetaState {
       // (an old stored `heat: 0`, a partial, or a corrupt object) to valid ranks → no
       // migration needed; an absent/invalid heat falls back to NO_HEAT.
       heat: normalizeHeat(parsed.heat as Partial<HeatConfig> | undefined),
+      hasWon: typeof parsed.hasWon === 'boolean' ? parsed.hasWon : base.hasWon,
     };
   } catch {
     return defaultMeta();

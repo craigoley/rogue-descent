@@ -10,7 +10,7 @@
  *   enemies -> particles -> shake decay -> death trigger.
  */
 
-import { BOSS, BOSS_DEATH, DESCENT, DUNGEON, ENEMY_DEATH_TINT, FIRE_RATE_LEVELS, MELEE, PALETTE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE } from '../utils/constants';
+import { BOSS, BOSS_DEATH, DESCENT, DUNGEON, ENEMY_DEATH_TINT, FIRE_RATE_LEVELS, HEAT, MELEE, PALETTE, PARTICLE, PLAYER_COMBAT, RANGED, SHAKE } from '../utils/constants';
 import { createPlayer, dashMaxCharges, updatePlayer, type PlayerState } from './Player';
 import type { RoomState } from './Room';
 import { generateDungeon } from './Dungeon';
@@ -206,6 +206,13 @@ export interface GameState {
   /** PERMADEATH (Phase 7b): true once the death pause elapses — the run is over
    *  and the sim is frozen, awaiting an explicit startNewRun (the restart). */
   runOver: boolean;
+  /** VICTORY (W=8 climax): true once the player beats the FINAL boss at the win-depth W
+   *  (HEAT.unlockDepth) and steps on the stairs — the run is WON + capped (no floor
+   *  beyond W) and the sim freezes, awaiting restart. ⚠️ MUTUALLY EXCLUSIVE with runOver:
+   *  runWon is set only on the win path (player alive, in descendIfReady), runOver only
+   *  on death (!player.alive) — a dead player never reaches the win path, so a run ends
+   *  in EXACTLY ONE of death OR victory. */
+  runWon: boolean;
 }
 
 /** Reused aim scratch — keeps `update` allocation-free. */
@@ -252,6 +259,7 @@ export function createGameState(config?: RunConfig): GameState {
     shakeTimer: 0,
     deathTimer: 0,
     runOver: false,
+    runWon: false,
   };
   state.prevEnemyActive = state.enemies.map((e) => e.active);
   startNewRun(state, DUNGEON.defaultSeed);
@@ -347,6 +355,7 @@ export function startNewRun(state: GameState, seed: number, config?: RunConfig):
   state.run.wildfireKills = 0;
   state.run.leanFirstDelivered = false;
   state.runOver = false;
+  state.runWon = false;
   loadFloor(state, seed);
 }
 
@@ -403,6 +412,15 @@ function descendIfReady(state: GameState): boolean {
   if (!stairs.active) return false;
   const p = state.player;
   if (Math.hypot(p.x - stairs.x, p.y - stairs.y) > DESCENT.contactRadius) return false;
+  // WIN (W=8 climax — the HARD CAP): at the win-depth W (HEAT.unlockDepth) the boss is
+  // the FINAL boss; beating it + reaching the stairs ENDS the run in VICTORY instead of
+  // descending — there is no floor beyond W. Sets runWon (the counterpart to runOver);
+  // the player is alive here (this fn isn't reached when dead), so runWon/runOver stay
+  // mutually exclusive. `>=` is defensive (the cap means depth can never exceed W).
+  if (state.run.depth >= HEAT.unlockDepth) {
+    state.runWon = true;
+    return true; // run over (WON) — caller ends the frame; update() then freezes on runWon
+  }
   // Descend: run state PERSISTS (mutated, not reset) across the floor change.
   state.run.depth += 1;
   state.run.floorsCleared += 1;
@@ -464,6 +482,10 @@ export function regenerate(state: GameState, seed: number): void {
 
 export function update(state: GameState, intent: InputIntent, dt: number): void {
   const p = state.player;
+
+  // WON (W=8 climax): the run is over (victory) — freeze the sim, like runOver, until an
+  // explicit startNewRun (restart). Set in descendIfReady the frame the final boss falls.
+  if (state.runWon) return;
 
   // Dead: the death pause plays the death particles/shake as a lead-in, then the
   // RUN ENDS (permadeath). The sim stays frozen at runOver — no same-floor
