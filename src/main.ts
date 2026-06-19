@@ -60,10 +60,11 @@ const game = createGameState(runConfig());
 // restart setup); no renderer mutates state in the loop.
 const bootParams = new URLSearchParams(window.location.search);
 const seedParam = bootParams.get('seed');
-if (seedParam !== null && /^\d+$/.test(seedParam)) startNewRun(game, Number(seedParam) >>> 0, runConfig());
+const hasValidSeedParam = seedParam !== null && /^\d+$/.test(seedParam);
+if (hasValidSeedParam) startNewRun(game, Number(seedParam) >>> 0, runConfig());
 // E2E seam boots (deterministic baselines) bypass the run-start lean card; real-play
 // boots route through beginRun() below (the card shows only once something's unlocked).
-const isE2EBoot = (seedParam !== null && /^\d+$/.test(seedParam)) || bootParams.get('scene') === 'boss' || bootParams.get('still') === '1';
+const isE2EBoot = hasValidSeedParam || bootParams.get('scene') === 'boss' || bootParams.get('still') === '1';
 if (bootParams.get('scene') === 'boss') {
   const rect = game.rooms[game.bossRoom]?.rect;
   if (rect) {
