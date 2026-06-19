@@ -16,22 +16,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  /* Vertical space the centred title wordmark occupies (margin + max font +
-     line). The corner widgets — minimap (top-right) AND health/dash bars
-     (top-left) — sit BELOW this, so the centred, letter-spaced title (which
-     reaches toward both corners on a narrow portrait) never shares the top band
-     with them. Measured from --safe-top (the title shares that origin). */
-  --hud-title-clear: 60px;
-  /* Clearance for everything BELOW the centred top band (title + the DEPTH
-     readout under it). The corner widgets — top-left health/dash bars and
-     top-right minimap — drop below THIS line so they never share a row with the
-     centred, full-width DEPTH counter (which caused the "PTH 1" overlap when
-     DEPTH was on the old --hud-title-clear row with the left bars). */
-  --hud-band-clear: 84px;
-  /* Compacted top-band offset (HUD reflow): once the title+depth fade on room-entry,
-     BOTH sides land here — the left bars rise to it (#100) and the right minimap+gear
-     are anchored to it — so the whole top band compacts to the top SYMMETRICALLY. 12px
-     mirrors the title's old margin-top, clear of the safe-area inset. */
+  /* Top-band offset: the corner widgets (bars, minimap, gear) sit this far below
+     --safe-top. The title/depth are a centre-screen arrival beat (not in the band),
+     so the band is compact from spawn — no rise-on-combat. */
   --hud-band-top: 12px;
   /* Width the top-right minimap + its insets + a gap reserve on the right, so the
      left-anchored powers (chip) row caps its width here and WRAPS within the left
@@ -97,80 +84,50 @@ body {
   background: var(--bg);
 }
 
-/* Depth indicator — centred just below the title, between the corner widgets.
-   Violet (= PALETTE.stairs) ties it to the descent system. */
-/* DEPTH — low-frequency info (changes only on descent): shrunk + dimmed IN PLACE so it
-   recedes without leaving the centre band (HUD reduction). */
-.hud-depth {
+/* UNIFIED ARRIVAL BEAT — a centred playfield stack on floor/game arrival: the
+   "ROGUE DESCENT" title (floor 1 / game-start only) ABOVE the "DEPTH N" announce
+   (every floor). Both fade on LEAVING the entry room (pre-combat). On a clean
+   playfield centre (the entry room is empty on arrival) so it's BIG + BRIGHT — it
+   owns the moment, then clears. pointer-events:none — never blocks the playfield. */
+.hud-arrival {
   position: fixed;
-  top: calc(var(--safe-top) + var(--hud-title-clear));
-  left: 50%;
-  transform: translateX(-50%);
-  font: 700 clamp(9px, 2vw, 11px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.18em;
-  color: var(--stairs);
-  opacity: 0.55; /* receded reference info (at-rest; unchanged from #99) */
-  text-shadow: 0 0 6px currentColor;
-  pointer-events: none;
-  user-select: none;
-  transition: opacity 0.6s ease; /* fades WITH the title on room-entry */
-}
-/* Faded out on first room-entry (with the title), vacating the centre band so the
-   bars compact up. (reduce-motion sets transition:none inline → instant.) */
-.hud-depth.is-faded {
-  opacity: 0;
-}
-
-/* LATER-FLOOR depth ANNOUNCE — the floor-2+ depth surface. On a later-floor arrival the
-   HUD band is already #100-compacted (chips risen into it), so the HUD-band .hud-depth
-   re-show collided with the chip grid (unreadable). Instead, floor 2+ announces "DEPTH N"
-   CENTER-SCREEN on the clean entry-room playfield — a proper arrival beat — then fades on
-   combat entry. Floor 1 (uncompacted, clear) keeps the HUD-band depth; this stays hidden
-   there. BIGGER + BRIGHTER than the receded HUD depth (it owns the moment, on a clean
-   background). Opacity-only transition → reduce-motion (transition:none inline) = instant,
-   no motion to gate. pointer-events:none so it never blocks the playfield. */
-.hud-depth-announce {
-  position: fixed;
-  top: 40%; /* just above centre — announces over the entry room, clear of the player */
+  top: 42%; /* just above true centre — announces over the entry room, clear of the player */
   left: 50%;
   transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  user-select: none;
+  text-align: center;
+  z-index: 3; /* above the floor-transition cover so the arrival beat reads on top */
+}
+/* TITLE — the larger top line of the stack. Created VISIBLE (no fade-in) so the ?still
+   frame-1 baseline is deterministic; the only transition is the fade-OUT on leaving the
+   entry room (reduce-motion sets transition:none inline → instant). One-time game-start:
+   set display:none on later floors so the depth centres alone in the stack. */
+.hud-arrival-title {
+  font: 700 clamp(28px, 8vw, 56px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.3em;
+  text-shadow: 0 0 16px currentColor;
+  opacity: 1;
+  white-space: nowrap;
+  transition: opacity 0.5s ease;
+}
+/* DEPTH — the smaller line below the title (violet = PALETTE.stairs, ties to descent).
+   Shown every floor, faded on leaving the entry room; re-shows per floor. */
+.hud-arrival-depth {
   font: 700 clamp(22px, 6vw, 42px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.3em;
   color: var(--stairs);
-  opacity: 0.92; /* bright: the focus for a beat (vs the receded HUD-band 0.55) */
   text-shadow: 0 0 18px currentColor;
-  pointer-events: none;
-  user-select: none;
+  opacity: 0.92; /* bright: the focus for a beat */
   white-space: nowrap;
-  text-align: center;
-  z-index: 3; /* above the floor-transition cover so the arrival beat reads on top */
-  transition: opacity 0.6s ease;
+  transition: opacity 0.5s ease;
 }
-.hud-depth-announce.is-faded {
-  opacity: 0;
-}
-
-/* TITLE — a spawn flourish that FADES once the player enters the first room (HUD
-   reduction); the .is-faded class is latched on first room-entry (reduce-motion sets
-   transition:none inline → instant hide). Reclaims the centre-top. */
-.hud-title {
-  position: fixed;
-  /* Shares --safe-top with the corner widgets so --hud-title-clear measures the
-     same origin (the title owns this top row; bars + minimap sit below it). */
-  top: var(--safe-top);
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 12px;
-  font-size: clamp(18px, 4vw, 32px);
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  text-shadow: 0 0 12px currentColor;
-  pointer-events: none;
-  user-select: none;
-  opacity: 1;
-  transition: opacity 0.6s ease;
-}
-.hud-title.is-faded {
+.hud-arrival-title.is-faded,
+.hud-arrival-depth.is-faded {
   opacity: 0;
 }
 
@@ -179,58 +136,30 @@ body {
    canvas paints its own translucent panel + border, so no background here. */
 .minimap {
   position: fixed;
-  /* AT REST (pre-room) it sits on the lower band (--hud-band-clear), BELOW the title's
-     own top row — so the centred title never shares a row with the minimap corner (the
-     spawn-overlap fix). On first room-entry the title fades and its row collapses; the
-     minimap RISES into it via the same transform the left bars use (#100), landing at
-     --hud-band-top — both sides reclaim the top symmetrically. The chip-row width cap
-     (--hud-minimap-reserve) keeps the risen left chips clear horizontally at any
-     vertical minimap position (the #75 reserve is position-independent). */
-  top: calc(var(--safe-top) + var(--hud-band-clear));
+  /* Anchored at the COMPACTED top band (--hud-band-top) from spawn — the title no longer
+     lives in the HUD band (it's a centre-screen arrival beat), so there's nothing for the
+     corner widgets to sit below and no rise-on-combat (the #100 latch is retired). The
+     chip-row width cap (--hud-minimap-reserve) keeps the left chips clear of it. */
+  top: calc(var(--safe-top) + var(--hud-band-top));
   right: calc(var(--safe-right) + 10px);
   border-radius: 6px;
   pointer-events: none;
   user-select: none;
-  transition: transform 0.4s ease; /* the smooth rise (reduce-motion → none, below) */
-}
-/* RISEN: on room-entry the container gets .is-compacted (latched once in HUD.update,
-   same trigger as the title fade + bars rise). Raise the minimap + its gear cluster by
-   the band delta — a GPU-friendly transform, not a top/layout change — so they land at
-   --hud-band-top, the title's vacated row. */
-.is-compacted .minimap,
-.is-compacted .hud-settings-btn,
-.is-compacted .hud-settings-panel {
-  transform: translateY(calc(var(--hud-band-top) - var(--hud-band-clear)));
-}
-/* Reduce-motion: snap (no rise animation), matching the bars' instant compaction. */
-.is-reduce-motion .minimap,
-.is-reduce-motion .hud-settings-btn,
-.is-reduce-motion .hud-settings-panel {
-  transition: none;
 }
 
-/* Combat HUD — health + dash + chips, top-left. Always visible. At-rest it sits below
-   the centred title+DEPTH band; on first room-entry it COMPACTS UP (.is-compact) into
-   the space the faded title+depth vacate (HUD reflow — closes #99's gap). */
+/* Combat HUD — health + dash + chips, top-left. Always visible. Anchored at the
+   compacted top band (--hud-band-top) from spawn (the title's no longer in the band, so
+   no rise-on-combat — the #100 latch is retired). The chip-row width cap keeps it clear
+   of the top-right minimap. */
 .hud-bars {
   position: fixed;
-  /* Below the centred band (title + DEPTH), same row as the top-right minimap,
-     so the bars never share a row with the full-width DEPTH counter (the cause
-     of the "PTH 1" overlap) nor paint over the title at any width. */
-  top: calc(var(--safe-top) + var(--hud-band-clear));
+  top: calc(var(--safe-top) + var(--hud-band-top));
   left: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   pointer-events: none;
   user-select: none;
-  transition: transform 0.4s ease; /* the smooth rise (reduce-motion → none inline) */
-}
-/* RISEN: translate up so the block's top lands ~12px below the safe-area inset (where
-   the title was) — a GPU-friendly transform, not a top/layout change. The minimap is
-   corner-anchored + unaffected; the chip row's width cap keeps it clear of it. */
-.hud-bars.is-compact {
-  transform: translateY(calc(var(--hud-band-top) - var(--hud-band-clear)));
 }
 
 /* One labelled bar: a small right-aligned caption + the track, so a new player
@@ -1061,12 +990,13 @@ body {
   position: fixed;
   /* A TAB that hangs off the minimap's bottom-right corner, reading as one tidy
      cluster with it — NOT a detached floating box. It sits FLUSH against the minimap's
-     bottom edge (minimap top --hud-band-clear + its 128px height), right-aligned to the
+     bottom edge (minimap top --hud-band-top + its 128px height), right-aligned to the
      same inset, sharing the minimap's translucent panel fill + teal border. The TOP
      border is dropped so the tab merges into the minimap's edge; only the bottom corners
-     round (the tab silhouette). Anchored to the lower band so it RIDES the minimap's
-     room-entry rise (the shared .is-compacted transform above). */
-  top: calc(var(--safe-top) + var(--hud-band-clear) + 128px);
+     round (the tab silhouette). Anchored at the compacted band (--hud-band-top + the
+     128px minimap height) so it hangs flush off the minimap, which now sits compacted
+     from spawn (the #100 rise is retired). */
+  top: calc(var(--safe-top) + var(--hud-band-top) + 128px);
   right: calc(var(--safe-right) + 10px);
   width: 40px;
   height: 26px;
@@ -1081,7 +1011,6 @@ body {
   touch-action: manipulation;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: transform 0.4s ease;
 }
 .hud-settings-btn.is-open {
   color: var(--player);
@@ -1090,10 +1019,10 @@ body {
 
 .hud-settings-panel {
   position: fixed;
-  /* Just below the gear tab, right-aligned with it (rides the same room-entry rise).
-     Anchored to the lower band so the gear tab (--hud-band-clear + 128px minimap + its
-     26px height) clears it with a small gap. */
-  top: calc(var(--safe-top) + var(--hud-band-clear) + 160px);
+  /* Just below the gear tab, right-aligned with it. Anchored at the compacted band
+     (--hud-band-top + 128px minimap + the gear tab's 26px) so it clears the tab with a
+     small gap — the cluster sits compacted from spawn (the #100 rise is retired). */
+  top: calc(var(--safe-top) + var(--hud-band-top) + 160px);
   right: calc(var(--safe-right) + 10px);
   display: none;
   flex-direction: column;
@@ -1103,7 +1032,6 @@ body {
   border: 1px solid rgba(51, 255, 204, 0.25);
   border-radius: 6px;
   user-select: none;
-  transition: transform 0.4s ease;
 }
 .hud-settings-panel.is-open {
   display: flex;
