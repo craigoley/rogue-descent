@@ -1,0 +1,38 @@
+name: Dependency Review
+
+# SCA (PR-diff): on a PR, diff the dependency changes and flag any newly-introduced
+# vulnerable dependency or disallowed license — BEFORE it lands (the gap OSV-Scanner
+# [scheduled full-tree CVE scan] + Dependabot [version bumps] don't cover: a bad dep
+# AS it enters the PR). Free on this PUBLIC repo (no GitHub Advanced Security needed).
+#
+# ⚠️ NON-BLOCKING: this repo has the claude-review auto-merge pipeline, so the check must
+# never WALL it. `continue-on-error: true` keeps the job GREEN regardless of findings —
+# the result surfaces as a PR comment (comment-summary-in-pr) for a human to read, it does
+# not gate. Flip continue-on-error off (and/or raise fail-on-severity to a real gate) only
+# if Craig later wants this blocking and the auto-merge is reconciled.
+on:
+  pull_request:
+    branches: [main]
+
+# contents: read to diff the dep graph; pull-requests: write to post the summary comment.
+# (NOT a code-scanner — no security-events:write, no SARIF.)
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dep-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/dependency-review-action@v4
+        continue-on-error: true # non-blocking — never wall the auto-merge; surfaces as a comment
+        with:
+          comment-summary-in-pr: on-failure
+          fail-on-severity: high
