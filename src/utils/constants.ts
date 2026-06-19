@@ -1338,11 +1338,14 @@ export const PIERCE_LEVELS = {
   maxHits: [1, 2, 3, Infinity],
 } as const;
 
+export const KNOCKBACK_LEVEL_2_FORCE = 26;
+export const KNOCKBACK_LEVEL_3_FORCE = 34;
+
 /** KNOCKBACK level → melee shove force (world units/sec). Level 0 = MELEE.knockback
  *  (base, unchanged); I = the old powerup force (DROP.meleeKnockback), II/III grow.
  *  PR1 scales FORCE only — stun (II) + AoE (III) land in PR2 on top of these. */
 export const KNOCKBACK_LEVELS = {
-  force: [MELEE.knockback, DROP.meleeKnockback, 26, 34],
+  force: [MELEE.knockback, DROP.meleeKnockback, KNOCKBACK_LEVEL_2_FORCE, KNOCKBACK_LEVEL_3_FORCE],
   /** PR2: STUN duration (seconds) applied on a melee knockback hit at level >= 2.
    *  Flat for II + III (III's extra is the AoE, not a longer stun). Long enough to
    *  open space / make the enemy miss a beat, short enough not to perma-lock.
