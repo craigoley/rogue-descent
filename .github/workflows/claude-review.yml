@@ -181,9 +181,14 @@ jobs:
 
       - uses: anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102  # v1
         if: steps.check-author.outputs.skip != 'true'
+        env:
+          # Authenticate the gh CLI used by the Bash tool (gh pr comment/merge).
+          GH_TOKEN: ${{ github.token }}
         with:
           # OAuth via Craig's Max subscription — same auth ClawApp uses.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Force tag mode so the review summary posts as a tracking comment.
+          track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -276,6 +281,6 @@ jobs:
             merge. Tag @craigoley in that comment so I see it.
 
           claude_args: |
-            --model claude-opus-4-6
+            --model claude-opus-4-8
             --max-turns 50
-            --allowedTools Edit,Write,Read,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(npx tsc:*),Bash(npm test:*),mcp__github_inline_comment__create_inline_comment
+            --allowedTools "Edit,Write,Read,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(npx tsc:*),Bash(npm test:*),mcp__github_inline_comment__create_inline_comment"
