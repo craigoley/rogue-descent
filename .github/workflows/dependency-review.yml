@@ -30,8 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
         continue-on-error: true # non-blocking — never wall the auto-merge; surfaces as a comment
         with:
           comment-summary-in-pr: on-failure

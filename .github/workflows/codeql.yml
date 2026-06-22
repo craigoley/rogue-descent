@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # build-mode: none — JS/TS is interpreted, so CodeQL extracts directly
       # from source with no compilation step (no autobuild needed).
