@@ -154,7 +154,7 @@ jobs:
       #      AND, for comments, an `@claude` body — only the owner can fire it.
       #   2. `ref:` is the resolved-at-trigger-time head SHA, not the mutable
       #      branch ref, so a force-push after the trust check can't swap it out.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.check-author.outputs.skip != 'true'
         with:
           # SHA-pinned (immutable). NOT `head.ref` — branch refs are mutable and
@@ -179,7 +179,7 @@ jobs:
           git checkout -B "$BRANCH"
           git branch --set-upstream-to="origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 
-      - uses: anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102  # v1
+      - uses: anthropics/claude-code-action@2fee15510437d71399d9139ed60433470484a8fb  # v1
         if: steps.check-author.outputs.skip != 'true'
         env:
           # Authenticate the gh CLI used by the Bash tool (gh pr comment/merge).
