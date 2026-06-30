@@ -18,7 +18,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.61.1",
-    "@types/three": "^0.184.1",
+    "@types/three": "^0.185.0",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "typescript": "~6.0.2",
@@ -27,6 +27,6 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "three": "^0.184.0"
+    "three": "^0.185.0"
   }
 }
