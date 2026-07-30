@@ -4,10 +4,10 @@
 # Conventions (schedule, grouping, commit prefixes, labels) follow the
 # OleyArcade fleet (ClawApp / neon-drift). ClawApp's ignore list is entirely
 # Expo / React Native SDK pins — NONE of which apply here: Rogue Descent is a
-# static Three.js + Vite app with no native modules. There are no held-back
-# versions in package.json (three / vite / vitest / typescript / eslint all
-# float on caret/tilde ranges with no pinning rationale), so this config carries
-# NO ignore list.
+# static Three.js + Vite app with no native modules. Nothing else in
+# package.json is held back (three / vite / vitest / eslint all float on
+# caret/tilde ranges with no pinning rationale), so the ignore list below is
+# the single documented exception — see the typescript entry.
 
 version: 2
 updates:
@@ -27,6 +27,22 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    ignore:
+      # typescript-eslint 8.x peer-caps TypeScript at ">=4.8.4 <6.1.0", so a
+      # typescript major bump makes `npm ci` fail ERESOLVE and takes the whole
+      # dev-tooling group PR red — every job, including build and lint. Seen on
+      # PR #143 (typescript 6.0.3 -> 7.0.2): typescript-eslint 8.65.0 both
+      # peer-rejects TS 7 and ships an explicit "TS 7 detected" warning, i.e.
+      # upstream support does not exist yet.
+      #
+      # Minor/patch updates within the current major still flow through
+      # normally — only the major is held.
+      #
+      # REMOVE THIS once typescript-eslint widens its peer range to admit TS 7
+      # (watch https://github.com/typescript-eslint/typescript-eslint), then
+      # take the major deliberately in its own PR.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       # Order matters — a package lands in the FIRST matching group.
       # @types/* are dev-deps too, so they must come before dev-tooling.
