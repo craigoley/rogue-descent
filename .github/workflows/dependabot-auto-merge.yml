@@ -131,14 +131,28 @@ jobs:
             echo "Hold notice already posted."
             exit 0
           fi
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
-            "<!-- auto-merge-hold -->
-          **Held for human review** — $REASON.
-
-          CI still runs normally; this PR just will not merge itself. Merge with
-          \`gh pr merge $PR --squash --delete-branch\` once you're satisfied.
-
-          _Policy lives in \`.github/workflows/dependabot-auto-merge.yml\`._"
+          # Built with printf rather than a multi-line string literal: this
+          # `run:` block is indented inside the YAML, and every continuation
+          # line of a quoted literal would carry that indentation into the
+          # comment body. At 4+ leading spaces GitHub renders Markdown as a
+          # code block, so the whole notice would come out preformatted.
+          # The single quotes are deliberate — the backticks inside are Markdown
+          # code spans/fences for the rendered comment, not command
+          # substitution, so they must NOT expand.
+          # shellcheck disable=SC2016
+          BODY=$(printf '%s\n' \
+            '<!-- auto-merge-hold -->' \
+            "**Held for human review** — $REASON." \
+            '' \
+            'CI still runs normally — this PR just will not merge itself.' \
+            'Merge it by hand once you are satisfied:' \
+            '' \
+            '```' \
+            "gh pr merge $PR --squash --delete-branch" \
+            '```' \
+            '' \
+            '_Policy lives in `.github/workflows/dependabot-auto-merge.yml`._')
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$BODY"
 
       # Wait for the checks that actually gate a merge.
       #
