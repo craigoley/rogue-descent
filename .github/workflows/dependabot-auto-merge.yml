@@ -80,9 +80,24 @@ jobs:
           merge=false
           reason=""
 
+          # BRANCH ORDER IS LOAD-BEARING — do not reorder these arms.
+          # Dependabot labels GitHub Actions bumps `dependency-type:
+          # direct:production` (verified on the #146 commit trailer for
+          # github/codeql-action). "production" there means "not a dev
+          # dependency of the action", NOT "ships to players". If the
+          # production arm ran first, every action bump would be held and this
+          # workflow would merge nothing at all — the exact stall it exists to
+          # fix. The ecosystem test must stay ahead of it.
+          #
+          # `github_actions` is spelled with an UNDERSCORE: fetch-metadata
+          # derives package-ecosystem by splitting the branch name
+          # (dependabot/github_actions/...), not from dependabot.yml, where the
+          # same ecosystem is written `github-actions` with a hyphen.
           if [[ "$ECOSYSTEM" == "github_actions" ]]; then
             # Action bumps only touch .github/workflows — they cannot change a
-            # single byte of the bundle Vercel serves.
+            # single byte of the bundle Vercel serves. A bump that breaks CI
+            # itself is self-gating: the blocking checks go red and the wait
+            # step refuses the merge.
             merge=true
           elif [[ "$UPDATE_TYPE" == "version-update:semver-major" ]]; then
             # Majors get eyes even for dev deps: a vitest or eslint major can go
