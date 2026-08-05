@@ -73,11 +73,20 @@ jobs:
     # merged. Marking a draft "Ready for review" fires ready_for_review (see the
     # trigger above), flips draft to false, and lets the run proceed.
     #
-    # Dependabot PRs are SKIPPED — deliberate fleet deviation from ClawApp: a
-    # three.js / Vite bump can pass tsc, vitest, CodeQL and OSV yet still break
-    # the render and auto-deploy to the public site, so dependency bumps get
-    # human review. github-actions[bot] is skipped to prevent self-loops on
-    # Claude's push-backs.
+    # Dependabot PRs are SKIPPED here — deliberate fleet deviation from ClawApp:
+    # a three.js / Vite bump can pass tsc, vitest, CodeQL and OSV yet still break
+    # the render and auto-deploy to the public site.
+    #
+    # That skip is NOT "dependency PRs are merged by hand". Dependabot is ~100%
+    # of this repo's PR traffic, so for a while it meant no automation ran at all
+    # and every bump was merged manually. `.github/workflows/dependabot-auto-merge.yml`
+    # now owns that lane: it auto-merges the blast-radius-zero subset
+    # (github-actions bumps, non-major devDependencies) behind lint/test/build/
+    # E2E, and holds production deps and majors for a human — which is the case
+    # this skip was actually written to protect. Keep the two files in sync: if
+    # you widen the policy there, revisit the rationale here.
+    #
+    # github-actions[bot] is skipped to prevent self-loops on Claude's push-backs.
     if: |
       (github.event_name == 'pull_request' &&
        github.event.pull_request.draft == false &&

@@ -1,0 +1,210 @@
+name: Dependabot auto-merge
+
+# WHY THIS EXISTS
+# ---------------
+# `claude-review.yml`'s review-and-merge job deliberately SKIPS dependabot PRs
+# (a three.js bump can pass tsc/vitest/CodeQL/OSV and still break the render on
+# the live site). But dependabot is ~100% of this repo's PR traffic, so that
+# skip left the hands-off pipeline dead: every pull_request-triggered run of
+# claude-review since 2026-07-13 concluded `skipped`, and every dependency PR
+# (#137, #139, #140, #142, #143, #146) was merged BY HAND.
+#
+# This workflow restores automation for the safe subset without giving up the
+# guard that motivated the skip. The split is by BLAST RADIUS, not by author:
+#   - github-actions bumps  -> CI-only, cannot reach the shipped bundle. Merge.
+#   - npm devDependencies   -> gated by lint + test + build + E2E. Merge.
+#   - npm prod deps (three) -> ships to players. HOLD for a human.
+#   - any npm major         -> HOLD for a human, regardless of dep type.
+# Anything held gets a comment explaining why, so it never just sits silently
+# the way #146 did for two days.
+
+on:
+  # pull_request_target, NOT pull_request. Workflow runs triggered by Dependabot
+  # get a READ-ONLY GITHUB_TOKEN on the `pull_request` event, so `gh pr merge`
+  # would 403 no matter what the `permissions:` block below says.
+  # pull_request_target runs the workflow definition from the BASE branch (main)
+  # with a read-write token, which is what the merge step needs.
+  #
+  # The usual pull_request_target danger is checking out and EXECUTING PR code
+  # under that privileged token. This workflow never checks out the PR at all —
+  # there is no `actions/checkout` step, and every step is either the metadata
+  # action or a `gh` API call keyed by PR number. The PR's code is only ever
+  # executed by the ordinary `pull_request` workflows (CI, E2E, Semgrep), which
+  # run unprivileged. Keep it that way: do NOT add a checkout of the head ref.
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Default read-only; the job below elevates to exactly what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the PR supersedes an in-flight wait for the older commit.
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    # Same-repo head only: dependabot branches live in this repo, never a fork.
+    if: |
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # Generous: the slowest blocking check (E2E) finishes ~1m20s, but Lighthouse
+    # and the validation soak run ~4m and the wait loop polls until everything
+    # settles. 30m leaves room for a queued-runner backlog.
+    timeout-minutes: 30
+    steps:
+      - name: Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
+
+      # Decide merge vs. hold BEFORE burning ~5 minutes waiting on checks.
+      - name: Apply merge policy
+        id: policy
+        env:
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          DEP_TYPE: ${{ steps.meta.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEP_NAMES: ${{ steps.meta.outputs.dependency-names }}
+        run: |
+          set -euo pipefail
+          echo "ecosystem=$ECOSYSTEM type=$DEP_TYPE update=$UPDATE_TYPE names=$DEP_NAMES"
+
+          merge=false
+          reason=""
+
+          if [[ "$ECOSYSTEM" == "github_actions" ]]; then
+            # Action bumps only touch .github/workflows — they cannot change a
+            # single byte of the bundle Vercel serves.
+            merge=true
+          elif [[ "$UPDATE_TYPE" == "version-update:semver-major" ]]; then
+            # Majors get eyes even for dev deps: a vitest or eslint major can go
+            # green while silently dropping test coverage or rules.
+            reason="major version bump — majors are reviewed by hand"
+          elif [[ "$DEP_TYPE" == *"production"* ]]; then
+            # three / any runtime dep ships to players. This is the exact case
+            # claude-review.yml's dependabot skip was written to protect.
+            reason="production dependency — ships to players, needs a device playtest"
+          elif [[ "$DEP_TYPE" == *"development"* ]]; then
+            merge=true
+          else
+            # indirect/transitive, or metadata the action could not classify.
+            reason="dependency type '$DEP_TYPE' is not on the auto-merge allowlist"
+          fi
+
+          echo "merge=$merge" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Explain hold and stop
+        if: steps.policy.outputs.merge != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REASON: ${{ steps.policy.outputs.reason }}
+        run: |
+          set -euo pipefail
+          # One comment per PR, not one per synchronize.
+          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
+               --jq '.comments[].body' | grep -q "auto-merge-hold"; then
+            echo "Hold notice already posted."
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
+            "<!-- auto-merge-hold -->
+          **Held for human review** — $REASON.
+
+          CI still runs normally; this PR just will not merge itself. Merge with
+          \`gh pr merge $PR --squash --delete-branch\` once you're satisfied.
+
+          _Policy lives in \`.github/workflows/dependabot-auto-merge.yml\`._"
+
+      # Wait for the checks that actually gate a merge.
+      #
+      # Blocking = every check whose name does NOT end in "(non-blocking)",
+      # PLUS the E2E suite. E2E is marked non-blocking for humans, but it is the
+      # ONLY check that exercises the rendered game, so it is the one thing
+      # standing between a bad dev-dep bump and a broken live site. For an
+      # unattended merge it is required.
+      #
+      # Deliberately still advisory here: Lighthouse and the live validation
+      # soak both run against a Vercel preview and are flaky-by-nature (network,
+      # cold starts); letting them veto an unattended merge would trade one
+      # stuck-PR problem for another.
+      - name: Wait for blocking checks
+        if: steps.policy.outputs.merge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # This job is itself a check run on the PR head SHA. Filtering it out
+          # is load-bearing: without it the loop waits on its own `pending`
+          # state and deadlocks until the 30m timeout.
+          SELF="Dependabot auto-merge"
+
+          # The three CI jobs must all be PRESENT before "nothing pending" can
+          # mean "everything passed". Right after `opened`, GitHub has often
+          # registered no check runs yet — an empty list trivially satisfies
+          # "zero pending" and would merge the PR having verified nothing.
+          CORE='["Lint","Test","Build"]'
+
+          for attempt in $(seq 1 60); do
+            # `gh pr checks` exits 8 while checks are still pending, so a bare
+            # `|| echo '[]'` would append to the JSON gh already printed and
+            # produce a malformed document. Swallow the status, then validate.
+            raw=$(gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json name,bucket,workflow 2>/dev/null) || true
+            jq -e 'type == "array"' >/dev/null 2>&1 <<<"$raw" || raw='[]'
+
+            blocking=$(jq -c --arg self "$SELF" '
+              [ .[]
+                | select(.workflow != $self)
+                | select((.name | endswith("(non-blocking)") | not) or (.name | startswith("E2E")))
+              ]' <<<"$raw")
+
+            pending=$(jq -r '[.[] | select(.bucket == "pending")] | length' <<<"$blocking")
+            failed=$(jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | .name' <<<"$blocking")
+            missing=$(jq -r --argjson core "$CORE" '
+              ($core - [.[].name]) | join(", ")' <<<"$blocking")
+
+            if [[ -n "$failed" ]]; then
+              echo "::error::Blocking checks failed, refusing to merge:"
+              sed 's/^/  - /' <<<"$failed"
+              exit 1
+            fi
+
+            if [[ "$pending" == "0" && -z "$missing" ]]; then
+              echo "All blocking checks settled:"
+              jq -r '.[] | "  \(.bucket)\t\(.name)"' <<<"$blocking"
+              exit 0
+            fi
+
+            if [[ -n "$missing" ]]; then
+              echo "attempt $attempt: waiting for core checks to register: $missing"
+            else
+              echo "attempt $attempt: $pending blocking check(s) still pending…"
+            fi
+            sleep 20
+          done
+
+          echo "::error::Timed out waiting for blocking checks."
+          exit 1
+
+      - name: Squash merge
+        if: steps.policy.outputs.merge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Plain squash, NOT --auto: this repo has allow_auto_merge disabled and
+          # no branch protection on main, so --auto is rejected outright. The
+          # wait step above is what replaces the missing required-checks gate.
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
