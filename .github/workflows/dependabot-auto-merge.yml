@@ -176,7 +176,7 @@ jobs:
 
             if [[ -n "$failed" ]]; then
               echo "::error::Blocking checks failed, refusing to merge:"
-              sed 's/^/  - /' <<<"$failed"
+              while IFS= read -r name; do echo "  - $name"; done <<<"$failed"
               exit 1
             fi
 
