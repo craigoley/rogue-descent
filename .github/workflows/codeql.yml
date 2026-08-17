@@ -35,7 +35,7 @@ jobs:
       # build-mode: none — JS/TS is interpreted, so CodeQL extracts directly
       # from source with no compilation step (no autobuild needed).
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.6
+        uses: github/codeql-action/init@v4.37.7
         with:
           languages: javascript-typescript
           build-mode: none
@@ -50,6 +50,6 @@ jobs:
               - '**/__tests__/**'
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.6
+        uses: github/codeql-action/analyze@v4.37.7
         with:
           category: "/language:javascript-typescript"
