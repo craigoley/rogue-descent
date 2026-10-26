@@ -188,7 +188,7 @@ jobs:
           git checkout -B "$BRANCH"
           git branch --set-upstream-to="origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 
-      - uses: anthropics/claude-code-action@f27be6b65a4652f08a2ba3cff79114829b588967  # v1
+      - uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33  # v1
         if: steps.check-author.outputs.skip != 'true'
         env:
           # Authenticate the gh CLI used by the Bash tool (gh pr comment/merge).
