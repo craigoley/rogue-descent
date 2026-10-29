@@ -42,10 +42,14 @@ name: Dependabot auto-merge
 
 on:
   # pull_request_target, NOT pull_request. Workflow runs triggered by Dependabot
-  # get a READ-ONLY GITHUB_TOKEN on the `pull_request` event, so `gh pr merge`
-  # would 403 no matter what the `permissions:` block below says.
-  # pull_request_target runs the workflow definition from the BASE branch (main)
-  # with a read-write token, which is what the merge step needs.
+  # get a READ-ONLY GITHUB_TOKEN by default on the `pull_request` event. A
+  # `permissions:` block CAN raise that token (GitHub: "You can use the
+  # `permissions` key in your workflow to increase the access for the token"),
+  # https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions
+  # so the token alone does not force this trigger. This workflow uses
+  # pull_request_target, which runs the workflow definition from the BASE
+  # branch (main) — a PR cannot edit the copy that runs with write access —
+  # and gets its write scopes from the job's `permissions:` block below.
   #
   # The usual pull_request_target danger is checking out and EXECUTING PR code
   # under that privileged token. This workflow never checks out the PR at all —
@@ -290,7 +294,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          # Plain squash, NOT --auto: this repo has allow_auto_merge disabled and
-          # no branch protection on main, so --auto is rejected outright. The
-          # wait step above is what replaces the missing required-checks gate.
+          # Plain squash, NOT --auto: `--auto` waits only for the REQUIRED status
+          # checks, and the `protect-main` ruleset requires just Lint, Test and
+          # Build. E2E is not required, so `--auto` would merge as soon as those
+          # three are green — before the render smoke had reported. The wait
+          # step above is the only gate that covers E2E.
           gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
