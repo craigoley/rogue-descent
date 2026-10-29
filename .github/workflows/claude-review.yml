@@ -180,6 +180,87 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # THE REVIEW PROMPT LIVES IN .github/claude-review/prompt.md, not inline
+      # here. claude-code-action refuses to run on a PR whose copy of this
+      # workflow differs from the default branch's ("Workflow validation
+      # failed"), so while the prompt was inline every prompt edit needed a
+      # hand merge. Moving it out of this file lets prompt edits go through the
+      # normal review + merge.
+      #
+      # SECURITY: the prompt is read from the DEFAULT BRANCH through the API,
+      # never from the PR checkout (which holds the PR's own copy). A PR must
+      # not be able to rewrite its own reviewer's instructions, so a prompt
+      # edit takes effect only for runs after it merges, and the PR making it
+      # is reviewed under main's current prompt. A missing or empty file is a
+      # job error: there is deliberately no fallback to the PR's copy.
+      #
+      # Placeholders ({{REPO}}, {{PR_NUMBER}}, {{BRANCH}}) are filled in
+      # one regex pass in Python, so a value containing sed metacharacters or
+      # another placeholder lands verbatim. An unknown placeholder fails the job
+      # rather than reaching the model unrendered. Runs before the checkout,
+      # so the workspace holds no PR code yet.
+      - name: Load review prompt from the default branch
+        id: prompt
+        if: steps.check-author.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          BRANCH: ${{ steps.pr-sha.outputs.branch }}
+        run: |
+          set -euo pipefail
+          PROMPT_PATH=.github/claude-review/prompt.md
+          if [[ -z "$DEFAULT_BRANCH" ]]; then
+            echo "::error::Could not determine the default branch from the event payload."
+            exit 1
+          fi
+          # Pin the read to one commit so the log says exactly which prompt ran.
+          REF_SHA=$(gh api "repos/$REPO/commits/$DEFAULT_BRANCH" --jq .sha)
+          TEMPLATE="$RUNNER_TEMP/review-prompt.template.md"
+          RENDERED="$RUNNER_TEMP/review-prompt.md"
+          if ! gh api "repos/$REPO/contents/$PROMPT_PATH?ref=$REF_SHA" \
+               -H "Accept: application/vnd.github.raw" > "$TEMPLATE"; then
+            echo "::error::Could not read $PROMPT_PATH from $DEFAULT_BRANCH ($REF_SHA). Refusing to review without it."
+            exit 1
+          fi
+          echo "Loaded $PROMPT_PATH from $DEFAULT_BRANCH@$REF_SHA ($(wc -c < "$TEMPLATE") bytes)."
+
+          python3 -I - "$TEMPLATE" "$RENDERED" <<'PY'
+          import os, re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          with open(src, encoding="utf-8") as f:
+              text = f.read()
+          def fail(msg):
+              print(f"::error::{msg}")
+              sys.exit(1)
+          if not text.strip():
+              fail("prompt.md on the default branch is empty.")
+          values = {k: os.environ.get(k, "") for k in ("REPO", "PR_NUMBER", "BRANCH")}
+          missing = [k for k, v in values.items() if not v]
+          if missing:
+              fail(f"No value for placeholder(s): {', '.join(missing)}")
+          pattern = re.compile(r"\{\{([A-Z_]+)\}\}")
+          unknown = sorted({name for name in pattern.findall(text) if name not in values})
+          if unknown:
+              fail(f"prompt.md uses unknown placeholder(s): {', '.join(unknown)}")
+          with open(dst, "w", encoding="utf-8") as f:
+              f.write(pattern.sub(lambda m: values[m.group(1)], text))
+          PY
+
+          # Random delimiter, so no line of the prompt can end the value early.
+          DELIM="PROMPT_$(openssl rand -hex 16)"
+          if grep -qF "$DELIM" "$RENDERED"; then
+            echo "::error::Delimiter collision; re-run the job."
+            exit 1
+          fi
+          {
+            echo "text<<$DELIM"
+            cat "$RENDERED"
+            [[ -z "$(tail -c1 "$RENDERED")" ]] || echo
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
       # Privileged checkout, reachable from the issue_comment trigger. CodeQL
       # may flag this (actions/untrusted-checkout); the sanitizers are in place:
       #   1. the job-level `if:` requires author_association in (OWNER, MEMBER)
@@ -223,97 +304,9 @@ jobs:
           track_progress: ${{ github.event_name != 'workflow_dispatch' }}
           # pr-sweeper dispatches with GITHUB_TOKEN, so the actor is github-actions[bot].
           allowed_bots: ${{ github.event_name == 'workflow_dispatch' && 'github-actions[bot]' || '' }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
-            BRANCH: ${{ steps.pr-sha.outputs.branch }}
-
-            You are the sole code reviewer for Rogue Descent, a real-time
-            twin-stick isometric roguelike dungeon crawler built with TypeScript
-            + Three.js + Vite and deployed to Vercel as a static site. Permadeath,
-            with LATERAL meta-progression (new options/playstyles between runs,
-            not flat power growth). Your job is to review this pull request, fix
-            any issues you find, and merge it when it meets quality standards.
-
-            ## Review Phase
-
-            Review the full diff. Post findings as inline review comments.
-
-            ### Project hard rules — flag any violation immediately
-
-            **1. Purity of the game layer (THE load-bearing rule)**
-            `src/game/` is pure TypeScript and MUST NOT import 'three' anywhere,
-            and MUST NOT touch the DOM (`window`, `document`, `localStorage`,
-            event listeners). Any `import ... from 'three'` (or a transitive
-            import that pulls three in), or any DOM access, under `src/game/` is a
-            hard failure — flag it at the top of your review. Game logic must stay
-            runnable and testable in Node with no WebGL. DOM input belongs in
-            `src/input/`; rendering belongs in `src/rendering/`, which READS game
-            state and never mutates it — flag renderers that write back into game
-            state.
-
-            **2. No magic numbers outside utils/constants.ts**
-            All tuning values live in `src/utils/constants.ts`. Flag any numeric
-            literal used as a tuning/gameplay/dimension value elsewhere (loop
-            indices, 0/1 identities and obvious math constants are fine).
-
-            **3. No allocations in the per-frame loop**
-            The simulation runs on a FIXED-TIMESTEP accumulator driven by
-            `requestAnimationFrame`. Flag object/array/vector allocations inside
-            anything reached per frame — the update step and the render sync:
-            `new THREE.Vector3()`, `new THREE.Color()`, array/object literals,
-            `.map`/`.filter` that allocate, closures created per frame. Vectors,
-            scratch objects and entity meshes should be created once and reused
-            (bounded pools).
-
-            **4. Touch input parity with keyboard**
-            Mobile is required. Any new keyboard control must have an equivalent
-            touch path, and vice versa. Flag input changes that add one without
-            the other.
-
-            **5. TypeScript strict — no implicit any**
-            Flag implicit `any`, unsafe casts (`as any`, non-null `!` that hides a
-            real nullable), and types that defeat strict mode.
-
-            ### Also review for
-            - Correctness: logic errors, off-by-one, broken edge cases, regressions
-            - Whether all callers of a changed function/type were updated
-            - Swallowed errors, dead code, duplicated logic
-
-            ### What to ignore
-            - Style/formatting (prettier/eslint territory)
-            - TODO/FIXME comments (intentional)
-            - Lock files, generated files, build artifacts
-            - Test code that intentionally exercises edge cases
-
-            ## Fix Phase
-
-            If you find issues:
-            1. Fix them directly in the code.
-            2. Before committing, verify the change is safe:
-               - Run `npx tsc --noEmit` and confirm it's clean.
-               - Run `npm test` and confirm the suite is green.
-               If either fails, iterate on your fix until both pass — do NOT push
-               broken code.
-            3. Commit your fixes to the PR branch with a clear commit message.
-            4. Push the changes.
-            5. Re-review your own fixes to confirm they're correct.
-
-            ## Merge Phase
-
-            After review (and fixes if needed), if the PR meets quality standards:
-            1. Post a brief summary comment on the PR noting what you reviewed and
-               any fixes made.
-            2. Approve the PR.
-            3. Merge with: `gh pr merge <number> --squash --delete-branch`
-               (NOT `--auto` — this repo has no auto-merge enabled and no branch
-               protection rules, so a plain squash-merge runs immediately.)
-
-            If the PR has fundamental issues that can't be auto-fixed (wrong
-            approach, needs architectural discussion, missing tests for complex new
-            features), post a detailed comment explaining the concerns and do NOT
-            merge. Tag @craigoley in that comment so I see it.
-
+          # Rendered by "Load review prompt from the default branch" above, from
+          # .github/claude-review/prompt.md on the default branch.
+          prompt: ${{ steps.prompt.outputs.text }}
           claude_args: |
             --model claude-opus-4-8
             --max-turns 50
