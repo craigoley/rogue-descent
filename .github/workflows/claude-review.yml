@@ -23,6 +23,17 @@ on:
       - '.github/workflows/claude-review.yml'
   issue_comment:
     types: [created]
+  # Dispatched by pr-sweeper.yml for PRs whose review never finished
+  # (skipped, cancelled, or a Dependabot PR held for review — Dependabot
+  # `pull_request` runs get no repo secrets). workflow_dispatch is one of the
+  # few events GITHUB_TOKEN may trigger; it runs in main's context with full
+  # secrets, and only accounts with write access can dispatch it.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
 
 # Workflow-level default: read-only. The review-and-merge job below overrides
 # with the write scopes the action actually needs (contents, pull-requests,
@@ -41,7 +52,17 @@ concurrency:
   # Including event_name keeps comment events in their own group; within an event
   # type, cancel-in-progress still supersedes a stale run (a new push cancels an
   # older review of the same PR).
-  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  # Comments that cannot start a review (Claude's own tracking comment,
+  # vercel[bot] / dependabot notes, plain chatter) get a throwaway per-run
+  # group. Without this, the tracking comment Claude posts at the start of
+  # every `@claude` run lands in the SAME issue_comment group and
+  # cancel-in-progress kills the live review ~1 min in — observed on
+  # wild-trails #215 and rogue-descent #173 (2026-10-26), cologne-service #100.
+  # Same fix as ClawApp and cologne-service #101.
+  group: >-
+    claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}${{
+    (github.event_name == 'issue_comment' && (github.event.comment.user.type == 'Bot' || !contains(github.event.comment.body, '@claude')))
+    && format('-noop-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -99,6 +120,8 @@ jobs:
        github.event.issue.pull_request &&
        (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER') &&
        contains(github.event.comment.body, '@claude'))
+      ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -140,7 +163,7 @@ jobs:
         id: pr-sha
         if: steps.check-author.outputs.skip != 'true'
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}"
           PR_JSON=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefOid,headRefName)
           SHA=$(echo "$PR_JSON" | jq -r .headRefOid)
           BRANCH=$(echo "$PR_JSON" | jq -r .headRefName)
@@ -197,11 +220,13 @@ jobs:
           # OAuth via Craig's Max subscription — same auth ClawApp uses.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Force tag mode so the review summary posts as a tracking comment.
-          track_progress: true
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
+          # pr-sweeper dispatches with GITHUB_TOKEN, so the actor is github-actions[bot].
+          allowed_bots: ${{ github.event_name == 'workflow_dispatch' && 'github-actions[bot]' || '' }}
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-            BRANCH: ${{ github.event.pull_request.head.ref || github.head_ref }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+            BRANCH: ${{ steps.pr-sha.outputs.branch }}
 
             You are the sole code reviewer for Rogue Descent, a real-time
             twin-stick isometric roguelike dungeon crawler built with TypeScript

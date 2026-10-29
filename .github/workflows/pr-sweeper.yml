@@ -1,0 +1,154 @@
+# PR sweeper — the safety net under claude-review.yml and
+# dependabot-auto-merge.yml.
+#
+# Every PR on this repo is supposed to merge itself within hours: Claude
+# reviews + merges Craig's PRs, and Dependabot patch/minor bumps merge on
+# green checks. When that chain breaks, PRs sit silently. Ported from
+# ClawApp (Oct 2026) after Dependabot PRs here waited weeks: held bumps got
+# an `@claude review` retrigger whose run was cancelled by Claude's own
+# tracking comment, and nothing ever retried.
+#
+# Every 6 hours this job:
+#   1. Finds open, non-draft PRs older than STUCK_HOURS.
+#   2. For each one that has red checks or no auto-merge armed, and that
+#      Claude hasn't commented on since its last commit, dispatches
+#      claude-review.yml (workflow_dispatch runs in main's context, so it
+#      gets CLAUDE_CODE_OAUTH_TOKEN even for Dependabot PRs). Capped at
+#      MAX_DISPATCH per sweep to bound token spend.
+#   3. Upserts one tracking issue (label `pr-pipeline`) listing whatever is
+#      still stuck, and closes it when the queue is clear — so a broken
+#      pipeline surfaces as a notification instead of a quiet backlog.
+
+name: PR sweeper
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      stuck_hours:
+        description: 'Treat PRs older than this many hours as stuck (0 = all — for testing the dispatch path)'
+        required: false
+        default: '24'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-sweeper
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Job-level permissions REPLACE the workflow default, so contents:read
+      # must be restated — statusCheckRollup resolves through the commit.
+      contents: read
+      actions: write        # gh workflow run claude-review.yml
+      issues: write         # tracking issue
+      pull-requests: read
+      checks: read          # statusCheckRollup (check runs)
+      statuses: read        # statusCheckRollup (commit statuses)
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      STUCK_HOURS: ${{ inputs.stuck_hours || '24' }}
+      MAX_DISPATCH: 3
+      LABEL: pr-pipeline
+    steps:
+      - name: Sweep open PRs
+        run: |
+          set -euo pipefail
+          # STUCK_HOURS feeds bash arithmetic, which evaluates expressions —
+          # reject anything that isn't a plain integer.
+          [[ "$STUCK_HOURS" =~ ^[0-9]+$ ]] || { echo "::error::stuck_hours must be a non-negative integer, got '$STUCK_HOURS'"; exit 1; }
+          dispatched=0
+          rows=""
+
+          prs=$(gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,title,author,isDraft,createdAt,autoMergeRequest,mergeStateStatus,statusCheckRollup)
+
+          # Backstop for claude-review.yml's own approval step: runs on a
+          # Claude push-back (github-actions[bot]) sit in action_required
+          # and block required checks. Same-repo heads only — never forks.
+          approved=$(gh api "repos/$REPO/actions/runs?status=action_required&event=pull_request&per_page=100" \
+            --jq '.workflow_runs[] | select(.head_repository.full_name == env.REPO and .triggering_actor.login == "github-actions[bot]") | .id')
+          for id in $approved; do
+            echo "Approving action_required run $id"
+            gh api -X POST "repos/$REPO/actions/runs/$id/approve" || true
+          done
+
+          for n in $(echo "$prs" | jq -r '.[] | select(.isDraft | not) | .number'); do
+            pr=$(echo "$prs" | jq --argjson n "$n" '.[] | select(.number == $n)')
+            age_h=$(echo "$pr" | jq '(now - (.createdAt | fromdateiso8601)) / 3600 | floor')
+            (( age_h >= STUCK_HOURS )) || continue
+
+            author=$(echo "$pr" | jq -r .author.login)
+            title=$(echo "$pr" | jq -r .title)
+            merge_state=$(echo "$pr" | jq -r .mergeStateStatus)
+            armed=$(echo "$pr" | jq -r 'if .autoMergeRequest then "yes" else "no" end')
+            failing=$(echo "$pr" | jq -r '[.statusCheckRollup[]?
+              | select((.conclusion // .state // "") | test("FAILURE|ERROR|TIMED_OUT|ACTION_REQUIRED|STARTUP_FAILURE"))
+              | .name // .context] | unique | join(", ")')
+
+            reason=""
+            [[ -n "$failing" ]] && reason="red: $failing"
+            [[ "$armed" == "no" ]] && reason="${reason:+$reason; }auto-merge not armed"
+            [[ "$merge_state" == "DIRTY" ]] && reason="${reason:+$reason; }merge conflict"
+            [[ -z "$reason" ]] && reason="auto-merge armed, checks still pending"
+
+            action="—"
+            if [[ -n "$failing" || "$armed" == "no" ]]; then
+              last_commit=$(gh pr view "$n" --repo "$REPO" --json commits --jq '.commits[-1].committedDate')
+              # Ignore unfinished tracking comments (spinner still showing) —
+              # those come from runs that were cancelled or crashed mid-review.
+              last_claude=$(gh api "repos/$REPO/issues/$n/comments" --paginate \
+                --jq '.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")
+                  | select(.body | test("Claude Code is working|width=\"14px\"") | not) | .created_at' \
+                | sort | tail -n1)
+              if [[ -n "$last_claude" && "$last_claude" > "$last_commit" ]]; then
+                action="Claude already reviewed this commit — needs Craig"
+              elif (( dispatched < MAX_DISPATCH )); then
+                gh workflow run claude-review.yml --repo "$REPO" -f pr_number="$n"
+                dispatched=$((dispatched + 1))
+                action="dispatched Claude review"
+              else
+                action="queued (dispatch cap reached)"
+              fi
+            fi
+
+            echo "#$n ($author, ${age_h}h): $reason → $action"
+            rows+="| #$n | ${title//|/\\|} | $author | ${age_h}h | $reason | $action |"$'\n'
+          done
+
+          gh label create "$LABEL" --repo "$REPO" --color B60205 \
+            --description "PR auto-merge pipeline health (pr-sweeper.yml)" 2>/dev/null || true
+          issue=$(gh issue list --repo "$REPO" --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [[ -z "$rows" ]]; then
+            echo "No stuck PRs." | tee -a "$GITHUB_STEP_SUMMARY"
+            if [[ -n "$issue" ]]; then
+              gh issue close "$issue" --repo "$REPO" --comment "Queue clear — every open PR is younger than ${STUCK_HOURS}h or merging. Closing."
+            fi
+            exit 0
+          fi
+
+          body=$(cat <<EOF
+          PRs open longer than ${STUCK_HOURS}h. The pipeline (\`claude-review.yml\` → auto-merge, \`dependabot-auto-merge.yml\`) should have merged these; \`pr-sweeper.yml\` updates this list every 6h and closes the issue when it empties.
+
+          | PR | Title | Author | Age | Why stuck | Sweeper action |
+          |---|---|---|---|---|---|
+          ${rows}
+          _Last sweep: $(date -u +"%Y-%m-%d %H:%M UTC") — [run](${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID})_
+          EOF
+          )
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "$issue" ]]; then
+            gh issue edit "$issue" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --label "$LABEL" \
+              --title "PR pipeline: PRs stuck > ${STUCK_HOURS}h" --body "$body"
+          fi
