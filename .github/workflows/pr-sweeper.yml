@@ -104,9 +104,14 @@ jobs:
               last_commit=$(gh pr view "$n" --repo "$REPO" --json commits --jq '.commits[-1].committedDate')
               # Ignore unfinished tracking comments (spinner still showing) —
               # those come from runs that were cancelled or crashed mid-review.
+              # Also ignore dependabot-auto-merge.yml's hold comment: it is
+              # posted by github-actions[bot] but is not a review. Counting it
+              # made every held bump read "Claude already reviewed this commit"
+              # (e.g. wild-trails #215 and #206, sweep of 2026-10-29), so the sweeper
+              # never dispatched them.
               last_claude=$(gh api "repos/$REPO/issues/$n/comments" --paginate \
                 --jq '.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")
-                  | select(.body | test("Claude Code is working|width=\"14px\"") | not) | .created_at' \
+                  | select(.body | test("Claude Code is working|width=\"14px\"|<!-- auto-merge-hold -->") | not) | .created_at' \
                 | sort | tail -n1)
               if [[ -n "$last_claude" && "$last_claude" > "$last_commit" ]]; then
                 action="Claude already reviewed this commit — needs Craig"

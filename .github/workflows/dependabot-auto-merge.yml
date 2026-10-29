@@ -13,10 +13,32 @@ name: Dependabot auto-merge
 # guard that motivated the skip. The split is by BLAST RADIUS, not by author:
 #   - github-actions bumps  -> CI-only, cannot reach the shipped bundle. Merge.
 #   - npm devDependencies   -> gated by lint + test + build + E2E. Merge.
-#   - npm prod deps (three) -> ships to players. HOLD for a human.
-#   - any npm major         -> HOLD for a human, regardless of dep type.
+#   - npm prod deps (three) -> ships to players. HOLD for review.
+#   - any npm major         -> HOLD for review, regardless of dep type.
 # Anything held gets a comment explaining why, so it never just sits silently
 # the way #146 did for two days.
+#
+# HELD PRs GO TO THE AUTOMATED CLAUDE REVIEW, not to a hand merge. Once their
+# blocking checks are green this workflow dispatches `claude-review.yml` with
+# `pr_number` — the same `gh workflow run` call `pr-sweeper.yml` makes — and
+# that run reviews the diff, then merges or tags Craig and holds. Before this,
+# held PRs waited ~24h for the sweeper to do the same dispatch.
+#   - Waiting for green first matters: E2E (the render check) is not a
+#     required status check on `main`, so a review dispatched at `opened`
+#     could merge a `three` bump before E2E had reported. Red checks fail this
+#     job and do NOT dispatch; pr-sweeper.yml picks those up after 24h.
+#   - Exactly one dispatch per PR. State lives in the hold comment (hidden
+#     markers `auto-merge-hold` / `claude-review-dispatched`), so every trigger
+#     — including a `synchronize` rebase that cancels an in-flight wait — can
+#     run this safely and only the first green run dispatches. A dispatch on
+#     every rebase would re-run a full Opus review each time; claude-review's
+#     concurrency (one group per event + PR, cancel-in-progress) would only
+#     cancel the older run mid-review, not dedupe it.
+#   - A `workflow_dispatch` made with GITHUB_TOKEN does start a run — it is one
+#     of the documented exceptions to the no-recursion rule:
+#     https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow
+#     The dispatched run executes main's claude-review.yml in its own context,
+#     which is where CLAUDE_CODE_OAUTH_TOKEN is available.
 
 on:
   # pull_request_target, NOT pull_request. Workflow runs triggered by Dependabot
@@ -52,8 +74,9 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # squash-merge and delete the branch
+      pull-requests: write # post / update the hold comment
+      actions: write # gh workflow run claude-review.yml (held PRs)
     # Generous: the slowest blocking check (E2E) finishes ~1m20s, but Lighthouse
     # and the validation soak run ~4m and the wait loop polls until everything
     # settles. 30m leaves room for a queued-runner backlog.
@@ -102,11 +125,11 @@ jobs:
           elif [[ "$UPDATE_TYPE" == "version-update:semver-major" ]]; then
             # Majors get eyes even for dev deps: a vitest or eslint major can go
             # green while silently dropping test coverage or rules.
-            reason="major version bump — majors are reviewed by hand"
+            reason="major version bump — majors always get a review"
           elif [[ "$DEP_TYPE" == *"production"* ]]; then
             # three / any runtime dep ships to players. This is the exact case
             # claude-review.yml's dependabot skip was written to protect.
-            reason="production dependency — ships to players, needs a device playtest"
+            reason="production dependency — ships to players"
           elif [[ "$DEP_TYPE" == *"development"* ]]; then
             merge=true
           else
@@ -117,7 +140,13 @@ jobs:
           echo "merge=$merge" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
-      - name: Explain hold and stop
+      # Explain the hold once per PR, and read back whether the Claude review
+      # was already dispatched. Both facts live in one comment, keyed by hidden
+      # markers, so a rebase never re-comments or re-dispatches. pr-sweeper.yml
+      # ignores comments carrying `auto-merge-hold` — without that it would
+      # take this github-actions[bot] comment for a finished Claude review.
+      - name: Post or find the hold comment
+        id: hold
         if: steps.policy.outputs.merge != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,34 +154,38 @@ jobs:
           REASON: ${{ steps.policy.outputs.reason }}
         run: |
           set -euo pipefail
-          # One comment per PR, not one per synchronize.
-          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
-               --jq '.comments[].body' | grep -q "auto-merge-hold"; then
-            echo "Hold notice already posted."
-            exit 0
+          found=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '
+            .[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- auto-merge-hold -->")))
+                | "\(.id) \(.body | contains("<!-- claude-review-dispatched -->"))"')
+          found=${found%%$'\n'*}
+
+          if [[ -n "$found" ]]; then
+            read -r id dispatched <<<"$found"
+            echo "Hold comment $id already posted (review dispatched: $dispatched)."
+          else
+            # Built with printf rather than a multi-line string literal: this
+            # `run:` block is indented inside the YAML, and every continuation
+            # line of a quoted literal would carry that indentation into the
+            # comment body. At 4+ leading spaces GitHub renders Markdown as a
+            # code block, so the whole notice would come out preformatted.
+            # The single quotes are deliberate — the backticks inside are
+            # Markdown code spans for the rendered comment, not command
+            # substitution, so they must NOT expand.
+            # shellcheck disable=SC2016
+            BODY=$(printf '%s\n' \
+              '<!-- auto-merge-hold -->' \
+              "**Held for the automated Claude review** — $REASON." \
+              '' \
+              'CI still runs normally — this PR just will not merge itself.' \
+              'Once the blocking checks are green, `claude-review.yml` is dispatched for it: Claude reviews the diff, then merges it or tags Craig and holds it.' \
+              '' \
+              '_Policy lives in `.github/workflows/dependabot-auto-merge.yml`._')
+            id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$BODY" --jq .id)
+            dispatched=false
+            echo "Posted hold comment $id."
           fi
-          # Built with printf rather than a multi-line string literal: this
-          # `run:` block is indented inside the YAML, and every continuation
-          # line of a quoted literal would carry that indentation into the
-          # comment body. At 4+ leading spaces GitHub renders Markdown as a
-          # code block, so the whole notice would come out preformatted.
-          # The single quotes are deliberate — the backticks inside are Markdown
-          # code spans/fences for the rendered comment, not command
-          # substitution, so they must NOT expand.
-          # shellcheck disable=SC2016
-          BODY=$(printf '%s\n' \
-            '<!-- auto-merge-hold -->' \
-            "**Held for human review** — $REASON." \
-            '' \
-            'CI still runs normally — this PR just will not merge itself.' \
-            'Merge it by hand once you are satisfied:' \
-            '' \
-            '```' \
-            "gh pr merge $PR --squash --delete-branch" \
-            '```' \
-            '' \
-            '_Policy lives in `.github/workflows/dependabot-auto-merge.yml`._')
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          echo "comment_id=$id" >> "$GITHUB_OUTPUT"
+          echo "dispatched=$dispatched" >> "$GITHUB_OUTPUT"
 
       # Wait for the checks that actually gate a merge.
       #
@@ -166,11 +199,15 @@ jobs:
       # soak both run against a Vercel preview and are flaky-by-nature (network,
       # cold starts); letting them veto an unattended merge would trade one
       # stuck-PR problem for another.
+      #
+      # Held PRs wait here too (until their review is dispatched), so Claude
+      # never reviews — and possibly merges — before E2E has reported.
       - name: Wait for blocking checks
-        if: steps.policy.outputs.merge == 'true'
+        if: steps.policy.outputs.merge == 'true' || steps.hold.outputs.dispatched == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          NEXT_STEP: ${{ steps.policy.outputs.merge == 'true' && 'merge' || 'dispatch the Claude review (pr-sweeper.yml retries after 24h)' }}
         run: |
           set -euo pipefail
 
@@ -204,7 +241,7 @@ jobs:
               ($core - [.[].name]) | join(", ")' <<<"$blocking")
 
             if [[ -n "$failed" ]]; then
-              echo "::error::Blocking checks failed, refusing to merge:"
+              echo "::error::Blocking checks failed, refusing to ${NEXT_STEP}:"
               while IFS= read -r name; do echo "  - $name"; done <<<"$failed"
               exit 1
             fi
@@ -225,6 +262,26 @@ jobs:
 
           echo "::error::Timed out waiting for blocking checks."
           exit 1
+
+      # Same mechanism and input as pr-sweeper.yml. `gh workflow run` targets
+      # the default branch, so main's claude-review.yml runs, never the PR's.
+      # The marker goes on only after the dispatch call succeeded; if the
+      # dispatch itself fails, this step goes red and no marker is written.
+      - name: Dispatch the Claude review
+        if: steps.policy.outputs.merge != 'true' && steps.hold.outputs.dispatched == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          COMMENT_ID: ${{ steps.hold.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          gh workflow run claude-review.yml --repo "$GITHUB_REPOSITORY" -f pr_number="$PR"
+          echo "Dispatched claude-review.yml for PR #$PR."
+
+          body=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
+          note="_Checks green — Claude review dispatched $(date -u +'%Y-%m-%d %H:%M UTC') by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})._"
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" \
+            -f body="${body}"$'\n\n<!-- claude-review-dispatched -->\n'"${note}" > /dev/null
 
       - name: Squash merge
         if: steps.policy.outputs.merge == 'true'
